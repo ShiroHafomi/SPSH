@@ -1,8 +1,14 @@
 <% if (flash && (flash.success || flash.error || flash.created || flash.updated || flash.deleted)) { %>
 <div class="mb-6" role="alert">
-  <% if (flash.success || flash.created) { %>
+  <% if (flash.success) { %>
   <div class="bg-success-50 border border-success-200 text-success-700 px-4 py-3 rounded-lg flex items-center justify-between">
-    <span><%= flash.success || 'Student created successfully!' %></span>
+    <span><%= flash.success %></span>
+    <button onclick="this.parentElement.remove()" class="text-success-500 hover:text-success-700">&times;</button>
+  </div>
+  <% } %>
+  <% if (flash.created) { %>
+  <div class="bg-success-50 border border-success-200 text-success-700 px-4 py-3 rounded-lg flex items-center justify-between">
+    <span>Student created successfully!</span>
     <button onclick="this.parentElement.remove()" class="text-success-500 hover:text-success-700">&times;</button>
   </div>
   <% } %>
@@ -14,7 +20,7 @@
   <% } %>
   <% if (flash.deleted) { %>
   <div class="bg-warning-50 border border-warning-200 text-warning-700 px-4 py-3 rounded-lg flex items-center justify-between">
-    <span>Student deleted successfully.</span>
+    <span><%= flash.deleted === true ? 'Deleted successfully.' : flash.deleted %></span>
     <button onclick="this.parentElement.remove()" class="text-warning-500 hover:text-warning-700">&times;</button>
   </div>
   <% } %>
