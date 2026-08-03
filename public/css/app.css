@@ -1,0 +1,44 @@
+/* Custom styles supplementing Tailwind */
+
+/* Ensure table cells don't break layout */
+table td, table th {
+  white-space: nowrap;
+}
+
+/* Smooth transitions for interactive elements */
+a, button, input, select, textarea {
+  transition: all 0.15s ease;
+}
+
+/* Chart canvas sizing */
+canvas {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Focus visible styles for accessibility */
+*:focus-visible {
+  outline: 2px solid #0ea5e9;
+  outline-offset: 2px;
+}
+
+/* Flash message animation */
+[role="alert"] > div {
+  animation: slideIn 0.2s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Pagination active state */
+nav a.bg-primary-600 {
+  box-shadow: 0 1px 3px rgba(14, 165, 233, 0.3);
+}

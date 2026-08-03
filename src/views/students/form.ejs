@@ -1,0 +1,130 @@
+<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 max-w-3xl mx-auto">
+  <div class="flex items-center justify-between mb-6">
+    <h2 class="text-xl font-semibold text-gray-900">
+      <%= mode === 'create' ? 'Add New Student' : 'Edit Student' %>
+    </h2>
+    <a href="/students" class="text-sm text-gray-500 hover:text-gray-700">
+      ← Back to list
+    </a>
+  </div>
+
+  <% if (errors && errors.general) { %>
+  <div class="mb-6 p-4 bg-danger-50 border border-danger-200 text-danger-700 rounded-lg">
+    <%= errors.general %>
+  </div>
+  <% } %>
+
+  <form method="POST" action="<%= mode === 'create' ? '/students' : '/students/' + student.id %>" class="space-y-5" novalidate>
+    <% columns.forEach(col => { %>
+      <div class="grid gap-2">
+        <label for="<%= col.name %>" class="block text-sm font-medium text-gray-700">
+          <%= col.displayLabel %>
+          <% if (!col.nullable) { %>
+            <span class="text-danger-500 ml-1">*</span>
+          <% } %>
+        </label>
+
+        <% if (col.inferredType === 'boolean') { %>
+          <div class="flex items-center gap-3">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="<%= col.name %>"
+                value="1"
+                <%= (student && student[col.name]) ? 'checked' : '' %>
+                class="h-4 w-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+              >
+              <span class="text-sm text-gray-700">Yes</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="<%= col.name %>"
+                value="0"
+                <%= (student && !student[col.name]) ? 'checked' : '' %>
+                class="h-4 w-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+              >
+              <span class="text-sm text-gray-700">No</span>
+            </label>
+          </div>
+
+        <% } else if (col.inferredType === 'category' && col.stats.distinctCount <= 12 && col.stats.distinctCount > 1) { %>
+          <select
+            name="<%= col.name %>"
+            id="<%= col.name %>"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            <%= !col.nullable ? 'required' : '' %>
+          >
+            <% if (col.nullable) { %>
+              <option value="">-- Select <%= col.displayLabel %> --</option>
+            <% } %>
+            <% col.stats.sampleValues.forEach((val, idx) => { %>
+              <% const uniqueVals = [...new Set(col.stats.sampleValues)]; %>
+              <% if (uniqueVals.indexOf(val) === idx) { %>
+                <option value="<%= val %>" <%= (student && student[col.name] === val) ? 'selected' : '' %>>
+                  <%= val %>
+                </option>
+              <% } %>
+            <% }) %>
+          </select>
+
+        <% } else if (col.inferredType === 'date') { %>
+          <input
+            type="date"
+            name="<%= col.name %>"
+            id="<%= col.name %>"
+            value="<%= student ? (student[col.name] ? new Date(student[col.name]).toISOString().split('T')[0] : '') : '' %>"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            <%= !col.nullable ? 'required' : '' %>
+          >
+
+        <% } else if (col.inferredType === 'int' || col.inferredType === 'bigint' || col.inferredType === 'decimal') { %>
+          <input
+            type="number"
+            name="<%= col.name %>"
+            id="<%= col.name %>"
+            value="<%= student ? student[col.name] : '' %>"
+            step="<%= col.inferredType === 'decimal' ? '0.01' : '1' %>"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            <%= !col.nullable ? 'required' : '' %>
+          >
+
+        <% } else if (col.inferredType === 'text') { %>
+          <textarea
+            name="<%= col.name %>"
+            id="<%= col.name %>"
+            rows="3"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            <%= !col.nullable ? 'required' : '' %>
+          ><%= student ? student[col.name] : '' %></textarea>
+
+        <% } else { %>
+          <input
+            type="text"
+            name="<%= col.name %>"
+            id="<%= col.name %>"
+            value="<%= student ? student[col.name] : '' %>"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            <%= !col.nullable ? 'required' : '' %>
+          >
+        <% } %>
+
+        <% if (col.nullable) { %>
+          <p class="text-xs text-gray-500">Optional</p>
+        <% } %>
+      </div>
+    <% }) %>
+
+    <div class="flex justify-end gap-3 pt-4 border-t border-gray-200">
+      <a href="/students" class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition font-medium">
+        Cancel
+      </a>
+      <button
+        type="submit"
+        class="px-4 py-2 text-white font-medium rounded-lg <%= mode === 'create' ? 'bg-success-600 hover:bg-success-700' : 'bg-primary-600 hover:bg-primary-700' %> transition"
+      >
+        <%= mode === 'create' ? 'Create Student' : 'Save Changes' %>
+      </button>
+    </div>
+  </form>
+</div>
