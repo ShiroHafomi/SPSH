@@ -1,34 +1,23 @@
 /**
- * Express app factory. No listening — just wiring.
- * All routes are mounted here so tests can import and use supertest.
+ * Express app factory — serves REST API + static SPA frontend.
+ * No EJS, no server-side rendering. The frontend is a Vanilla JS SPA.
  */
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const morgan = require('morgan');
-const ejs = require('ejs');
-const expressLayouts = require('express-ejs-layouts');
 const session = require('express-session');
 
-const { pool, ensureReady } = require('./config/db');
+const { ensureReady } = require('./config/db');
 const authService = require('./services/authService');
-const studentRoutes = require('./routes/studentRoutes');
-const dashboardRoutes = require('./routes/dashboardRoutes');
-const authRoutes = require('./routes/authRoutes');
+const apiRoutes = require('./routes/apiRoutes');
 
 function createApp() {
   const app = express();
 
-  // --- Settings ---
-  app.set('view engine', 'ejs');
-  app.set('views', path.join(__dirname, 'views'));
-  app.set('layout', 'layouts/main');
-  app.set('layout extractScripts', true);
-  app.set('layout extractStyles', true);
-
-  // --- Global locals (available in every view) ---
+  // --- Global locals ---
   app.locals.appName = 'Student Performance & Study Habits';
-  app.locals.dbReady = false;  // will be set by ensureReady at boot
+  app.locals.dbReady = false;
 
   // --- Middleware ---
   if (process.env.NODE_ENV !== 'test') {
@@ -36,62 +25,36 @@ function createApp() {
   }
   app.use(express.urlencoded({ extended: true }));
   app.use(express.json());
-  app.use(express.static(path.join(__dirname, 'public')));
-  app.use(expressLayouts);
 
-  // --- Helper: set dbReady on first request that hits the pool ---
-  // (Actual boot-time check happens in server.js before listen)
-  let readyChecked = false;
-  app.use(async (req, res, next) => {
-    if (!readyChecked) {
-      app.locals.dbReady = await ensureReady();
-      readyChecked = true;
-    }
-    next();
-  });
+  // Static files (CSS, JS, images — served from /)
+  app.use(express.static(path.join(__dirname, '..', 'public')));
 
   // --- Session middleware ---
   app.use(session({
     secret: process.env.SESSION_SECRET || 'change-me-in-production',
     resave: false,
-    saveUninitialized: false,       // don't create session until user logs in
+    saveUninitialized: false,
     cookie: {
       httpOnly: true,
       sameSite: 'lax',
-      maxAge: 24 * 60 * 60 * 1000,  // 24 hours
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
     },
   }));
 
   // --- Current user middleware ---
-  // Populates res.locals.currentUser from session so every view has access.
+  // Populates res.locals.currentUser from session for API route use.
   app.use(async (req, res, next) => {
     if (req.session && req.session.userId) {
       try {
         const user = await authService.findById(req.session.userId);
         res.locals.currentUser = user;
       } catch {
-        // stale session — clear it
         req.session.destroy(() => {});
         res.locals.currentUser = null;
       }
     } else {
       res.locals.currentUser = null;
     }
-    next();
-  });
-
-  // --- Flash from querystring ---
-  // Reads ?created=1, ?updated=1, ?deleted=1, ?error=message and
-  // sets res.locals.flash so the flash.ejs partial renders.
-  app.use((req, res, next) => {
-    const flash = {};
-    const q = req.query;
-    if (q.created === '1') flash.created = true;
-    if (q.updated === '1') flash.updated = true;
-    if (q.deleted === '1') flash.deleted = true;
-    if (q.error) flash.error = q.error;
-    if (q.success) flash.success = q.success;
-    res.locals.flash = flash;
     next();
   });
 
@@ -102,56 +65,36 @@ function createApp() {
       const referer = req.get('Referer') || '';
       const allowed = `http://localhost:${process.env.PORT || 3000}`;
       if (origin && !origin.startsWith(allowed)) {
-        return res.status(403).render('error', {
-          title: 'Forbidden',
-          message: 'Cross-origin requests are not allowed.',
-          backLink: '/',
-        });
+        return res.status(403).json({ error: 'Cross-origin requests are not allowed.' });
       }
       if (!origin && referer && !referer.startsWith(allowed)) {
-        return res.status(403).render('error', {
-          title: 'Forbidden',
-          message: 'Cross-origin requests are not allowed.',
-          backLink: '/',
-        });
+        return res.status(403).json({ error: 'Cross-origin requests are not allowed.' });
       }
     }
     next();
   });
 
-  // --- Routes ---
+  // --- API routes ---
   app.get('/health', (req, res) => res.json({ ok: true }));
+  app.use('/api', apiRoutes);
 
-  // Auth routes (login, register, logout, admin panel)
-  app.use('/', authRoutes);
-
-  // Dashboard (home)
-  app.use('/', dashboardRoutes);
-
-  // Students CRUD
-  app.use('/students', studentRoutes);
-
-  // --- 404 ---
-  app.use((req, res) => {
-    res.status(404).render('error', {
-      title: 'Not Found',
-      message: `Cannot ${req.method} ${req.path}`,
-      backLink: '/',
-    });
+  // --- SPA catch-all ---
+  // Any non-API, non-static path serves index.html so the SPA handles routing.
+  app.get('*', (req, res) => {
+    // Don't catch /api/* routes (they should 404 as JSON)
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ error: 'API endpoint not found.' });
+    }
+    res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
   });
 
   // --- 500 ---
-  // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
     console.error('[ERROR]', err);
-    const message = process.env.NODE_ENV === 'production'
-      ? 'Internal server error'
-      : err.message;
-    res.status(500).render('error', {
-      title: 'Server Error',
-      message,
-      backLink: '/',
-    });
+    if (req.path.startsWith('/api/')) {
+      return res.status(500).json({ error: 'Internal server error.' });
+    }
+    res.status(500).send('Internal server error');
   });
 
   return app;

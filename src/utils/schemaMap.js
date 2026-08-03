@@ -12,7 +12,7 @@ let _schemaMap = null;
  * Returns the parsed object or null if not found/invalid.
  */
 function loadSchemaMap() {
-  const mapPath = path.join(process.cwd(), 'schema_map.json');
+  const mapPath = path.resolve(__dirname, '..', '..', 'schema_map.json');
   if (!fs.existsSync(mapPath)) return null;
 
   try {

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student Performance & Study Habits</title>
+
+  <!-- Tailwind CSS via Play CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: { 50: '#f0f9ff', 100: '#e0f2fe', 500: '#0ea5e9', 600: '#0284c7', 700: '#0369a1' },
+            secondary: { 50: '#f8fafc', 100: '#f1f5f9', 500: '#64748b', 600: '#475569', 700: '#334155' },
+            success: { 50: '#f0fdf4', 500: '#22c55e', 600: '#16a34a' },
+            warning: { 50: '#fffbeb', 500: '#f59e0b', 600: '#d97706' },
+            danger: { 50: '#fef2f2', 500: '#ef4444', 600: '#dc2626' },
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- Chart.js via jsDelivr -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+  <!-- Custom styles -->
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="bg-gray-50 min-h-screen font-sans antialiased">
+  <!-- Floating Navbar -->
+  <nav id="navbar" class="fixed top-4 left-4 right-4 z-50 max-w-7xl mx-auto bg-white/90 backdrop-blur-md border border-gray-200 rounded-xl shadow-sm">
+    <div class="px-4 sm:px-6">
+      <div class="flex items-center justify-between h-16">
+        <!-- Left: Logo + Nav links -->
+        <div class="flex items-center gap-8">
+          <a href="#/dashboard" class="flex items-center gap-2 text-lg font-bold text-primary-600 hover:text-primary-700 transition-colors" id="nav-logo">
+            <!-- Heroicon: chart-bar -->
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+            </svg>
+            Student Performance
+          </a>
+          <div id="nav-links" class="hidden md:flex items-center gap-6">
+            <!-- Dynamically rendered -->
+          </div>
+        </div>
+        <!-- Right: User info + Auth buttons -->
+        <div id="nav-right" class="flex items-center gap-3">
+          <!-- Dynamically rendered -->
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content (offset for floating navbar) -->
+  <main id="app-content" class="w-full max-w-7xl mx-auto px-4 pt-24 pb-8">
+    <!-- Initial loading state -->
+    <div id="loading-splash" class="flex items-center justify-center min-h-[60vh]">
+      <div class="flex flex-col items-center gap-4">
+        <div class="w-10 h-10 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin"></div>
+        <p class="text-sm text-gray-500">Loading...</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- App Scripts -->
+  <script src="/js/api.js"></script>
+  <script src="/js/router.js"></script>
+  <script src="/js/views/login.js"></script>
+  <script src="/js/views/register.js"></script>
+  <script src="/js/views/dashboard.js"></script>
+  <script src="/js/views/students.js"></script>
+  <script src="/js/views/studentForm.js"></script>
+  <script src="/js/views/adminUsers.js"></script>
+
+  <!-- App Initialization -->
+  <script src="/js/app.js"></script>
+</body>
+</html>
