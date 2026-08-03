@@ -5,6 +5,7 @@
         <a href="/" class="text-xl font-bold text-primary-600">
           📊 Student Performance
         </a>
+        <% if (locals.currentUser) { %>
         <div class="hidden md:flex items-center gap-6">
           <a href="/" class="text-sm font-medium text-gray-700 hover:text-primary-600 transition">
             Dashboard
@@ -13,9 +14,34 @@
             Students
           </a>
         </div>
+        <% } %>
       </div>
       <div class="flex items-center gap-4">
-        <span class="text-sm text-gray-500"><%= appName %></span>
+        <% if (locals.currentUser) { %>
+          <span class="text-sm text-gray-500">
+            <%= currentUser.name %>
+            <% if (currentUser.role === 'admin') { %>
+              <span class="text-xs text-warning-600 ml-1">(Admin)</span>
+            <% } %>
+          </span>
+          <% if (currentUser.role === 'admin') { %>
+            <a href="/admin/users" class="text-sm font-medium text-gray-700 hover:text-primary-600 transition">
+              Manage Users
+            </a>
+          <% } %>
+          <form method="POST" action="/logout" class="inline">
+            <button type="submit" class="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+              Logout
+            </button>
+          </form>
+        <% } else { %>
+          <a href="/login" class="text-sm font-medium text-gray-700 hover:text-primary-600 transition">
+            Login
+          </a>
+          <a href="/register" class="px-3 py-1.5 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition">
+            Register
+          </a>
+        <% } %>
         <span class="relative inline-flex items-center">
           <span class="h-2.5 w-2.5 rounded-full <%= dbReady ? 'bg-success-500' : 'bg-danger-500' %>"></span>
           <span class="ml-2 text-xs text-gray-500"><%= dbReady ? 'DB Connected' : 'DB Not Ready' %></span>

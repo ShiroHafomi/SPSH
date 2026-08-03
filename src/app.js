@@ -8,10 +8,13 @@ const path = require('path');
 const morgan = require('morgan');
 const ejs = require('ejs');
 const expressLayouts = require('express-ejs-layouts');
+const session = require('express-session');
 
 const { pool, ensureReady } = require('./config/db');
+const authService = require('./services/authService');
 const studentRoutes = require('./routes/studentRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
+const authRoutes = require('./routes/authRoutes');
 
 function createApp() {
   const app = express();
@@ -43,6 +46,36 @@ function createApp() {
     if (!readyChecked) {
       app.locals.dbReady = await ensureReady();
       readyChecked = true;
+    }
+    next();
+  });
+
+  // --- Session middleware ---
+  app.use(session({
+    secret: process.env.SESSION_SECRET || 'change-me-in-production',
+    resave: false,
+    saveUninitialized: false,       // don't create session until user logs in
+    cookie: {
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 24 * 60 * 60 * 1000,  // 24 hours
+    },
+  }));
+
+  // --- Current user middleware ---
+  // Populates res.locals.currentUser from session so every view has access.
+  app.use(async (req, res, next) => {
+    if (req.session && req.session.userId) {
+      try {
+        const user = await authService.findById(req.session.userId);
+        res.locals.currentUser = user;
+      } catch {
+        // stale session — clear it
+        req.session.destroy(() => {});
+        res.locals.currentUser = null;
+      }
+    } else {
+      res.locals.currentUser = null;
     }
     next();
   });
@@ -88,6 +121,9 @@ function createApp() {
 
   // --- Routes ---
   app.get('/health', (req, res) => res.json({ ok: true }));
+
+  // Auth routes (login, register, logout, admin panel)
+  app.use('/', authRoutes);
 
   // Dashboard (home)
   app.use('/', dashboardRoutes);

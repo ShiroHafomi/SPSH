@@ -1,0 +1,57 @@
+<div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+  <div class="p-6 border-b border-gray-200">
+    <h2 class="text-xl font-semibold text-gray-900">Manage Users</h2>
+    <p class="text-sm text-gray-500 mt-1">View and manage user accounts. Admin accounts cannot be deleted.</p>
+  </div>
+
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead class="bg-gray-50 border-b border-gray-200">
+        <tr>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+          <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+          <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-200">
+        <% users.forEach(user => { %>
+        <tr class="hover:bg-gray-50 transition-colors">
+          <td class="px-4 py-3 text-sm text-gray-500"><%= user.id %></td>
+          <td class="px-4 py-3 text-sm text-gray-900 font-medium"><%= user.name %></td>
+          <td class="px-4 py-3 text-sm text-gray-700"><%= user.email %></td>
+          <td class="px-4 py-3 text-sm">
+            <% if (user.role === 'admin') { %>
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-warning-100 text-warning-800">Admin</span>
+            <% } else { %>
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">User</span>
+            <% } %>
+          </td>
+          <td class="px-4 py-3 text-sm text-gray-500"><%= new Date(user.created_at).toLocaleDateString() %></td>
+          <td class="px-4 py-3 text-right">
+            <% if (user.role !== 'admin') { %>
+              <form method="POST" action="/admin/users/<%= user.id %>/delete" onsubmit="return confirm('Delete user &quot;<%= user.name %>&quot;? This cannot be undone.');" class="inline">
+                <button type="submit" class="px-3 py-1.5 text-sm font-medium text-danger-600 bg-danger-50 rounded-lg hover:bg-danger-100 transition">
+                  Delete
+                </button>
+              </form>
+            <% } else { %>
+              <span class="text-sm text-gray-400">—</span>
+            <% } %>
+          </td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="p-4 border-t border-gray-200 text-sm text-gray-600">
+    <%= users.length %> user<%= users.length !== 1 ? 's' : '' %> total
+  </div>
+</div>
+
+<div class="mt-4">
+  <a href="/" class="text-sm text-primary-600 hover:text-primary-700">← Back to Dashboard</a>
+</div>

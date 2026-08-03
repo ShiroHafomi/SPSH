@@ -5,6 +5,7 @@
 require('dotenv').config();
 const { createApp } = require('./app');
 const { ensureReady } = require('./config/db');
+const { ensureUsersTable } = require('./services/authService');
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -14,6 +15,14 @@ async function main() {
   // Boot-time DB readiness (so the first page load doesn't wait)
   const dbReady = await ensureReady();
   app.locals.dbReady = dbReady;
+
+  // Auto-create the users table
+  try {
+    await ensureUsersTable();
+    console.log('   Users table: ready');
+  } catch (err) {
+    console.error('   Users table: FAILED —', err.message);
+  }
 
   if (!dbReady) {
     console.warn(
