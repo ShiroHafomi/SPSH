@@ -1,0 +1,315 @@
+2026-08-04 11:21:49 | INFO     | train | 
+============================================================
+2026-08-04 11:21:49 | INFO     | train | STUDENT PERFORMANCE MODEL TRAINING
+2026-08-04 11:21:49 | INFO     | train | ============================================================
+2026-08-04 11:21:49 | INFO     | train | Log file: D:\Student Performance & Study Habits\ml\logs\train_20260804_112149.log
+2026-08-04 11:21:49 | INFO     | train | Project root: D:\Student Performance & Study Habits
+2026-08-04 11:21:49 | INFO     | train | Data path: D:\Student Performance & Study Habits\ml\data\students.csv
+2026-08-04 11:21:49 | INFO     | train | Models dir: D:\Student Performance & Study Habits\ml\models
+2026-08-04 11:21:49 | INFO     | train | Output dir: D:\Student Performance & Study Habits\ml\output
+2026-08-04 11:21:49 | INFO     | train | Loading data from D:\Student Performance & Study Habits\ml\data\students.csv
+2026-08-04 11:21:49 | INFO     | train | Data loaded in 0.002s: shape=(50, 12), columns=['gender', 'age', 'study_hours_per_day', 'attendance_percent', 'sleep_hours', 'previous_gpa', 'parental_education', 'internet_access', 'extracurricular', 'part_time_job', 'final_score', 'grade']
+2026-08-04 11:21:49 | DEBUG    | train | Data types:
+gender                  object
+age                      int64
+study_hours_per_day    float64
+attendance_percent       int64
+sleep_hours            float64
+previous_gpa           float64
+parental_education      object
+internet_access          int64
+extracurricular          int64
+part_time_job            int64
+final_score              int64
+grade                   object
+2026-08-04 11:21:49 | DEBUG    | train | Numeric summary:
+            age  study_hours_per_day  attendance_percent  sleep_hours  previous_gpa  internet_access  extracurricular  part_time_job  final_score
+count  50.00000             50.00000           50.000000     50.00000     50.000000        50.000000        50.000000      50.000000    50.000000
+mean   18.52000              3.25800           84.120000      7.08800      3.090000         0.740000         0.580000       0.360000    75.700000
+std     0.99468              1.18616           11.599859      1.06496      0.616524         0.443087         0.498569       0.484873    18.624375
+min    17.00000              1.00000           55.000000      5.00000      1.800000         0.000000         0.000000       0.000000    38.000000
+25%    18.00000              2.27500           78.000000      6.27500      2.725000         0.250000         0.000000       0.000000    62.250000
+50%    18.00000              3.20000           87.500000      7.00000      3.200000         1.000000         1.000000       0.000000    80.500000
+75%    19.00000              4.20000           92.750000      8.00000      3.600000         1.000000         1.000000       1.000000    91.750000
+max    20.00000              5.50000           99.000000      9.00000      4.000000         1.000000         1.000000       1.000000    99.000000
+2026-08-04 11:21:49 | DEBUG    | train | Missing values:
+gender                 0
+age                    0
+study_hours_per_day    0
+attendance_percent     0
+sleep_hours            0
+previous_gpa           0
+parental_education     0
+internet_access        0
+extracurricular        0
+part_time_job          0
+final_score            0
+grade                  0
+2026-08-04 11:21:49 | DEBUG    | train | Feature types: numeric=['age', 'study_hours_per_day', 'attendance_percent', 'sleep_hours', 'previous_gpa'], categorical=['gender', 'parental_education'], binary=['internet_access', 'extracurricular', 'part_time_job']
+2026-08-04 11:21:49 | INFO     | train | Numeric features: ['age', 'study_hours_per_day', 'attendance_percent', 'sleep_hours', 'previous_gpa']
+2026-08-04 11:21:49 | INFO     | train | Categorical features: ['gender', 'parental_education']
+2026-08-04 11:21:49 | INFO     | train | Binary features: ['internet_access', 'extracurricular', 'part_time_job']
+2026-08-04 11:21:49 | DEBUG    | train | Preprocessor transformers: ['num', 'cat', 'bin']
+2026-08-04 11:21:49 | INFO     | train | Target regression range: [38, 99], mean=75.70
+2026-08-04 11:21:49 | INFO     | train | Target classification distribution: {0: 10, 1: 6, 2: 8, 3: 5, 4: 21}
+2026-08-04 11:21:49 | INFO     | train | Transformed feature shape: (50, 12)
+2026-08-04 11:21:49 | DEBUG    | train | Final feature names (12): ['age', 'study_hours_per_day', 'attendance_percent', 'sleep_hours', 'previous_gpa', 'gender_Male', 'parental_education_High School', 'parental_education_Master', 'parental_education_PhD', 'internet_access', 'extracurricular', 'part_time_job']
+2026-08-04 11:21:49 | INFO     | train | CV strategy: RepeatedKFold(n_splits=5, n_repeats=3) = 15 folds
+2026-08-04 11:21:49 | INFO     | train | 
+============================================================
+2026-08-04 11:21:49 | INFO     | train | REGRESSION: Predicting Final_Score
+2026-08-04 11:21:49 | INFO     | train | ============================================================
+2026-08-04 11:21:49 | INFO     | train | 
+--- Model: RandomForest ---
+2026-08-04 11:21:49 | INFO     | train | Tuning hyperparameters for RandomForest...
+2026-08-04 11:22:04 | INFO     | train |   Tuning completed in 14.70s
+2026-08-04 11:22:04 | INFO     | train |   Best params: {'max_depth': 5, 'min_samples_leaf': 2, 'min_samples_split': 5, 'n_estimators': 200}
+2026-08-04 11:22:04 | INFO     | train |   Best CV R²: 0.9787
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 4, 'min_samples_leaf': 2, 'min_samples_split': 5, 'n_estimators': 100} -> R²: 0.9776 (±0.0176)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 4, 'min_samples_leaf': 2, 'min_samples_split': 5, 'n_estimators': 200} -> R²: 0.9787 (±0.0160)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 4, 'min_samples_leaf': 2, 'min_samples_split': 10, 'n_estimators': 100} -> R²: 0.9375 (±0.0473)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 4, 'min_samples_leaf': 2, 'min_samples_split': 10, 'n_estimators': 200} -> R²: 0.9376 (±0.0455)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 4, 'min_samples_leaf': 4, 'min_samples_split': 5, 'n_estimators': 100} -> R²: 0.9610 (±0.0314)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 4, 'min_samples_leaf': 4, 'min_samples_split': 5, 'n_estimators': 200} -> R²: 0.9619 (±0.0298)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 4, 'min_samples_leaf': 4, 'min_samples_split': 10, 'n_estimators': 100} -> R²: 0.9369 (±0.0485)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 4, 'min_samples_leaf': 4, 'min_samples_split': 10, 'n_estimators': 200} -> R²: 0.9369 (±0.0467)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 5, 'min_samples_leaf': 2, 'min_samples_split': 5, 'n_estimators': 100} -> R²: 0.9776 (±0.0176)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 5, 'min_samples_leaf': 2, 'min_samples_split': 5, 'n_estimators': 200} -> R²: 0.9787 (±0.0160)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 5, 'min_samples_leaf': 2, 'min_samples_split': 10, 'n_estimators': 100} -> R²: 0.9375 (±0.0473)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 5, 'min_samples_leaf': 2, 'min_samples_split': 10, 'n_estimators': 200} -> R²: 0.9376 (±0.0455)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 5, 'min_samples_leaf': 4, 'min_samples_split': 5, 'n_estimators': 100} -> R²: 0.9610 (±0.0314)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 5, 'min_samples_leaf': 4, 'min_samples_split': 5, 'n_estimators': 200} -> R²: 0.9619 (±0.0298)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 5, 'min_samples_leaf': 4, 'min_samples_split': 10, 'n_estimators': 100} -> R²: 0.9369 (±0.0485)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 5, 'min_samples_leaf': 4, 'min_samples_split': 10, 'n_estimators': 200} -> R²: 0.9369 (±0.0467)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 6, 'min_samples_leaf': 2, 'min_samples_split': 5, 'n_estimators': 100} -> R²: 0.9776 (±0.0176)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 6, 'min_samples_leaf': 2, 'min_samples_split': 5, 'n_estimators': 200} -> R²: 0.9787 (±0.0160)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 6, 'min_samples_leaf': 2, 'min_samples_split': 10, 'n_estimators': 100} -> R²: 0.9375 (±0.0473)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 6, 'min_samples_leaf': 2, 'min_samples_split': 10, 'n_estimators': 200} -> R²: 0.9376 (±0.0455)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 6, 'min_samples_leaf': 4, 'min_samples_split': 5, 'n_estimators': 100} -> R²: 0.9610 (±0.0314)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 6, 'min_samples_leaf': 4, 'min_samples_split': 5, 'n_estimators': 200} -> R²: 0.9619 (±0.0298)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 6, 'min_samples_leaf': 4, 'min_samples_split': 10, 'n_estimators': 100} -> R²: 0.9369 (±0.0485)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': 6, 'min_samples_leaf': 4, 'min_samples_split': 10, 'n_estimators': 200} -> R²: 0.9369 (±0.0467)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': None, 'min_samples_leaf': 2, 'min_samples_split': 5, 'n_estimators': 100} -> R²: 0.9776 (±0.0176)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': None, 'min_samples_leaf': 2, 'min_samples_split': 5, 'n_estimators': 200} -> R²: 0.9787 (±0.0160)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': None, 'min_samples_leaf': 2, 'min_samples_split': 10, 'n_estimators': 100} -> R²: 0.9375 (±0.0473)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': None, 'min_samples_leaf': 2, 'min_samples_split': 10, 'n_estimators': 200} -> R²: 0.9376 (±0.0455)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': None, 'min_samples_leaf': 4, 'min_samples_split': 5, 'n_estimators': 100} -> R²: 0.9610 (±0.0314)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': None, 'min_samples_leaf': 4, 'min_samples_split': 5, 'n_estimators': 200} -> R²: 0.9619 (±0.0298)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': None, 'min_samples_leaf': 4, 'min_samples_split': 10, 'n_estimators': 100} -> R²: 0.9369 (±0.0485)
+2026-08-04 11:22:04 | DEBUG    | train |   Params: {'max_depth': None, 'min_samples_leaf': 4, 'min_samples_split': 10, 'n_estimators': 200} -> R²: 0.9369 (±0.0467)
+2026-08-04 11:22:04 | INFO     | train | Evaluating RandomForest (regression)...
+2026-08-04 11:22:04 | INFO     | train |   CV completed in 0.43s
+2026-08-04 11:22:04 | INFO     | train |   R²:     0.9787 (±0.0160) [train: 0.9941]
+2026-08-04 11:22:04 | INFO     | train |   MAE:    1.8365 (±0.5321)
+2026-08-04 11:22:04 | INFO     | train |   RMSE:   2.3806 (±0.6209)
+2026-08-04 11:22:04 | INFO     | train |   MSE:    6.0528
+2026-08-04 11:22:04 | INFO     | train | 
+--- Model: GradientBoosting ---
+2026-08-04 11:22:04 | INFO     | train | Tuning hyperparameters for GradientBoosting...
+2026-08-04 11:22:07 | INFO     | train |   Tuning completed in 2.57s
+2026-08-04 11:22:07 | INFO     | train |   Best params: {'learning_rate': 0.1, 'max_depth': 4, 'min_samples_split': 5, 'n_estimators': 100}
+2026-08-04 11:22:07 | INFO     | train |   Best CV R²: 0.9803
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 3, 'min_samples_split': 5, 'n_estimators': 100} -> R²: 0.9792 (±0.0221)
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 3, 'min_samples_split': 5, 'n_estimators': 200} -> R²: 0.9792 (±0.0226)
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 3, 'min_samples_split': 10, 'n_estimators': 100} -> R²: 0.9778 (±0.0207)
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 3, 'min_samples_split': 10, 'n_estimators': 200} -> R²: 0.9780 (±0.0222)
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 4, 'min_samples_split': 5, 'n_estimators': 100} -> R²: 0.9783 (±0.0239)
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 4, 'min_samples_split': 5, 'n_estimators': 200} -> R²: 0.9783 (±0.0240)
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 4, 'min_samples_split': 10, 'n_estimators': 100} -> R²: 0.9776 (±0.0217)
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 4, 'min_samples_split': 10, 'n_estimators': 200} -> R²: 0.9779 (±0.0214)
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 5, 'min_samples_split': 5, 'n_estimators': 100} -> R²: 0.9797 (±0.0203)
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 5, 'min_samples_split': 5, 'n_estimators': 200} -> R²: 0.9797 (±0.0205)
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 5, 'min_samples_split': 10, 'n_estimators': 100} -> R²: 0.9783 (±0.0199)
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 5, 'min_samples_split': 10, 'n_estimators': 200} -> R²: 0.9783 (±0.0203)
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 3, 'min_samples_split': 5, 'n_estimators': 100} -> R²: 0.9802 (±0.0195)
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 3, 'min_samples_split': 5, 'n_estimators': 200} -> R²: 0.9802 (±0.0192)
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 3, 'min_samples_split': 10, 'n_estimators': 100} -> R²: 0.9774 (±0.0227)
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 3, 'min_samples_split': 10, 'n_estimators': 200} -> R²: 0.9770 (±0.0228)
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 4, 'min_samples_split': 5, 'n_estimators': 100} -> R²: 0.9803 (±0.0189)
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 4, 'min_samples_split': 5, 'n_estimators': 200} -> R²: 0.9802 (±0.0189)
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 4, 'min_samples_split': 10, 'n_estimators': 100} -> R²: 0.9778 (±0.0203)
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 4, 'min_samples_split': 10, 'n_estimators': 200} -> R²: 0.9775 (±0.0205)
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 5, 'min_samples_split': 5, 'n_estimators': 100} -> R²: 0.9798 (±0.0197)
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 5, 'min_samples_split': 5, 'n_estimators': 200} -> R²: 0.9798 (±0.0197)
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 5, 'min_samples_split': 10, 'n_estimators': 100} -> R²: 0.9781 (±0.0187)
+2026-08-04 11:22:07 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 5, 'min_samples_split': 10, 'n_estimators': 200} -> R²: 0.9779 (±0.0188)
+2026-08-04 11:22:07 | INFO     | train | Evaluating GradientBoosting (regression)...
+2026-08-04 11:22:07 | INFO     | train |   CV completed in 0.11s
+2026-08-04 11:22:07 | INFO     | train |   R²:     0.9803 (±0.0189) [train: 1.0000]
+2026-08-04 11:22:07 | INFO     | train |   MAE:    1.7317 (±0.4846)
+2026-08-04 11:22:07 | INFO     | train |   RMSE:   2.1882 (±0.6759)
+2026-08-04 11:22:07 | INFO     | train |   MSE:    5.2449
+2026-08-04 11:22:07 | INFO     | train | 
+--- Model: RidgeCV ---
+2026-08-04 11:22:07 | INFO     | train | Evaluating RidgeCV (regression)...
+2026-08-04 11:22:07 | INFO     | train |   CV completed in 0.09s
+2026-08-04 11:22:07 | INFO     | train |   R²:     0.9836 (±0.0085) [train: 0.9923]
+2026-08-04 11:22:07 | INFO     | train |   MAE:    1.7736 (±0.3904)
+2026-08-04 11:22:07 | INFO     | train |   RMSE:   2.1166 (±0.4703)
+2026-08-04 11:22:07 | INFO     | train |   MSE:    4.7010
+2026-08-04 11:22:07 | INFO     | train | 
+Best regression model: RidgeCV (R² = 0.9836)
+2026-08-04 11:22:07 | INFO     | train | Regression training took 17.90s
+2026-08-04 11:22:07 | INFO     | train | 
+============================================================
+2026-08-04 11:22:07 | INFO     | train | CLASSIFICATION: Predicting Grade
+2026-08-04 11:22:07 | INFO     | train | ============================================================
+2026-08-04 11:22:07 | INFO     | train | 
+--- Model: RandomForest ---
+2026-08-04 11:22:07 | INFO     | train | Tuning hyperparameters for RandomForest...
+2026-08-04 11:22:22 | INFO     | train |   Tuning completed in 14.51s
+2026-08-04 11:22:22 | INFO     | train |   Best params: {'max_depth': 4, 'min_samples_leaf': 2, 'min_samples_split': 5, 'n_estimators': 100}
+2026-08-04 11:22:22 | INFO     | train |   Best CV F1: 0.7599
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 4, 'min_samples_leaf': 2, 'min_samples_split': 5, 'n_estimators': 100} -> F1: 0.7599 (±0.1501)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 4, 'min_samples_leaf': 2, 'min_samples_split': 5, 'n_estimators': 200} -> F1: 0.7599 (±0.1501)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 4, 'min_samples_leaf': 2, 'min_samples_split': 10, 'n_estimators': 100} -> F1: 0.7114 (±0.1256)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 4, 'min_samples_leaf': 2, 'min_samples_split': 10, 'n_estimators': 200} -> F1: 0.6936 (±0.1381)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 4, 'min_samples_leaf': 4, 'min_samples_split': 5, 'n_estimators': 100} -> F1: 0.7039 (±0.1172)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 4, 'min_samples_leaf': 4, 'min_samples_split': 5, 'n_estimators': 200} -> F1: 0.7159 (±0.1219)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 4, 'min_samples_leaf': 4, 'min_samples_split': 10, 'n_estimators': 100} -> F1: 0.6746 (±0.1330)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 4, 'min_samples_leaf': 4, 'min_samples_split': 10, 'n_estimators': 200} -> F1: 0.6821 (±0.1421)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 5, 'min_samples_leaf': 2, 'min_samples_split': 5, 'n_estimators': 100} -> F1: 0.7599 (±0.1501)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 5, 'min_samples_leaf': 2, 'min_samples_split': 5, 'n_estimators': 200} -> F1: 0.7599 (±0.1501)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 5, 'min_samples_leaf': 2, 'min_samples_split': 10, 'n_estimators': 100} -> F1: 0.7114 (±0.1256)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 5, 'min_samples_leaf': 2, 'min_samples_split': 10, 'n_estimators': 200} -> F1: 0.6936 (±0.1381)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 5, 'min_samples_leaf': 4, 'min_samples_split': 5, 'n_estimators': 100} -> F1: 0.7039 (±0.1172)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 5, 'min_samples_leaf': 4, 'min_samples_split': 5, 'n_estimators': 200} -> F1: 0.7159 (±0.1219)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 5, 'min_samples_leaf': 4, 'min_samples_split': 10, 'n_estimators': 100} -> F1: 0.6746 (±0.1330)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 5, 'min_samples_leaf': 4, 'min_samples_split': 10, 'n_estimators': 200} -> F1: 0.6821 (±0.1421)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 6, 'min_samples_leaf': 2, 'min_samples_split': 5, 'n_estimators': 100} -> F1: 0.7599 (±0.1501)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 6, 'min_samples_leaf': 2, 'min_samples_split': 5, 'n_estimators': 200} -> F1: 0.7599 (±0.1501)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 6, 'min_samples_leaf': 2, 'min_samples_split': 10, 'n_estimators': 100} -> F1: 0.7114 (±0.1256)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 6, 'min_samples_leaf': 2, 'min_samples_split': 10, 'n_estimators': 200} -> F1: 0.6936 (±0.1381)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 6, 'min_samples_leaf': 4, 'min_samples_split': 5, 'n_estimators': 100} -> F1: 0.7039 (±0.1172)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 6, 'min_samples_leaf': 4, 'min_samples_split': 5, 'n_estimators': 200} -> F1: 0.7159 (±0.1219)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 6, 'min_samples_leaf': 4, 'min_samples_split': 10, 'n_estimators': 100} -> F1: 0.6746 (±0.1330)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': 6, 'min_samples_leaf': 4, 'min_samples_split': 10, 'n_estimators': 200} -> F1: 0.6821 (±0.1421)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': None, 'min_samples_leaf': 2, 'min_samples_split': 5, 'n_estimators': 100} -> F1: 0.7599 (±0.1501)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': None, 'min_samples_leaf': 2, 'min_samples_split': 5, 'n_estimators': 200} -> F1: 0.7599 (±0.1501)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': None, 'min_samples_leaf': 2, 'min_samples_split': 10, 'n_estimators': 100} -> F1: 0.7114 (±0.1256)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': None, 'min_samples_leaf': 2, 'min_samples_split': 10, 'n_estimators': 200} -> F1: 0.6936 (±0.1381)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': None, 'min_samples_leaf': 4, 'min_samples_split': 5, 'n_estimators': 100} -> F1: 0.7039 (±0.1172)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': None, 'min_samples_leaf': 4, 'min_samples_split': 5, 'n_estimators': 200} -> F1: 0.7159 (±0.1219)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': None, 'min_samples_leaf': 4, 'min_samples_split': 10, 'n_estimators': 100} -> F1: 0.6746 (±0.1330)
+2026-08-04 11:22:22 | DEBUG    | train |   Params: {'max_depth': None, 'min_samples_leaf': 4, 'min_samples_split': 10, 'n_estimators': 200} -> F1: 0.6821 (±0.1421)
+2026-08-04 11:22:22 | INFO     | train | Evaluating RandomForest (classification)...
+2026-08-04 11:22:22 | INFO     | train |   CV completed in 0.28s
+2026-08-04 11:22:22 | INFO     | train |   Accuracy: 0.7800 (±0.1327) [train: 0.9533]
+2026-08-04 11:22:22 | INFO     | train |   F1 (w):   0.7599 (±0.1501)
+2026-08-04 11:22:22 | INFO     | train |   F1 (macro): 0.6383 (±0.2035)
+2026-08-04 11:22:22 | INFO     | train |   Precision: 0.7747
+2026-08-04 11:22:22 | INFO     | train |   Recall:    0.7800
+2026-08-04 11:22:22 | WARNING  | train |   [WARN] Possible overfitting: train Acc - test Acc = 0.1733
+2026-08-04 11:22:22 | INFO     | train | 
+--- Model: GradientBoosting ---
+2026-08-04 11:22:22 | INFO     | train | Tuning hyperparameters for GradientBoosting...
+2026-08-04 11:22:40 | INFO     | train |   Tuning completed in 17.87s
+2026-08-04 11:22:40 | INFO     | train |   Best params: {'learning_rate': 0.1, 'max_depth': 3, 'min_samples_split': 10, 'n_estimators': 100}
+2026-08-04 11:22:40 | INFO     | train |   Best CV F1: 0.8215
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 3, 'min_samples_split': 5, 'n_estimators': 100} -> F1: 0.8142 (±0.1029)
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 3, 'min_samples_split': 5, 'n_estimators': 200} -> F1: 0.8064 (±0.1016)
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 3, 'min_samples_split': 10, 'n_estimators': 100} -> F1: 0.8069 (±0.1015)
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 3, 'min_samples_split': 10, 'n_estimators': 200} -> F1: 0.8064 (±0.1166)
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 4, 'min_samples_split': 5, 'n_estimators': 100} -> F1: 0.7426 (±0.1299)
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 4, 'min_samples_split': 5, 'n_estimators': 200} -> F1: 0.7593 (±0.1303)
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 4, 'min_samples_split': 10, 'n_estimators': 100} -> F1: 0.8058 (±0.1016)
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 4, 'min_samples_split': 10, 'n_estimators': 200} -> F1: 0.7964 (±0.0993)
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 5, 'min_samples_split': 5, 'n_estimators': 100} -> F1: 0.7697 (±0.1394)
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 5, 'min_samples_split': 5, 'n_estimators': 200} -> F1: 0.7780 (±0.1477)
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 5, 'min_samples_split': 10, 'n_estimators': 100} -> F1: 0.8058 (±0.1016)
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.05, 'max_depth': 5, 'min_samples_split': 10, 'n_estimators': 200} -> F1: 0.8053 (±0.1018)
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 3, 'min_samples_split': 5, 'n_estimators': 100} -> F1: 0.8020 (±0.1027)
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 3, 'min_samples_split': 5, 'n_estimators': 200} -> F1: 0.8020 (±0.1027)
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 3, 'min_samples_split': 10, 'n_estimators': 100} -> F1: 0.8215 (±0.0956)
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 3, 'min_samples_split': 10, 'n_estimators': 200} -> F1: 0.8213 (±0.1125)
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 4, 'min_samples_split': 5, 'n_estimators': 100} -> F1: 0.7522 (±0.1255)
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 4, 'min_samples_split': 5, 'n_estimators': 200} -> F1: 0.7601 (±0.1368)
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 4, 'min_samples_split': 10, 'n_estimators': 100} -> F1: 0.8025 (±0.1025)
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 4, 'min_samples_split': 10, 'n_estimators': 200} -> F1: 0.8020 (±0.1027)
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 5, 'min_samples_split': 5, 'n_estimators': 100} -> F1: 0.7702 (±0.1393)
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 5, 'min_samples_split': 5, 'n_estimators': 200} -> F1: 0.7713 (±0.1395)
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 5, 'min_samples_split': 10, 'n_estimators': 100} -> F1: 0.7964 (±0.0890)
+2026-08-04 11:22:40 | DEBUG    | train |   Params: {'learning_rate': 0.1, 'max_depth': 5, 'min_samples_split': 10, 'n_estimators': 200} -> F1: 0.8031 (±0.1093)
+2026-08-04 11:22:40 | INFO     | train | Evaluating GradientBoosting (classification)...
+2026-08-04 11:22:40 | INFO     | train |   CV completed in 0.46s
+2026-08-04 11:22:40 | INFO     | train |   Accuracy: 0.8333 (±0.0789) [train: 1.0000]
+2026-08-04 11:22:40 | INFO     | train |   F1 (w):   0.8215 (±0.0956)
+2026-08-04 11:22:40 | INFO     | train |   F1 (macro): 0.6987 (±0.1637)
+2026-08-04 11:22:40 | INFO     | train |   Precision: 0.8502
+2026-08-04 11:22:40 | INFO     | train |   Recall:    0.8333
+2026-08-04 11:22:40 | WARNING  | train |   [WARN] Possible overfitting: train Acc - test Acc = 0.1667
+2026-08-04 11:22:40 | INFO     | train | 
+--- Model: LogisticRegressionCV ---
+2026-08-04 11:22:40 | INFO     | train | Evaluating LogisticRegressionCV (classification)...
+2026-08-04 11:22:40 | INFO     | train |   CV completed in 0.23s
+2026-08-04 11:22:40 | INFO     | train |   Accuracy: 0.6667 (±0.0943) [train: 0.9317]
+2026-08-04 11:22:40 | INFO     | train |   F1 (w):   0.6200 (±0.1186)
+2026-08-04 11:22:40 | INFO     | train |   F1 (macro): 0.4391 (±0.0935)
+2026-08-04 11:22:40 | INFO     | train |   Precision: 0.6015
+2026-08-04 11:22:40 | INFO     | train |   Recall:    0.6667
+2026-08-04 11:22:40 | WARNING  | train |   [WARN] Possible overfitting: train Acc - test Acc = 0.2650
+2026-08-04 11:22:40 | INFO     | train | 
+Best classification model: GradientBoosting (Accuracy = 0.8333)
+2026-08-04 11:22:40 | INFO     | train | Classification training took 33.36s
+2026-08-04 11:22:40 | INFO     | train | 
+============================================================
+2026-08-04 11:22:40 | INFO     | train | FITTING BEST MODELS ON FULL DATASET
+2026-08-04 11:22:40 | INFO     | train | ============================================================
+2026-08-04 11:22:40 | INFO     | train | Fitting RidgeCV (regression)...
+2026-08-04 11:22:40 | INFO     | train | Fitting GradientBoosting (classification)...
+2026-08-04 11:22:41 | INFO     | train | 
+============================================================
+2026-08-04 11:22:41 | INFO     | train | PERMUTATION IMPORTANCE
+2026-08-04 11:22:41 | INFO     | train | ============================================================
+2026-08-04 11:22:41 | INFO     | train | Computing permutation importance for RidgeCV...
+2026-08-04 11:22:41 | INFO     | train |   Top 10 features (permutation importance):
+2026-08-04 11:22:41 | INFO     | train |     attendance_percent: 0.2482 (±0.0276)
+2026-08-04 11:22:41 | INFO     | train |     previous_gpa: 0.1728 (±0.0202)
+2026-08-04 11:22:41 | INFO     | train |     sleep_hours: 0.0223 (±0.0035)
+2026-08-04 11:22:41 | INFO     | train |     extracurricular: 0.0213 (±0.0041)
+2026-08-04 11:22:41 | INFO     | train |     study_hours_per_day: 0.0141 (±0.0026)
+2026-08-04 11:22:41 | INFO     | train |     parental_education_High School: 0.0107 (±0.0024)
+2026-08-04 11:22:41 | INFO     | train |     part_time_job: 0.0023 (±0.0006)
+2026-08-04 11:22:41 | INFO     | train |     internet_access: 0.0022 (±0.0010)
+2026-08-04 11:22:41 | INFO     | train |     gender_Male: 0.0000 (±0.0001)
+2026-08-04 11:22:41 | INFO     | train |     parental_education_Master: 0.0000 (±0.0001)
+2026-08-04 11:22:41 | INFO     | train | Computing permutation importance for GradientBoosting...
+2026-08-04 11:22:41 | INFO     | train |   Top 10 features (permutation importance):
+2026-08-04 11:22:41 | INFO     | train |     previous_gpa: 0.2700 (±0.0300)
+2026-08-04 11:22:41 | INFO     | train |     extracurricular: 0.1420 (±0.0275)
+2026-08-04 11:22:41 | INFO     | train |     attendance_percent: 0.0920 (±0.0286)
+2026-08-04 11:22:41 | INFO     | train |     part_time_job: 0.0000 (±0.0000)
+2026-08-04 11:22:41 | INFO     | train |     internet_access: 0.0000 (±0.0000)
+2026-08-04 11:22:41 | INFO     | train |     parental_education_PhD: 0.0000 (±0.0000)
+2026-08-04 11:22:41 | INFO     | train |     parental_education_Master: 0.0000 (±0.0000)
+2026-08-04 11:22:41 | INFO     | train |     parental_education_High School: 0.0000 (±0.0000)
+2026-08-04 11:22:41 | INFO     | train |     gender_Male: 0.0000 (±0.0000)
+2026-08-04 11:22:41 | INFO     | train |     sleep_hours: 0.0000 (±0.0000)
+2026-08-04 11:22:41 | INFO     | train | 
+============================================================
+2026-08-04 11:22:41 | INFO     | train | SAVING MODELS
+2026-08-04 11:22:41 | INFO     | train | ============================================================
+2026-08-04 11:22:41 | INFO     | train | Models saved to D:\Student Performance & Study Habits\ml\models
+2026-08-04 11:22:41 | INFO     | train | Metrics saved to D:\Student Performance & Study Habits\ml\models/metrics.json
+2026-08-04 11:22:41 | INFO     | train | Training summary saved to D:\Student Performance & Study Habits\ml\logs/training_summary_latest.json
+2026-08-04 11:22:41 | INFO     | train | 
+============================================================
+2026-08-04 11:22:41 | INFO     | train | GENERATING PLOTS
+2026-08-04 11:22:41 | INFO     | train | ============================================================
+2026-08-04 11:22:41 | INFO     | train | Feature importance plot saved to D:\Student Performance & Study Habits\ml\output\feature_importance_regression.png
+2026-08-04 11:22:41 | INFO     | train | Feature importance plot saved to D:\Student Performance & Study Habits\ml\output\feature_importance_classification.png
+2026-08-04 11:22:42 | INFO     | train | Predictions vs Actual plot saved to D:\Student Performance & Study Habits\ml\output\predictions_vs_actual_regression.png
+2026-08-04 11:22:42 | INFO     | train | Confusion matrix saved to D:\Student Performance & Study Habits\ml\output\confusion_matrix.png
+2026-08-04 11:22:42 | INFO     | train | Learning curve saved to D:\Student Performance & Study Habits\ml\output\learning_curve_regression.png
+2026-08-04 11:22:44 | INFO     | train | Learning curve saved to D:\Student Performance & Study Habits\ml\output\learning_curve_classification.png
+2026-08-04 11:22:44 | INFO     | train | 
+============================================================
+2026-08-04 11:22:44 | INFO     | train | TRAINING COMPLETE
+2026-08-04 11:22:44 | INFO     | train | ============================================================
+2026-08-04 11:22:44 | INFO     | train | Total training time: 54.81s
+2026-08-04 11:22:44 | INFO     | train | Models saved to: D:\Student Performance & Study Habits\ml\models
+2026-08-04 11:22:44 | INFO     | train | Plots saved to: D:\Student Performance & Study Habits\ml\output
+2026-08-04 11:22:44 | INFO     | train | Logs saved to: D:\Student Performance & Study Habits\ml\logs
+2026-08-04 11:22:44 | INFO     | train | Best regression: RidgeCV (R² = 0.9836 ± 0.0085)
+2026-08-04 11:22:44 | INFO     | train | Best classification: GradientBoosting (Acc = 0.8333 ± 0.0789, F1 = 0.8215)
+2026-08-04 11:22:44 | INFO     | train | Log file: D:\Student Performance & Study Habits\ml\logs\train_20260804_112149.log

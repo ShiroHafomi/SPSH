@@ -1,31 +1,146 @@
 {
+  "timestamp": "2026-08-04T11:22:41.427504",
+  "data_info": {
+    "n_samples": 50,
+    "n_features": 12,
+    "target_reg_range": [
+      38,
+      99
+    ],
+    "target_clf_distribution": {
+      "0": 10,
+      "1": 6,
+      "2": 8,
+      "3": 5,
+      "4": 21
+    },
+    "feature_names": [
+      "age",
+      "study_hours_per_day",
+      "attendance_percent",
+      "sleep_hours",
+      "previous_gpa",
+      "gender_Male",
+      "parental_education_High School",
+      "parental_education_Master",
+      "parental_education_PhD",
+      "internet_access",
+      "extracurricular",
+      "part_time_job"
+    ]
+  },
+  "cv_strategy": "RepeatedKFold(n_splits=5, n_repeats=3)",
   "regression": {
     "best_model": "RidgeCV",
     "cv_results": {
       "RandomForest": {
         "r2_mean": 0.9786999953714852,
-        "r2_std": 0.015995565195353553,
-        "mae_mean": 1.8364582527657543,
-        "mae_std": 0.5320902046149032,
-        "rmse_mean": 2.3806180919488975,
-        "rmse_std": 0.6208557271570289
+        "r2_std": 0.01599556519535357,
+        "r2_train_mean": 0.9941189604629722,
+        "mae_mean": 1.836458252765755,
+        "mae_std": 0.532090204614903,
+        "rmse_mean": 2.3806180919488984,
+        "rmse_std": 0.6208557271570287,
+        "mse_mean": 6.052804333658098,
+        "fit_time_mean": 0.2918012301127116,
+        "score_time_mean": 0.0521917978922526,
+        "cv_duration_sec": 0.42733049392700195
       },
       "GradientBoosting": {
-        "r2_mean": 0.9807053782309926,
-        "r2_std": 0.016751777008686797,
-        "mae_mean": 1.770134504426194,
-        "mae_std": 0.49308247454888715,
-        "rmse_mean": 2.192052017616695,
-        "rmse_std": 0.6016409506530722
+        "r2_mean": 0.9802508957851866,
+        "r2_std": 0.018853286025763458,
+        "r2_train_mean": 0.9999965738078977,
+        "mae_mean": 1.7317294315774812,
+        "mae_std": 0.4845523708992924,
+        "rmse_mean": 2.1881553175476274,
+        "rmse_std": 0.6759291007949766,
+        "mse_mean": 5.244903843013465,
+        "fit_time_mean": 0.0603695551554362,
+        "score_time_mean": 0.002349853515625,
+        "cv_duration_sec": 0.10520076751708984
       },
       "RidgeCV": {
         "r2_mean": 0.9836488672921402,
         "r2_std": 0.008533894727658411,
+        "r2_train_mean": 0.9922716107795628,
         "mae_mean": 1.7735796000325332,
         "mae_std": 0.390420603359791,
         "rmse_mean": 2.116554132060803,
-        "rmse_std": 0.47028736155581446
+        "rmse_std": 0.47028736155581446,
+        "mse_mean": 4.700971596382787,
+        "fit_time_mean": 0.05601072311401367,
+        "score_time_mean": 0.0018541495005289714,
+        "cv_duration_sec": 0.09468650817871094
       }
+    },
+    "tuning_info": {
+      "RandomForest": {
+        "best_params": {
+          "max_depth": 5,
+          "min_samples_leaf": 2,
+          "min_samples_split": 5,
+          "n_estimators": 200
+        },
+        "best_cv_score": 0.9786999953714852
+      },
+      "GradientBoosting": {
+        "best_params": {
+          "learning_rate": 0.1,
+          "max_depth": 4,
+          "min_samples_split": 5,
+          "n_estimators": 100
+        },
+        "best_cv_score": 0.9802508957851866
+      },
+      "RidgeCV": {
+        "best_params": "N/A (built-in CV)",
+        "best_cv_score": 0.9836488672921402
+      }
+    },
+    "permutation_importance": {
+      "features": [
+        "age",
+        "study_hours_per_day",
+        "attendance_percent",
+        "sleep_hours",
+        "previous_gpa",
+        "gender_Male",
+        "parental_education_High School",
+        "parental_education_Master",
+        "parental_education_PhD",
+        "internet_access",
+        "extracurricular",
+        "part_time_job"
+      ],
+      "importances_mean": [
+        3.587361862955607e-06,
+        0.014056520335414702,
+        0.24815733534430834,
+        0.022294965801087797,
+        0.17281099072475303,
+        4.572037719381416e-05,
+        0.010685937809120426,
+        3.0547522502011314e-05,
+        6.838336100112308e-06,
+        0.002185793154592497,
+        0.02131864341523646,
+        0.0022815682606511676
+      ],
+      "importances_std": [
+        1.518957604998704e-05,
+        0.0025974272962169514,
+        0.02764924371054039,
+        0.0034746436842738268,
+        0.02019328836864617,
+        0.00010775512001321872,
+        0.002416883621926106,
+        8.904902420890994e-05,
+        3.0967501077748836e-05,
+        0.000980159722974596,
+        0.004140591444569864,
+        0.0006393355785857793
+      ],
+      "duration_sec": 0.022516250610351562
     }
   },
   "classification": {
@@ -34,21 +149,114 @@
       "RandomForest": {
         "accuracy_mean": 0.78,
         "accuracy_std": 0.13266499161421602,
-        "f1_mean": 0.759925925925926,
-        "f1_std": 0.15005045333471462
+        "accuracy_train_mean": 0.9533333333333331,
+        "f1_weighted_mean": 0.759925925925926,
+        "f1_weighted_std": 0.15005045333471462,
+        "f1_macro_mean": 0.6382592592592592,
+        "f1_macro_std": 0.2035067937174659,
+        "precision_mean": 0.7746666666666666,
+        "recall_mean": 0.78,
+        "fit_time_mean": 0.18082575798034667,
+        "score_time_mean": 0.040252399444580075,
+        "cv_duration_sec": 0.28005290031433105
       },
       "GradientBoosting": {
-        "accuracy_mean": 0.8200000000000001,
-        "accuracy_std": 0.09092121131323905,
-        "f1_mean": 0.8071005291005292,
-        "f1_std": 0.10648375704952898
+        "accuracy_mean": 0.8333333333333335,
+        "accuracy_std": 0.07888106377466156,
+        "accuracy_train_mean": 1.0,
+        "f1_weighted_mean": 0.8214814814814815,
+        "f1_weighted_std": 0.09563103536276382,
+        "f1_macro_mean": 0.6987407407407408,
+        "f1_macro_std": 0.1637046002992038,
+        "precision_mean": 0.8502222222222222,
+        "recall_mean": 0.8333333333333335,
+        "fit_time_mean": 0.4084064324696859,
+        "score_time_mean": 0.010016504923502605,
+        "cv_duration_sec": 0.45845603942871094
       },
       "LogisticRegressionCV": {
         "accuracy_mean": 0.6666666666666666,
         "accuracy_std": 0.09428090415820635,
-        "f1_mean": 0.6199652199652199,
-        "f1_std": 0.11857865295635574
+        "accuracy_train_mean": 0.9316666666666666,
+        "f1_weighted_mean": 0.6199652199652199,
+        "f1_weighted_std": 0.11857865295635574,
+        "f1_macro_mean": 0.43906401006401014,
+        "f1_macro_std": 0.09353904821699772,
+        "precision_mean": 0.6015,
+        "recall_mean": 0.6666666666666666,
+        "fit_time_mean": 0.18351917266845702,
+        "score_time_mean": 0.009276866912841797,
+        "cv_duration_sec": 0.2309558391571045
       }
+    },
+    "tuning_info": {
+      "RandomForest": {
+        "best_params": {
+          "max_depth": 4,
+          "min_samples_leaf": 2,
+          "min_samples_split": 5,
+          "n_estimators": 100
+        },
+        "best_cv_score": 0.759925925925926
+      },
+      "GradientBoosting": {
+        "best_params": {
+          "learning_rate": 0.1,
+          "max_depth": 3,
+          "min_samples_split": 10,
+          "n_estimators": 100
+        },
+        "best_cv_score": 0.8214814814814815
+      },
+      "LogisticRegressionCV": {
+        "best_params": "N/A (built-in CV)",
+        "best_cv_score": 0.6199652199652199
+      }
+    },
+    "permutation_importance": {
+      "features": [
+        "age",
+        "study_hours_per_day",
+        "attendance_percent",
+        "sleep_hours",
+        "previous_gpa",
+        "gender_Male",
+        "parental_education_High School",
+        "parental_education_Master",
+        "parental_education_PhD",
+        "internet_access",
+        "extracurricular",
+        "part_time_job"
+      ],
+      "importances_mean": [
+        0.0,
+        0.0,
+        0.092,
+        0.0,
+        0.27,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.14200000000000004,
+        0.0
+      ],
+      "importances_std": [
+        0.0,
+        0.0,
+        0.028565713714171395,
+        0.0,
+        0.030000000000000006,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.027495454169735065,
+        0.0
+      ],
+      "duration_sec": 0.1700129508972168
     },
     "grade_map": {
       "F": 0,
@@ -75,5 +283,6 @@
       "extracurricular",
       "part_time_job"
     ]
-  }
+  },
+  "training_duration_sec": 51.77538990974426
 }
