@@ -17,6 +17,7 @@ const {
   apiDeleteStudent,
   apiListUsers,
   apiDeleteUser,
+  apiPredict,
 } = require('../controllers/apiController');
 
 const router = express.Router();
@@ -42,5 +43,8 @@ router.post('/students/:id/delete', requireApiAuth, apiDeleteStudent);
 // ─── Admin ───────────────────────────────────────────────────────────────────
 router.get('/admin/users', requireApiAuth, requireApiAdmin, apiListUsers);
 router.post('/admin/users/:id/delete', requireApiAuth, requireApiAdmin, apiDeleteUser);
+
+// ─── ML Prediction ────────────────────────────────────────────────────────────
+router.post('/predict', requireApiAuth, apiPredict);
 
 module.exports = router;

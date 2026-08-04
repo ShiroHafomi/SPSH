@@ -1,6 +1,5 @@
 /**
- * Express app factory — serves REST API + static SPA frontend.
- * No EJS, no server-side rendering. The frontend is a Vanilla JS SPA.
+ * Express app factory — serves REST API + React frontend (Vite in dev, static build in prod).
  */
 require('dotenv').config();
 const express = require('express');
@@ -11,6 +10,9 @@ const session = require('express-session');
 const { ensureReady } = require('./config/db');
 const authService = require('./services/authService');
 const apiRoutes = require('./routes/apiRoutes');
+
+const isDev = process.env.NODE_ENV !== 'production';
+const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
 
 function createApp() {
   const app = express();
@@ -26,9 +28,6 @@ function createApp() {
   app.use(express.urlencoded({ extended: true }));
   app.use(express.json());
 
-  // Static files (CSS, JS, images — served from /)
-  app.use(express.static(path.join(__dirname, '..', 'public')));
-
   // --- Session middleware ---
   app.use(session({
     secret: process.env.SESSION_SECRET || 'change-me-in-production',
@@ -42,7 +41,6 @@ function createApp() {
   }));
 
   // --- Current user middleware ---
-  // Populates res.locals.currentUser from session for API route use.
   app.use(async (req, res, next) => {
     if (req.session && req.session.userId) {
       try {
@@ -58,7 +56,7 @@ function createApp() {
     next();
   });
 
-  // --- Minimal POST origin check (CSRF defense-in-depth) ---
+  // --- CSRF defense-in-depth ---
   app.use((req, res, next) => {
     if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
       const origin = req.get('Origin') || '';
@@ -78,15 +76,35 @@ function createApp() {
   app.get('/health', (req, res) => res.json({ ok: true }));
   app.use('/api', apiRoutes);
 
-  // --- SPA catch-all ---
-  // Any non-API, non-static path serves index.html so the SPA handles routing.
-  app.get('*', (req, res) => {
-    // Don't catch /api/* routes (they should 404 as JSON)
-    if (req.path.startsWith('/api/')) {
-      return res.status(404).json({ error: 'API endpoint not found.' });
-    }
-    res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
-  });
+  // --- Frontend serving ---
+  if (isDev) {
+    // In development, Vite dev server handles frontend (port 5173)
+    // Express only serves API. Add a helpful message for root access.
+    app.get('/', (req, res) => {
+      res.json({
+        message: 'Student Performance API running',
+        frontend: 'Run "npm run dev" in frontend/ to start Vite dev server on port 5173',
+        endpoints: {
+          health: '/health',
+          auth: '/api/auth/*',
+          students: '/api/students*',
+          dashboard: '/api/dashboard/*',
+          admin: '/api/admin/*',
+        },
+      });
+    });
+  } else {
+    // Production: serve built React app
+    app.use(express.static(frontendDist));
+
+    // SPA catch-all for client-side routing
+    app.get('*', (req, res) => {
+      if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ error: 'API endpoint not found.' });
+      }
+      res.sendFile(path.join(frontendDist, 'index.html'));
+    });
+  }
 
   // --- 500 ---
   app.use((err, req, res, next) => {

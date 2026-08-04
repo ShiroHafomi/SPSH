@@ -1,0 +1,79 @@
+{
+  "regression": {
+    "best_model": "RidgeCV",
+    "cv_results": {
+      "RandomForest": {
+        "r2_mean": 0.9786999953714852,
+        "r2_std": 0.015995565195353553,
+        "mae_mean": 1.8364582527657543,
+        "mae_std": 0.5320902046149032,
+        "rmse_mean": 2.3806180919488975,
+        "rmse_std": 0.6208557271570289
+      },
+      "GradientBoosting": {
+        "r2_mean": 0.9807053782309926,
+        "r2_std": 0.016751777008686797,
+        "mae_mean": 1.770134504426194,
+        "mae_std": 0.49308247454888715,
+        "rmse_mean": 2.192052017616695,
+        "rmse_std": 0.6016409506530722
+      },
+      "RidgeCV": {
+        "r2_mean": 0.9836488672921402,
+        "r2_std": 0.008533894727658411,
+        "mae_mean": 1.7735796000325332,
+        "mae_std": 0.390420603359791,
+        "rmse_mean": 2.116554132060803,
+        "rmse_std": 0.47028736155581446
+      }
+    }
+  },
+  "classification": {
+    "best_model": "GradientBoosting",
+    "cv_results": {
+      "RandomForest": {
+        "accuracy_mean": 0.78,
+        "accuracy_std": 0.13266499161421602,
+        "f1_mean": 0.759925925925926,
+        "f1_std": 0.15005045333471462
+      },
+      "GradientBoosting": {
+        "accuracy_mean": 0.8200000000000001,
+        "accuracy_std": 0.09092121131323905,
+        "f1_mean": 0.8071005291005292,
+        "f1_std": 0.10648375704952898
+      },
+      "LogisticRegressionCV": {
+        "accuracy_mean": 0.6666666666666666,
+        "accuracy_std": 0.09428090415820635,
+        "f1_mean": 0.6199652199652199,
+        "f1_std": 0.11857865295635574
+      }
+    },
+    "grade_map": {
+      "F": 0,
+      "D": 1,
+      "C": 2,
+      "B": 3,
+      "A": 4
+    }
+  },
+  "feature_info": {
+    "numeric_features": [
+      "age",
+      "study_hours_per_day",
+      "attendance_percent",
+      "sleep_hours",
+      "previous_gpa"
+    ],
+    "categorical_features": [
+      "gender",
+      "parental_education"
+    ],
+    "binary_features": [
+      "internet_access",
+      "extracurricular",
+      "part_time_job"
+    ]
+  }
+}

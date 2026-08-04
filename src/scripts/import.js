@@ -431,11 +431,14 @@ async function streamInsert(pool, csvPath, tblName, columns, mapOrigToSanitized)
   const flushBatch = async (rows, attempt = 1) => {
     if (!rows.length) return;
     const maxBatch = OPTS.batch;
-    // Build flat array for multi-row INSERT
+    // Build multi-row VALUES: (?,?,...), (?,?,...), ...
+    const rowPlaceholders = rows.map(() => `(${placeholders})`).join(',');
+    const multiRowSQL = `INSERT INTO \`${tblName}\` (\`${colNames.join('`,`')}\`) VALUES ${rowPlaceholders}`;
+    // Flatten all row values for the multi-row query
     const values = rows.flat();
 
     try {
-      await pool.query(insertSQL, values);
+      await pool.query(multiRowSQL, values);
       totalInserted += rows.length;
       if (OPTS.verbose || totalInserted % 5000 === 0) {
         log(`Inserted ${totalInserted} rows...`);

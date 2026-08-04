@@ -7,6 +7,8 @@ const authService = require('../services/authService');
 const { getDisplayColumns, getSchemaMap, loadSchemaMap } = require('../utils/schemaMap');
 const { buildColumnSets } = require('../utils/columns');
 const { buildChartConfig } = require('../utils/chartConfig');
+const { execFile } = require('child_process');
+const path = require('path');
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
@@ -297,6 +299,59 @@ async function apiDeleteUser(req, res) {
   }
 }
 
+// ─── ML Prediction ─────────────────────────────────────────────────────────────
+
+/** POST /api/predict - Predict student performance */
+async function apiPredict(req, res) {
+  const input = req.body || {};
+
+  // Validate required fields
+  const requiredFields = ['gender', 'age', 'study_hours_per_day', 'attendance_percent',
+                          'sleep_hours', 'previous_gpa', 'parental_education',
+                          'internet_access', 'extracurricular', 'part_time_job'];
+  const missing = requiredFields.filter(f => input[f] === undefined || input[f] === null || input[f] === '');
+  if (missing.length > 0) {
+    return res.status(400).json({
+      error: 'Missing required fields',
+      missing,
+      required: requiredFields
+    });
+  }
+
+  // Convert Yes/No to 1/0 for binary features
+  const pythonInput = { ...input };
+  for (const key of ['internet_access', 'extracurricular', 'part_time_job']) {
+    if (typeof pythonInput[key] === 'string') {
+      pythonInput[key] = pythonInput[key].toLowerCase() === 'yes' ? 1 : 0;
+    }
+  }
+
+  // Path to inference script
+  const scriptPath = path.join(__dirname, '..', '..', 'ml', 'inference.py');
+
+  // Run Python inference
+  execFile('py', [scriptPath, '--json', '-'], {
+    maxBuffer: 1024 * 1024,
+    timeout: 30000,
+  }, (error, stdout, stderr) => {
+    if (error) {
+      console.error('[apiPredict] Python error:', error);
+      console.error('[apiPredict] stderr:', stderr);
+      return res.status(500).json({ error: 'Prediction failed', details: stderr });
+    }
+
+    try {
+      // Parse JSON from stdout
+      const result = JSON.parse(stdout.trim());
+      res.json(result);
+    } catch (parseErr) {
+      console.error('[apiPredict] Parse error:', parseErr);
+      console.error('[apiPredict] stdout:', stdout);
+      res.status(500).json({ error: 'Failed to parse prediction result' });
+    }
+  }).stdin.write(JSON.stringify(pythonInput)).end();
+}
+
 // ─── Helper ──────────────────────────────────────────────────────────────────
 
 /**
@@ -352,4 +407,5 @@ module.exports = {
   apiDeleteStudent,
   apiListUsers,
   apiDeleteUser,
+  apiPredict,
 };

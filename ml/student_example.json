@@ -1,0 +1,12 @@
+{
+  "gender": "Female",
+  "age": 20,
+  "study_hours_per_day": 5.0,
+  "attendance_percent": 98,
+  "sleep_hours": 8.5,
+  "previous_gpa": 3.9,
+  "parental_education": "PhD",
+  "internet_access": "Yes",
+  "extracurricular": "Yes",
+  "part_time_job": "No"
+}
