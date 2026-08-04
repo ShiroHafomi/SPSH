@@ -7,8 +7,24 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:3001',
         changeOrigin: true,
+        configure: (proxy, options) => {
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            // Forward cookies from the browser to the API server
+            const cookie = req.headers.cookie;
+            if (cookie) {
+              proxyReq.setHeader('cookie', cookie);
+            }
+          });
+          proxy.on('proxyRes', (proxyRes, req, res) => {
+            // Forward set-cookie headers from API server to browser
+            const setCookie = proxyRes.headers['set-cookie'];
+            if (setCookie) {
+              res.setHeader('set-cookie', setCookie);
+            }
+          });
+        },
       },
     },
   },
