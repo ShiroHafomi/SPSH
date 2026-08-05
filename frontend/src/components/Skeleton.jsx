@@ -1,7 +1,7 @@
 export function Skeleton({ className = '', style, ...props }) {
   return (
     <div
-      className={`animate-shimmer rounded ${className}`}
+      className={`animate-shimmer rounded-xl ${className}`}
       style={style}
       aria-hidden="true"
       {...props}

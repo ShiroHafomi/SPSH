@@ -280,6 +280,75 @@ async function getDashboardStats() {
   return stats;
 }
 
+/**
+ * Find at-risk students based on configurable thresholds.
+ * Detected via schema_agnostic column name heuristics.
+ * @param {Object} thresholds { attendance, study_hours, gpa }
+ * @returns {Promise<Object>} { students, count, thresholds }
+ */
+async function getAtRiskStudents({ attendance = 75, studyHours = 2, gpa = 2.5 } = {}) {
+  const { loadSchemaMap, getSchemaMap } = require('../utils/schemaMap');
+  loadSchemaMap();
+  const map = getSchemaMap();
+
+  const conditions = [];
+  const params = [];
+
+  // Find matching columns by semantic tag or name pattern
+  for (const [key, tag] of [
+    ['attendance_percent', 'attendance'],
+    ['study_hours_per_day', 'study_hours'],
+    ['previous_gpa', 'gpa'],
+  ]) {
+    const col = map[key];
+    if (col) {
+      switch (col.semanticTag || key) {
+        case 'attendance':
+        case 'attendance_percent':
+          conditions.push(`\`${col.name}\` < ?`);
+          params.push(thresholds.attendance);
+          break;
+        case 'study_hours':
+        case 'study_hours_per_day':
+          conditions.push(`\`${col.name}\` < ?`);
+          params.push(thresholds.studyHours);
+          break;
+        case 'gpa':
+        case 'previous_gpa':
+          conditions.push(`\`${col.name}\` < ?`);
+          params.push(thresholds.gpa);
+          break;
+        default:
+          // Fallback: match by name containing keywords
+          if (/attendance/i.test(col.name)) {
+            conditions.push(`\`${col.name}\` < ?`);
+            params.push(thresholds.attendance);
+          } else if (/study.*hour/i.test(col.name)) {
+            conditions.push(`\`${col.name}\` < ?`);
+            params.push(thresholds.studyHours);
+          } else if (/gpa/i.test(col.name)) {
+            conditions.push(`\`${col.name}\` < ?`);
+            params.push(thresholds.gpa);
+          }
+      }
+    }
+  }
+
+  if (!conditions.length) {
+    return { students: [], count: 0, thresholds: { attendance: thresholds.attendance, studyHours: thresholds.studyHours, gpa: thresholds.gpa } };
+  }
+
+  const whereSql = conditions.join(' OR ');
+  const sql = `SELECT * FROM \`${TABLE}\` WHERE ${whereSql} ORDER BY \`id\` ASC LIMIT 20`;
+  const [rows] = await pool.query(sql, params);
+
+  return {
+    students: rows,
+    count: rows.length,
+    thresholds: { attendance: thresholds.attendance, studyHours: thresholds.studyHours, gpa: thresholds.gpa },
+  };
+}
+
 module.exports = {
   listStudents,
   countStudents,
@@ -288,4 +357,5 @@ module.exports = {
   updateStudent,
   deleteStudent,
   getDashboardStats,
+  getAtRiskStudents,
 };

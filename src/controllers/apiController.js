@@ -9,6 +9,7 @@ const { buildColumnSets } = require('../utils/columns');
 const { buildChartConfig } = require('../utils/chartConfig');
 const { execFile } = require('child_process');
 const path = require('path');
+const { generateFeedback } = require('../utils/feedbackTemplates');
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
@@ -352,6 +353,85 @@ async function apiPredict(req, res) {
   }).stdin.write(JSON.stringify(pythonInput)).end();
 }
 
+// ─── At-Risk Students ────────────────────────────────────────────────────────
+
+/** GET /api/dashboard/at-risk — find students with low attendance/study/gpa */
+async function apiAtRiskStudents(req, res) {
+  const thresholds = {
+    attendance: parseInt(req.query.attendance, 10) || 75,
+    studyHours: parseFloat(req.query.study) || 2,
+    gpa: parseFloat(req.query.gpa) || 2.5,
+  };
+
+  try {
+    const result = await studentService.getAtRiskStudents(thresholds);
+    res.json(result);
+  } catch (err) {
+    console.error('[apiAtRiskStudents]', err);
+    res.status(500).json({ error: 'Failed to load at-risk students.' });
+  }
+}
+
+// ─── AI Feedback ───────────────────────────────────────────────────────────────
+
+/** POST /api/feedback — run ML prediction + generate rule-based feedback */
+async function apiFeedback(req, res) {
+  const input = req.body || {};
+
+  // Validate required fields
+  const requiredFields = ['gender', 'age', 'study_hours_per_day', 'attendance_percent',
+                          'sleep_hours', 'previous_gpa', 'parental_education',
+                          'internet_access', 'extracurricular', 'part_time_job'];
+  const missing = requiredFields.filter(f => input[f] === undefined || input[f] === null || input[f] === '');
+  if (missing.length > 0) {
+    return res.status(400).json({
+      error: 'Missing required fields',
+      missing,
+      required: requiredFields
+    });
+  }
+
+  // Run ML inference
+  const pythonInput = { ...input };
+  for (const key of ['internet_access', 'extracurricular', 'part_time_job']) {
+    if (typeof pythonInput[key] === 'string') {
+      pythonInput[key] = pythonInput[key].toLowerCase() === 'yes' ? 1 : 0;
+    }
+  }
+
+  const scriptPath = path.join(__dirname, '..', '..', 'ml', 'inference.py');
+
+  execFile('py', [scriptPath, '--json', '-'], {
+    maxBuffer: 1024 * 1024,
+    timeout: 30000,
+  }, (error, stdout, stderr) => {
+    if (error) {
+      console.error('[apiFeedback] Python error:', error);
+      console.error('[apiFeedback] stderr:', stderr);
+      return res.status(500).json({ error: 'Prediction failed', details: stderr });
+    }
+
+    try {
+      const prediction = JSON.parse(stdout.trim());
+
+      // Generate rule-based feedback
+      const feedback = generateFeedback(input, prediction);
+
+      res.json({
+        final_score: prediction.final_score,
+        grade: prediction.grade,
+        grade_confidence: prediction.grade_confidence,
+        grade_probabilities: prediction.grade_probabilities,
+        feedback,
+      });
+    } catch (parseErr) {
+      console.error('[apiFeedback] Parse error:', parseErr);
+      console.error('[apiFeedback] stdout:', stdout);
+      res.status(500).json({ error: 'Failed to parse prediction result' });
+    }
+  }).stdin.write(JSON.stringify(pythonInput)).end();
+}
+
 // ─── Helper ──────────────────────────────────────────────────────────────────
 
 /**
@@ -400,6 +480,8 @@ module.exports = {
   apiLogout,
   apiMe,
   apiDashboardStats,
+  apiAtRiskStudents,
+  apiFeedback,
   apiListStudents,
   apiGetStudent,
   apiCreateStudent,

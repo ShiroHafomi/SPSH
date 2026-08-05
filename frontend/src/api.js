@@ -89,6 +89,16 @@ export const api = {
     });
     return handleResponse(response);
   },
+
+  async put(path, body) {
+    const response = await fetch(`${API_BASE}${path}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(body),
+    });
+    return handleResponse(response);
+  },
 };
 
 export { ApiError };

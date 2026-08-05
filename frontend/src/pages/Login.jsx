@@ -51,8 +51,8 @@ export default function Login() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Sign In</h1>
-          <p className="text-sm text-gray-500 mt-1">Enter your credentials to access your account</p>
+          <h1 className="text-2xl font-bold text-primary-950 dark:text-gray-100">Sign In</h1>
+          <p className="text-sm text-primary-400 dark:text-gray-500 mt-1">Enter your credentials to access your account</p>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
@@ -103,9 +103,9 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-gray-500">
-          Don't have an account?
-          <Link to="/register" className="text-primary-600 hover:text-primary-700 font-medium transition-colors">
+        <p className="mt-6 text-center text-sm text-primary-400 dark:text-gray-500">
+          Don't have an account?{' '}
+          <Link to="/register" className="text-primary-600 hover:text-primary-700 font-semibold transition-colors">
             Create one
           </Link>
         </p>

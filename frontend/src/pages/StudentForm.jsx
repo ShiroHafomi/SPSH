@@ -169,7 +169,7 @@ export default function StudentForm() {
                 {...fieldProps}
                 className="h-4 w-4 text-primary-600 border-gray-300 focus:ring-primary-500"
               />
-              <span className="text-sm text-gray-700">Yes</span>
+              <span className="text-sm text-primary-700 dark:text-gray-300">Yes</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -178,7 +178,7 @@ export default function StudentForm() {
                 {...fieldProps}
                 className="h-4 w-4 text-primary-600 border-gray-300 focus:ring-primary-500"
               />
-              <span className="text-sm text-gray-700">No</span>
+              <span className="text-sm text-primary-700 dark:text-gray-300">No</span>
             </label>
           </div>
           {col.nullable && <p className="text-xs text-gray-500 mt-1">Optional</p>}
@@ -289,19 +289,19 @@ export default function StudentForm() {
     <div className="max-w-3xl mx-auto">
       <div className="card p-6">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-gray-900">
+          <h2 className="text-xl font-bold text-primary-950 dark:text-gray-100">
             {isEdit ? 'Edit Student' : 'Add New Student'}
           </h2>
-          <Link to="/students" className="text-sm text-gray-500 hover:text-gray-700 transition-colors">
+          <Link to="/students" className="text-sm text-primary-400 dark:text-gray-500 hover:text-primary-700 dark:hover:text-gray-300 transition-colors">
             ← Back to list
           </Link>
         </div>
 
-        {Object.keys(errors).length > 0 && Object.values(errors).some(e => e.message && !e.type) && (
+        {Object.keys(errors).length > 0 && (
           <div className="mb-6 p-4 bg-danger-50 border border-danger-200 text-danger-700 rounded-lg" role="alert">
             <ul className="list-disc list-inside text-sm space-y-1">
-              {Object.entries(errors).map(([key, err]) => err.message && !err.type && (
-                <li key={key}>{err.message}</li>
+              {Object.entries(errors).map(([key, err]) => (
+                <li key={key}>{err.message || String(err)}</li>
               ))}
             </ul>
           </div>
@@ -312,7 +312,7 @@ export default function StudentForm() {
             <div key={col.name}>{renderField(col)}</div>
           ))}
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+          <div className="flex justify-end gap-3 pt-4 border-t border-primary-100 dark:border-gray-800">
             <Link to="/students" className="btn-secondary">
               Cancel
             </Link>

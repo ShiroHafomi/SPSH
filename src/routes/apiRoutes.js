@@ -10,6 +10,8 @@ const {
   apiLogout,
   apiMe,
   apiDashboardStats,
+  apiAtRiskStudents,
+  apiFeedback,
   apiListStudents,
   apiGetStudent,
   apiCreateStudent,
@@ -32,6 +34,7 @@ router.get('/me', requireApiAuth, apiMe);
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
 router.get('/dashboard/stats', requireApiAuth, apiDashboardStats);
+router.get('/dashboard/at-risk', requireApiAuth, apiAtRiskStudents);
 
 // ─── Students ────────────────────────────────────────────────────────────────
 router.get('/students', requireApiAuth, apiListStudents);
@@ -46,5 +49,6 @@ router.post('/admin/users/:id/delete', requireApiAuth, requireApiAdmin, apiDelet
 
 // ─── ML Prediction ────────────────────────────────────────────────────────────
 router.post('/predict', requireApiAuth, apiPredict);
+router.post('/feedback', requireApiAuth, apiFeedback);
 
 module.exports = router;
