@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-08-04T11:22:41.429012",
-  "log_file": "D:\\Student Performance & Study Habits\\ml\\logs\\train_20260804_112149.log",
+  "timestamp": "2026-08-05T09:33:27.346440",
+  "log_file": "D:\\Student Performance & Study Habits\\ml\\logs\\train_20260805_093230.log",
   "best_regression": {
     "model": "RidgeCV",
     "r2_mean": 0.9836488672921402,
@@ -15,5 +15,5 @@
     "f1_weighted_mean": 0.8214814814814815,
     "f1_macro_mean": 0.6987407407407408
   },
-  "total_duration_sec": 51.77689814567566
+  "total_duration_sec": 56.811230182647705
 }

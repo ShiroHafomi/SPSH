@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-08-04T11:22:41.427504",
+  "timestamp": "2026-08-05T09:33:27.344436",
   "data_info": {
     "n_samples": 50,
     "n_features": 12,
@@ -35,16 +35,16 @@
     "cv_results": {
       "RandomForest": {
         "r2_mean": 0.9786999953714852,
-        "r2_std": 0.01599556519535357,
+        "r2_std": 0.01599556519535355,
         "r2_train_mean": 0.9941189604629722,
         "mae_mean": 1.836458252765755,
-        "mae_std": 0.532090204614903,
+        "mae_std": 0.5320902046149024,
         "rmse_mean": 2.3806180919488984,
-        "rmse_std": 0.6208557271570287,
-        "mse_mean": 6.052804333658098,
-        "fit_time_mean": 0.2918012301127116,
-        "score_time_mean": 0.0521917978922526,
-        "cv_duration_sec": 0.42733049392700195
+        "rmse_std": 0.6208557271570273,
+        "mse_mean": 6.052804333658096,
+        "fit_time_mean": 0.31303908030192057,
+        "score_time_mean": 0.04777107238769531,
+        "cv_duration_sec": 0.5588974952697754
       },
       "GradientBoosting": {
         "r2_mean": 0.9802508957851866,
@@ -55,9 +55,9 @@
         "rmse_mean": 2.1881553175476274,
         "rmse_std": 0.6759291007949766,
         "mse_mean": 5.244903843013465,
-        "fit_time_mean": 0.0603695551554362,
-        "score_time_mean": 0.002349853515625,
-        "cv_duration_sec": 0.10520076751708984
+        "fit_time_mean": 0.06258756319681803,
+        "score_time_mean": 0.0024307886759440105,
+        "cv_duration_sec": 0.10214424133300781
       },
       "RidgeCV": {
         "r2_mean": 0.9836488672921402,
@@ -68,9 +68,9 @@
         "rmse_mean": 2.116554132060803,
         "rmse_std": 0.47028736155581446,
         "mse_mean": 4.700971596382787,
-        "fit_time_mean": 0.05601072311401367,
-        "score_time_mean": 0.0018541495005289714,
-        "cv_duration_sec": 0.09468650817871094
+        "fit_time_mean": 0.06784207026163737,
+        "score_time_mean": 0.0017520268758138022,
+        "cv_duration_sec": 0.09804606437683105
       }
     },
     "tuning_info": {
@@ -140,7 +140,7 @@
         0.004140591444569864,
         0.0006393355785857793
       ],
-      "duration_sec": 0.022516250610351562
+      "duration_sec": 0.02272200584411621
     }
   },
   "classification": {
@@ -156,9 +156,9 @@
         "f1_macro_std": 0.2035067937174659,
         "precision_mean": 0.7746666666666666,
         "recall_mean": 0.78,
-        "fit_time_mean": 0.18082575798034667,
-        "score_time_mean": 0.040252399444580075,
-        "cv_duration_sec": 0.28005290031433105
+        "fit_time_mean": 0.20030717849731444,
+        "score_time_mean": 0.04695625305175781,
+        "cv_duration_sec": 0.35289525985717773
       },
       "GradientBoosting": {
         "accuracy_mean": 0.8333333333333335,
@@ -170,9 +170,9 @@
         "f1_macro_std": 0.1637046002992038,
         "precision_mean": 0.8502222222222222,
         "recall_mean": 0.8333333333333335,
-        "fit_time_mean": 0.4084064324696859,
-        "score_time_mean": 0.010016504923502605,
-        "cv_duration_sec": 0.45845603942871094
+        "fit_time_mean": 0.5072966734568278,
+        "score_time_mean": 0.010222037633260092,
+        "cv_duration_sec": 0.6042592525482178
       },
       "LogisticRegressionCV": {
         "accuracy_mean": 0.6666666666666666,
@@ -184,9 +184,9 @@
         "f1_macro_std": 0.09353904821699772,
         "precision_mean": 0.6015,
         "recall_mean": 0.6666666666666666,
-        "fit_time_mean": 0.18351917266845702,
-        "score_time_mean": 0.009276866912841797,
-        "cv_duration_sec": 0.2309558391571045
+        "fit_time_mean": 0.19236791928609212,
+        "score_time_mean": 0.010316149393717448,
+        "cv_duration_sec": 0.25702548027038574
       }
     },
     "tuning_info": {
@@ -256,7 +256,7 @@
         0.027495454169735065,
         0.0
       ],
-      "duration_sec": 0.1700129508972168
+      "duration_sec": 0.1769871711730957
     },
     "grade_map": {
       "F": 0,
@@ -284,5 +284,5 @@
       "part_time_job"
     ]
   },
-  "training_duration_sec": 51.77538990974426
+  "training_duration_sec": 56.80922532081604
 }

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "fine-tuning-expert": {
+      "source": "Jeffallan/claude-skills",
+      "sourceType": "github",
+      "skillPath": "skills/fine-tuning-expert/SKILL.md",
+      "computedHash": "2250831eb0bf919f28177d370a209f77b457e232312f9ea9965a392d09ea2396"
+    }
+  }
+}
