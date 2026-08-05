@@ -11,8 +11,13 @@ class ApiError extends Error {
 
 async function handleResponse(response) {
   if (response.status === 401) {
-    // Clear any stored auth state
-    window.location.href = '/login';
+    // Use React Router navigation instead of hard redirect
+    if (navigateRef) {
+      navigateRef('/login', { replace: true });
+    } else {
+      // Fallback if navigate not set yet (shouldn't happen in normal flow)
+      window.location.href = '/login';
+    }
     throw new ApiError('Unauthorized. Please log in first.', 401);
   }
 
@@ -50,12 +55,18 @@ function getAuthHeaders() {
   return headers;
 }
 
+let navigateRef = null;
+
+export function setNavigate(navigate) {
+  navigateRef = navigate;
+}
+
 export const api = {
   async get(path) {
     const response = await fetch(`${API_BASE}${path}`, {
       method: 'GET',
       headers: getAuthHeaders(),
-      credentials: 'same-origin',
+      credentials: 'include',
     });
     return handleResponse(response);
   },
@@ -64,7 +75,7 @@ export const api = {
     const response = await fetch(`${API_BASE}${path}`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      credentials: 'same-origin',
+      credentials: 'include',
       body: JSON.stringify(body),
     });
     return handleResponse(response);
@@ -74,7 +85,7 @@ export const api = {
     const response = await fetch(`${API_BASE}${path}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
-      credentials: 'same-origin',
+      credentials: 'include',
     });
     return handleResponse(response);
   },

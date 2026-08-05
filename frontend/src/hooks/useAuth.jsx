@@ -1,11 +1,16 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { api } from '../api';
+import { useNavigate } from 'react-router-dom';
+import { api, setNavigate } from '../api';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  // Provide navigate to api for SPA redirects on 401
+  setNavigate(navigate);
 
   const refreshUser = useCallback(async () => {
     try {

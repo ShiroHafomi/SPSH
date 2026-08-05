@@ -1,0 +1,6 @@
+{
+  "watch": ["src"],
+  "ext": "js,mjs,cjs,json",
+  "ignore": ["node_modules", "frontend", "public", "dist", "*.log"],
+  "exec": "node src/server.js"
+}

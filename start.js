@@ -20,6 +20,7 @@ const { existsSync, readFileSync, copyFileSync } = require('fs');
 const { resolve } = require('path');
 
 const PROJECT_ROOT = __dirname;
+const NODE_EXE = process.execPath; // absolute path to current node.exe
 
 const COLORS = {
   reset: '\x1b[0m',
@@ -44,11 +45,26 @@ const log = {
 };
 
 function run(cmd, args, options = {}) {
-  const fullCmd = process.platform === 'win32' && !options.shell ? `${cmd}.cmd` : cmd;
-  const result = spawnSync(fullCmd, args, {
+  const useShell = options.shell ?? (process.platform === 'win32');
+  let fullCmd = cmd;
+  let fullArgs = args;
+
+  if (process.platform === 'win32' && useShell) {
+    // On Windows with shell, quote the command if it contains spaces
+    if (cmd.includes(' ') && !cmd.startsWith('"')) {
+      fullCmd = `"${cmd}"`;
+    }
+  } else if (process.platform === 'win32' && !useShell) {
+    // Without shell, don't append .cmd for absolute paths
+    fullCmd = cmd;
+  } else if (process.platform === 'win32') {
+    fullCmd = `${cmd}.cmd`;
+  }
+
+  const result = spawnSync(fullCmd, fullArgs, {
     cwd: PROJECT_ROOT,
     stdio: options.stdio ?? 'inherit',
-    shell: options.shell ?? (process.platform === 'win32'),
+    shell: useShell,
     encoding: 'utf8',
     env: { ...process.env, FORCE_COLOR: '1' },
   });
@@ -57,16 +73,48 @@ function run(cmd, args, options = {}) {
 }
 
 function runAsync(cmd, args, options = {}) {
-  const fullCmd = process.platform === 'win32' && !options.shell ? `${cmd}.cmd` : cmd;
+  const useShell = options.shell ?? (process.platform === 'win32');
+  let fullCmd = cmd;
+  let fullArgs = args;
+
+  if (process.platform === 'win32' && useShell) {
+    if (cmd.includes(' ') && !cmd.startsWith('"')) {
+      fullCmd = `"${cmd}"`;
+    }
+  } else if (process.platform === 'win32' && !useShell) {
+    fullCmd = cmd;
+  } else if (process.platform === 'win32') {
+    fullCmd = `${cmd}.cmd`;
+  }
+
   return new Promise((resolve, reject) => {
-    const child = spawn(fullCmd, args, {
+    const child = spawn(fullCmd, fullArgs, {
       cwd: PROJECT_ROOT,
       stdio: options.stdio ?? 'inherit',
-      shell: options.shell ?? (process.platform === 'win32'),
+      shell: useShell,
       env: { ...process.env, FORCE_COLOR: '1' },
     });
     child.on('error', reject);
     child.on('close', (code) => code === 0 ? resolve() : reject(new Error(`Exit code ${code}`)));
+  });
+}
+
+// Spawn a long-lived child process and return the live ChildProcess (not a promise).
+// Survives spaces in the project path by quoting a spaced command and using
+// relative args + a custom cwd. Used for the dual dev servers (API + Vite).
+function spawnSafe(cmd, args, options = {}) {
+  const useShell = options.shell ?? (process.platform === 'win32');
+  let fullCmd = cmd;
+
+  if (process.platform === 'win32' && useShell && cmd.includes(' ') && !cmd.startsWith('"')) {
+    fullCmd = `"${cmd}"`;
+  }
+
+  return spawn(fullCmd, args, {
+    cwd: options.cwd ?? PROJECT_ROOT,
+    stdio: options.stdio ?? 'inherit',
+    shell: useShell,
+    env: { ...process.env, FORCE_COLOR: '1' },
   });
 }
 
@@ -100,7 +148,8 @@ function showHelp() {
 Usage: node start.js [command]
 
 Commands:
-  dev (default)  Start backend in development mode (nodemon)
+  dev (default)  Start BOTH Express API (port 3001) + Vite frontend (port 5173) concurrently
+  api            Start ONLY Express API backend (nodemon)
   prod           Start backend in production mode
   ml             Show ML pipeline commands
   import         Import sample CSV data into MySQL
@@ -109,6 +158,7 @@ Commands:
 
 Examples:
   node start.js
+  node start.js api
   node start.js prod
   node start.js setup
 `);
@@ -219,10 +269,73 @@ async function doStartDev() {
     log.error('.env not found. Run \'node start.js setup\' first.');
     process.exit(1);
   }
-  log.info('Starting development server (nodemon)...');
-  log.info('Server will be at: http://localhost:3000');
+
+  const frontendPath = resolve(PROJECT_ROOT, 'frontend');
+  const frontendPkg = resolve(frontendPath, 'package.json');
+  const viteEntry = resolve(frontendPath, 'node_modules', 'vite', 'bin', 'vite.js');
+  const hasFrontend = existsSync(frontendPkg) && existsSync(viteEntry);
+
+  if (hasFrontend) {
+    // Run both Express API + Vite frontend concurrently.
+    log.info('Starting development servers (Express API + Vite frontend)...');
+    log.info('Express API:   http://localhost:3001  (serves /api/* + /health)');
+    log.info('Vite Frontend: http://localhost:5173  (proxies /api -> :3001)');
+    log.info('Open the app at: http://localhost:5173');
+    log.info('Press Ctrl+C to stop both servers.');
+
+    // Invoke each tool via `node <relative-js-path>` so we never touch a
+    // .bin/*.cmd shim (those shims break on the space + '&' in this path).
+    // Relative args => no spaces; custom cwd => Vite finds its config.
+    // Nodemon now reads nodemon.json which watches only src/ (backend)
+    const api = spawnSafe(NODE_EXE,
+      ['node_modules/nodemon/bin/nodemon.js'],
+      { cwd: PROJECT_ROOT });
+
+    const web = spawnSafe(NODE_EXE,
+      ['node_modules/vite/bin/vite.js'],
+      { cwd: frontendPath });
+
+    await new Promise((resolve, reject) => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        try { api.kill(); } catch {}
+        try { web.kill(); } catch {}
+        resolve();
+      };
+      api.on('close', finish);
+      web.on('close', finish);
+      api.on('error', (e) => { done = true; reject(e); });
+      web.on('error', (e) => { done = true; reject(e); });
+      process.on('SIGINT', () => { api.kill('SIGINT'); web.kill('SIGINT'); finish(); });
+      process.on('SIGTERM', () => { api.kill(); web.kill(); finish(); });
+    });
+  } else if (!existsSync(frontendPkg)) {
+    // No frontend at all -> API only.
+    log.info('Starting development server (nodemon)...');
+    log.info('Server will be at: http://localhost:3001');
+    log.info('Press Ctrl+C to stop.');
+    await runAsync(NODE_EXE, ['node_modules/nodemon/bin/nodemon.js', 'src/server.js']);
+  } else {
+    // Frontend dir exists but deps not installed.
+    log.warn('Frontend found but Vite is not installed.');
+    log.warn('Run: npm install --prefix frontend');
+    log.info('Starting API only...');
+    await runAsync(NODE_EXE, ['node_modules/nodemon/bin/nodemon.js', 'src/server.js']);
+  }
+}
+
+async function doStartApi() {
+  if (!hasEnvFile()) {
+    log.error('.env not found. Run \'node start.js setup\' first.');
+    process.exit(1);
+  }
+  log.info('Starting API development server (nodemon)...');
+  log.info('Server will be at: http://localhost:3001');
   log.info('Press Ctrl+C to stop.');
-  await runAsync('npm', ['run', 'dev']);
+  // Nodemon reads nodemon.json which watches only src/ (backend)
+  await runAsync(NODE_EXE, ['node_modules/nodemon/bin/nodemon.js']);
 }
 
 async function doStartProd() {
@@ -233,7 +346,8 @@ async function doStartProd() {
   log.info('Starting production server...');
   log.info('Server will be at: http://localhost:3000');
   log.info('Press Ctrl+C to stop.');
-  await runAsync('npm', ['start']);
+  // Use absolute node path to avoid issues with spaces in project path on Windows
+  await runAsync(NODE_EXE, ['src/server.js']);
 }
 
 // ============================================================
@@ -246,6 +360,9 @@ async function main() {
     switch (cmd) {
       case 'dev':
         await doStartDev();
+        break;
+      case 'api':
+        await doStartApi();
         break;
       case 'prod':
         await doStartProd();
