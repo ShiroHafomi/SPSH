@@ -31,12 +31,14 @@ function createApp() {
 
   // --- Session middleware ---
   app.use(session({
+    name: 'spsh.sid',
     secret: process.env.SESSION_SECRET || 'change-me-in-production',
     resave: false,
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      sameSite: 'lax',
+      sameSite: 'strict',
+      secure: process.env.NODE_ENV === 'production',
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
     },
   }));

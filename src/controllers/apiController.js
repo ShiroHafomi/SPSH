@@ -21,13 +21,29 @@ async function apiLogin(req, res) {
     return res.status(400).json({ error: 'Email and password are required.' });
   }
 
+  // Normalize email: trim whitespace, lowercase
+  const normalizedEmail = String(email).trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    return res.status(400).json({ error: 'Please enter a valid email address.' });
+  }
+
   try {
-    const user = await authService.loginUser({ email, password });
+    const user = await authService.loginUser({ email: normalizedEmail, password });
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
-    req.session.userId = user.id;
-    res.json({ user });
+
+    // Regenerate session ID on login to prevent session fixation
+    req.session.regenerate((err) => {
+      if (err) {
+        console.error('[apiLogin] session regenerate failed:', err);
+        // Fallback: just set userId on existing session
+        req.session.userId = user.id;
+        return res.json({ user });
+      }
+      req.session.userId = user.id;
+      res.json({ user });
+    });
   } catch (err) {
     console.error('[apiLogin]', err);
     res.status(500).json({ error: 'Something went wrong. Please try again.' });
@@ -39,15 +55,32 @@ async function apiRegister(req, res) {
   const { name, email, password, confirm_password } = req.body || {};
   const errors = [];
 
+  // Name
   if (!name || name.trim().length < 2 || name.trim().length > 100) {
     errors.push('Name must be between 2 and 100 characters.');
   }
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+
+  // Email (normalize: trim + lowercase)
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
     errors.push('Please enter a valid email address.');
   }
-  if (!password || password.length < 6) {
-    errors.push('Password must be at least 6 characters.');
+
+  // Password strength: min 8 chars, at least one uppercase, one lowercase, one digit
+  if (!password || password.length < 8) {
+    errors.push('Password must be at least 8 characters.');
+  } else {
+    if (!/[A-Z]/.test(password)) {
+      errors.push('Password must contain at least one uppercase letter.');
+    }
+    if (!/[a-z]/.test(password)) {
+      errors.push('Password must contain at least one lowercase letter.');
+    }
+    if (!/[0-9]/.test(password)) {
+      errors.push('Password must contain at least one digit.');
+    }
   }
+
   if (password !== confirm_password) {
     errors.push('Passwords do not match.');
   }
@@ -56,14 +89,27 @@ async function apiRegister(req, res) {
   }
 
   try {
-    const exists = await authService.emailExists(email);
+    const exists = await authService.emailExists(normalizedEmail);
     if (exists) {
       return res.status(409).json({ error: 'An account with this email already exists.' });
     }
 
-    const user = await authService.registerUser({ email, password, name: name.trim() });
-    req.session.userId = user.id;
-    res.json({ user });
+    const user = await authService.registerUser({
+      email: normalizedEmail,
+      password,
+      name: name.trim(),
+    });
+
+    // Regenerate session to prevent session fixation
+    req.session.regenerate((err) => {
+      if (err) {
+        console.error('[apiRegister] session regenerate failed:', err);
+        req.session.userId = user.id;
+        return res.json({ user });
+      }
+      req.session.userId = user.id;
+      res.json({ user });
+    });
   } catch (err) {
     console.error('[apiRegister]', err);
     res.status(500).json({ error: 'Failed to create account. Please try again.' });

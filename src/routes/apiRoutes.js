@@ -4,6 +4,7 @@
  */
 const express = require('express');
 const { requireApiAuth, requireApiAdmin } = require('../middleware/apiAuth');
+const { loginLimiter, registerLimiter, rateLimitMiddleware } = require('../utils/rateLimiter');
 const {
   apiLogin,
   apiRegister,
@@ -24,9 +25,9 @@ const {
 
 const router = express.Router();
 
-// ─── Auth (no auth required) ──────────────────────────────────────────────────
-router.post('/auth/login', apiLogin);
-router.post('/auth/register', apiRegister);
+// ─── Auth (no auth required) — rate-limited ───────────────────────────────────
+router.post('/auth/login', rateLimitMiddleware(loginLimiter), apiLogin);
+router.post('/auth/register', rateLimitMiddleware(registerLimiter), apiRegister);
 
 // ─── Auth (requires auth) ────────────────────────────────────────────────────
 router.post('/auth/logout', requireApiAuth, apiLogout);
