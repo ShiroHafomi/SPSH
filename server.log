@@ -1,0 +1,12 @@
+   Users table: ready
+🚀 Server running at http://localhost:3001
+   DB ready: yes
+[0mGET /health [32m200[0m 2.728 ms - 11[0m
+[0mPOST /api/auth/login [32m200[0m 266.724 ms - 77[0m
+[0mPOST /api/admin/students/3/intervention [32m200[0m 1723.957 ms - 1235[0m
+[0mPOST /api/admin/students/3/summarize-habits [32m200[0m 16.986 ms - 440[0m
+[0mGET /api/admin/analytics [32m200[0m 9.867 ms - 1843[0m
+[0mPOST /api/auth/login [32m200[0m 229.145 ms - 77[0m
+[0mGET /api/admin/students [32m200[0m 6.689 ms - 16836[0m
+[0mPOST /api/admin/students/bulk-export [32m200[0m 3.042 ms - 455[0m
+[0mPOST /api/admin/students/bulk-ai-evaluate [32m200[0m 4598.426 ms - 3688[0m

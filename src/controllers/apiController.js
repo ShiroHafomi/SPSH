@@ -478,6 +478,150 @@ async function apiFeedback(req, res) {
   }).stdin.write(JSON.stringify(pythonInput)).end();
 }
 
+/** GET /api/admin/analytics — Admin dashboard analytics */
+async function apiAdminAnalytics(req, res) {
+  try {
+    const analytics = await studentService.getAdminAnalytics();
+    res.json(analytics);
+  } catch (err) {
+    console.error('[apiAdminAnalytics]', err);
+    res.status(500).json({ error: 'Failed to load admin analytics.' });
+  }
+}
+
+/** GET /api/admin/students — Filtered student list with pagination */
+async function apiAdminListStudents(req, res) {
+  const { loadSchemaMap, getDisplayColumns, getSchemaMap } = require('../utils/schemaMap');
+  loadSchemaMap();
+
+  const q = req.query.q || '';
+  const sort = req.query.sort || 'id';
+  const dir = req.query.dir || 'asc';
+  const page = parseInt(req.query.page, 10) || 1;
+  const size = parseInt(req.query.size, 10) || 20;
+
+  // Parse filters from query params
+  const filters = {
+    grade: req.query.grade || 'all',
+    gender: req.query.gender || 'all',
+    part_time_job: req.query.part_time_job || 'all',
+    parental_education: req.query.parental_education || 'all',
+    at_risk: req.query.at_risk || 'all',
+  };
+
+  try {
+    const [rows, total] = await Promise.all([
+      studentService.listStudents({ q, sort, dir, page, size, filters }),
+      studentService.countStudents({ q, filters }),
+    ]);
+
+    const totalPages = Math.ceil(total / size);
+    const columns = getDisplayColumns();
+    const schemaMap = getSchemaMap();
+
+    res.json({ rows, total, page, totalPages, columns, schemaMap, filters });
+  } catch (err) {
+    console.error('[apiAdminListStudents]', err);
+    res.status(500).json({ error: 'Failed to load students.' });
+  }
+}
+
+/** POST /api/admin/students/bulk-export — Export filtered students as CSV */
+async function apiAdminBulkExport(req, res) {
+  const { ids = [], filters = {} } = req.body || {};
+
+  try {
+    const rows = await studentService.getStudentsForBulk({ ids, filters });
+
+    // Generate CSV
+    const { getDisplayColumns } = require('../utils/schemaMap');
+    loadSchemaMap();
+    const displayCols = getDisplayColumns();
+
+    const header = ['id', ...displayCols.map(c => c.name)].join(',');
+    const csvRows = rows.map(row => {
+      return [row.id, ...displayCols.map(c => {
+        const val = row[c.name];
+        if (val === null || val === undefined) return '';
+        // Escape commas and quotes
+        const str = String(val);
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+          return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+      })].join(',');
+    });
+
+    const csv = [header, ...csvRows].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="students-export-${new Date().toISOString().split('T')[0]}.csv"`);
+    res.send(csv);
+  } catch (err) {
+    console.error('[apiAdminBulkExport]', err);
+    res.status(500).json({ error: 'Failed to export students.' });
+  }
+}
+
+/** POST /api/admin/students/bulk-ai-evaluate — Run AI evaluation on multiple students */
+async function apiAdminBulkAiEvaluate(req, res) {
+  const { ids = [], filters = {} } = req.body || {};
+
+  try {
+    const rows = await studentService.getStudentsForBulk({ ids, filters, size: 50 }); // Limit to 50
+
+    // For each student, generate AI feedback
+    const results = [];
+    for (const student of rows) {
+      try {
+        const noteResult = await studentService.generateInterventionNote(student.id);
+        results.push({
+          studentId: student.id,
+          student_id: student.student_id,
+          interventionNote: noteResult.interventionNote,
+        });
+      } catch (e) {
+        results.push({
+          studentId: student.id,
+          student_id: student.student_id,
+          error: e.message,
+        });
+      }
+    }
+
+    res.json({ results });
+  } catch (err) {
+    console.error('[apiAdminBulkAiEvaluate]', err);
+    res.status(500).json({ error: 'Failed to run bulk AI evaluation.' });
+  }
+}
+
+/** POST /api/admin/students/:id/intervention — Generate intervention note for a student */
+async function apiAdminGenerateIntervention(req, res) {
+  const id = parseInt(req.params.id, 10);
+
+  try {
+    const result = await studentService.generateInterventionNote(id);
+    res.json(result);
+  } catch (err) {
+    console.error('[apiAdminGenerateIntervention]', err);
+    res.status(500).json({ error: 'Failed to generate intervention note.' });
+  }
+}
+
+/** POST /api/admin/students/:id/summarize-habits — Generate habit summary for notes */
+async function apiAdminSummarizeHabits(req, res) {
+  const id = parseInt(req.params.id, 10);
+
+  try {
+    const result = await studentService.summarizeHabits(id);
+    res.json(result);
+  } catch (err) {
+    console.error('[apiAdminSummarizeHabits]', err);
+    res.status(500).json({ error: 'Failed to summarize habits.' });
+  }
+}
+
 // ─── Helper ──────────────────────────────────────────────────────────────────
 
 /**
@@ -536,4 +680,10 @@ module.exports = {
   apiListUsers,
   apiDeleteUser,
   apiPredict,
+  apiAdminAnalytics,
+  apiAdminListStudents,
+  apiAdminBulkExport,
+  apiAdminBulkAiEvaluate,
+  apiAdminGenerateIntervention,
+  apiAdminSummarizeHabits,
 };

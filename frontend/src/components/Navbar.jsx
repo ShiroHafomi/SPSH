@@ -15,6 +15,10 @@ export function Navbar() {
     { path: '/predictor', label: 'AI Counselor' },
   ];
 
+  const adminLinks = [
+    { path: '/admin', label: 'Admin Dashboard' },
+  ];
+
   return (
     <nav className="fixed top-4 left-4 right-4 z-50 max-w-7xl mx-auto bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border border-primary-100 dark:border-gray-800 rounded-3xl shadow-clay-sm">
       <div className="flex items-center justify-between px-5 py-3">
@@ -30,6 +34,19 @@ export function Navbar() {
         <div className="flex items-center gap-5">
           <div className="hidden md:flex items-center gap-1">
             {navLinks.map(({ path, label }) => (
+              <Link
+                key={path}
+                to={path}
+                className={`px-3.5 py-2 text-sm font-semibold rounded-xl transition-all duration-200 ${
+                  location.pathname === path
+                    ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300'
+                    : 'text-primary-600 dark:text-gray-400 hover:bg-primary-50 dark:hover:bg-gray-800 hover:text-primary-700 dark:hover:text-gray-200'
+                }`}
+              >
+                {label}
+              </Link>
+            ))}
+            {isAdmin && adminLinks.map(({ path, label }) => (
               <Link
                 key={path}
                 to={path}

@@ -21,6 +21,12 @@ const {
   apiListUsers,
   apiDeleteUser,
   apiPredict,
+  apiAdminAnalytics,
+  apiAdminListStudents,
+  apiAdminBulkExport,
+  apiAdminBulkAiEvaluate,
+  apiAdminGenerateIntervention,
+  apiAdminSummarizeHabits,
 } = require('../controllers/apiController');
 
 const router = express.Router();
@@ -44,7 +50,22 @@ router.post('/students', requireApiAuth, apiCreateStudent);
 router.post('/students/:id', requireApiAuth, apiUpdateStudent);
 router.post('/students/:id/delete', requireApiAuth, apiDeleteStudent);
 
-// ─── Admin ───────────────────────────────────────────────────────────────────
+// ─── Admin (requires admin) ───────────────────────────────────────────────────
+// Analytics
+router.get('/admin/analytics', requireApiAuth, requireApiAdmin, apiAdminAnalytics);
+
+// Student management (filtered, with search/sort/pagination)
+router.get('/admin/students', requireApiAuth, requireApiAdmin, apiAdminListStudents);
+
+// Bulk operations
+router.post('/admin/students/bulk-export', requireApiAuth, requireApiAdmin, apiAdminBulkExport);
+router.post('/admin/students/bulk-ai-evaluate', requireApiAuth, requireApiAdmin, apiAdminBulkAiEvaluate);
+
+// Individual student AI actions
+router.post('/admin/students/:id/intervention', requireApiAuth, requireApiAdmin, apiAdminGenerateIntervention);
+router.post('/admin/students/:id/summarize-habits', requireApiAuth, requireApiAdmin, apiAdminSummarizeHabits);
+
+// User management
 router.get('/admin/users', requireApiAuth, requireApiAdmin, apiListUsers);
 router.post('/admin/users/:id/delete', requireApiAuth, requireApiAdmin, apiDeleteUser);
 

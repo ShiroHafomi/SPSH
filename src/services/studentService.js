@@ -10,11 +10,12 @@ const { getChartConfig } = require('../utils/chartConfig');
 const TABLE = process.env.DB_TABLE || 'students';
 
 /**
- * List students with search, sort, pagination.
- * @param {Object} opts { q, sort, dir, page, size }
+ * List students with search, sort, pagination, and multiple filters.
+ * @param {Object} opts { q, sort, dir, page, size, filters }
+ *   filters: { grade, gender, part_time_job, parental_education, at_risk }
  * @returns {Promise<Array>} rows
  */
-async function listStudents({ q = '', sort = 'id', dir = 'asc', page = 1, size = 20 } = {}) {
+async function listStudents({ q = '', sort = 'id', dir = 'asc', page = 1, size = 20, filters = {} } = {}) {
   const safeSort = validateSortColumn(sort);
   const safeDir = validateSortDir(dir);
   const { page: p, size: s, offset } = clampPagination(page, size);
@@ -23,20 +24,82 @@ async function listStudents({ q = '', sort = 'id', dir = 'asc', page = 1, size =
   const whereClauses = [];
   const params = [];
 
+  // Global search
   if (q && q.trim() && searchable.length > 0) {
     const searchTerm = `%${q.trim()}%`;
-    const conditions = searchable.map(() => '`?` LIKE ?').join(' OR ');
-    // We can't parameterize column names, so we use the whitelisted names directly
-    // The columns in `conditions` are from the whitelist, so safe
     const condSql = searchable.map(col => `\`${col}\` LIKE ?`).join(' OR ');
     whereClauses.push(`(${condSql})`);
-    // One param per searchable column
     searchable.forEach(() => params.push(searchTerm));
+  }
+
+  // Filters
+  if (filters.grade && filters.grade !== 'all') {
+    whereClauses.push('`grade` = ?');
+    params.push(filters.grade);
+  }
+  if (filters.gender && filters.gender !== 'all') {
+    whereClauses.push('`gender` = ?');
+    params.push(filters.gender);
+  }
+  if (filters.part_time_job && filters.part_time_job !== 'all') {
+    whereClauses.push('`part_time_job` = ?');
+    params.push(filters.part_time_job);
+  }
+  if (filters.parental_education && filters.parental_education !== 'all') {
+    whereClauses.push('`parental_education` = ?');
+    params.push(filters.parental_education);
+  }
+  if (filters.at_risk && filters.at_risk !== 'all') {
+    // At-risk filter uses the same logic as getAtRiskStudents
+    const { loadSchemaMap, getSchemaMap } = require('./schemaMap');
+    loadSchemaMap();
+    const map = getSchemaMap();
+    const atRiskConditions = [];
+    const atRiskParams = [];
+
+    for (const [key, tag] of [
+      ['attendance_percent', 'attendance'],
+      ['study_hours_per_day', 'study_hours'],
+      ['previous_gpa', 'gpa'],
+    ]) {
+      const col = map[key];
+      if (col) {
+        switch (col.semanticTag || key) {
+          case 'attendance':
+          case 'attendance_percent':
+            atRiskConditions.push(`\`${col.name}\` < 75`);
+            atRiskParams.push(75);
+            break;
+          case 'study_hours':
+          case 'study_hours_per_day':
+            atRiskConditions.push(`\`${col.name}\` < 2`);
+            atRiskParams.push(2);
+            break;
+          case 'gpa':
+          case 'previous_gpa':
+            atRiskConditions.push(`\`${col.name}\` < 2.0`);
+            atRiskParams.push(2.0);
+            break;
+          default:
+            if (/attendance/i.test(col.name)) {
+              atRiskConditions.push(`\`${col.name}\` < 75`);
+            } else if (/study.*hour/i.test(col.name)) {
+              atRiskConditions.push(`\`${col.name}\` < 2`);
+            } else if (/gpa/i.test(col.name)) {
+              atRiskConditions.push(`\`${col.name}\` < 2.0`);
+            }
+        }
+      }
+    }
+
+    if (atRiskConditions.length) {
+      whereClauses.push(`(${atRiskConditions.join(' OR ')})`);
+      params.push(...atRiskParams);
+    }
   }
 
   const whereSql = whereClauses.length ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
-  // ORDER BY uses whitelisted column + enum direction (safe to interpolate)
   const sql = `
     SELECT * FROM \`${TABLE}\`
     ${whereSql}
@@ -50,9 +113,9 @@ async function listStudents({ q = '', sort = 'id', dir = 'asc', page = 1, size =
 }
 
 /**
- * Total count for pagination (respects search filter).
+ * Total count for pagination (respects search filter and all filters).
  */
-async function countStudents({ q = '' } = {}) {
+async function countStudents({ q = '', filters = {} } = {}) {
   const searchable = getSearchableColumns();
   const whereClauses = [];
   const params = [];
@@ -62,6 +125,70 @@ async function countStudents({ q = '' } = {}) {
     const condSql = searchable.map(col => `\`${col}\` LIKE ?`).join(' OR ');
     whereClauses.push(`(${condSql})`);
     searchable.forEach(() => params.push(searchTerm));
+  }
+
+  if (filters.grade && filters.grade !== 'all') {
+    whereClauses.push('`grade` = ?');
+    params.push(filters.grade);
+  }
+  if (filters.gender && filters.gender !== 'all') {
+    whereClauses.push('`gender` = ?');
+    params.push(filters.gender);
+  }
+  if (filters.part_time_job && filters.part_time_job !== 'all') {
+    whereClauses.push('`part_time_job` = ?');
+    params.push(filters.part_time_job);
+  }
+  if (filters.parental_education && filters.parental_education !== 'all') {
+    whereClauses.push('`parental_education` = ?');
+    params.push(filters.parental_education);
+  }
+  if (filters.at_risk && filters.at_risk !== 'all') {
+    const { loadSchemaMap, getSchemaMap } = require('./schemaMap');
+    loadSchemaMap();
+    const map = getSchemaMap();
+    const atRiskConditions = [];
+    const atRiskParams = [];
+
+    for (const [key, tag] of [
+      ['attendance_percent', 'attendance'],
+      ['study_hours_per_day', 'study_hours'],
+      ['previous_gpa', 'gpa'],
+    ]) {
+      const col = map[key];
+      if (col) {
+        switch (col.semanticTag || key) {
+          case 'attendance':
+          case 'attendance_percent':
+            atRiskConditions.push(`\`${col.name}\` < 75`);
+            atRiskParams.push(75);
+            break;
+          case 'study_hours':
+          case 'study_hours_per_day':
+            atRiskConditions.push(`\`${col.name}\` < 2`);
+            atRiskParams.push(2);
+            break;
+          case 'gpa':
+          case 'previous_gpa':
+            atRiskConditions.push(`\`${col.name}\` < 2.0`);
+            atRiskParams.push(2.0);
+            break;
+          default:
+            if (/attendance/i.test(col.name)) {
+              atRiskConditions.push(`\`${col.name}\` < 75`);
+            } else if (/study.*hour/i.test(col.name)) {
+              atRiskConditions.push(`\`${col.name}\` < 2`);
+            } else if (/gpa/i.test(col.name)) {
+              atRiskConditions.push(`\`${col.name}\` < 2.0`);
+            }
+        }
+      }
+    }
+
+    if (atRiskConditions.length) {
+      whereClauses.push(`(${atRiskConditions.join(' OR ')})`);
+      params.push(...atRiskParams);
+    }
   }
 
   const whereSql = whereClauses.length ? `WHERE ${whereClauses.join(' AND ')}` : '';
@@ -283,13 +410,12 @@ async function getDashboardStats() {
 /**
  * Find at-risk students based on configurable thresholds.
  * Detected via schema_agnostic column name heuristics.
- * @param {Object} thresholds { attendance, study_hours, gpa }
+ * @param {Object} thresholds { attendance, studyHours, gpa }
  * @returns {Promise<Object>} { students, count, thresholds }
  */
 async function getAtRiskStudents({ attendance = 75, studyHours = 2, gpa = 2.5 } = {}) {
-  const { loadSchemaMap, getSchemaMap } = require('../utils/schemaMap');
+  const { loadSchemaMap, getColumnByName } = require('../utils/schemaMap');
   loadSchemaMap();
-  const map = getSchemaMap();
 
   const conditions = [];
   const params = [];
@@ -300,42 +426,42 @@ async function getAtRiskStudents({ attendance = 75, studyHours = 2, gpa = 2.5 } 
     ['study_hours_per_day', 'study_hours'],
     ['previous_gpa', 'gpa'],
   ]) {
-    const col = map[key];
+    const col = getColumnByName(key);
     if (col) {
-      switch (col.semanticTag || key) {
+      switch (col.semantic || key) {
         case 'attendance':
         case 'attendance_percent':
           conditions.push(`\`${col.name}\` < ?`);
-          params.push(thresholds.attendance);
+          params.push(attendance);
           break;
         case 'study_hours':
         case 'study_hours_per_day':
           conditions.push(`\`${col.name}\` < ?`);
-          params.push(thresholds.studyHours);
+          params.push(studyHours);
           break;
         case 'gpa':
         case 'previous_gpa':
           conditions.push(`\`${col.name}\` < ?`);
-          params.push(thresholds.gpa);
+          params.push(gpa);
           break;
         default:
           // Fallback: match by name containing keywords
           if (/attendance/i.test(col.name)) {
             conditions.push(`\`${col.name}\` < ?`);
-            params.push(thresholds.attendance);
+            params.push(attendance);
           } else if (/study.*hour/i.test(col.name)) {
             conditions.push(`\`${col.name}\` < ?`);
-            params.push(thresholds.studyHours);
+            params.push(studyHours);
           } else if (/gpa/i.test(col.name)) {
             conditions.push(`\`${col.name}\` < ?`);
-            params.push(thresholds.gpa);
+            params.push(gpa);
           }
       }
     }
   }
 
   if (!conditions.length) {
-    return { students: [], count: 0, thresholds: { attendance: thresholds.attendance, studyHours: thresholds.studyHours, gpa: thresholds.gpa } };
+    return { students: [], count: 0, thresholds: { attendance, studyHours, gpa } };
   }
 
   const whereSql = conditions.join(' OR ');
@@ -345,8 +471,461 @@ async function getAtRiskStudents({ attendance = 75, studyHours = 2, gpa = 2.5 } 
   return {
     students: rows,
     count: rows.length,
-    thresholds: { attendance: thresholds.attendance, studyHours: thresholds.studyHours, gpa: thresholds.gpa },
+    thresholds: { attendance, studyHours, gpa },
   };
+}
+
+/**
+ * Get admin analytics summary with KPIs and chart data.
+ * @returns {Promise<Object>} Analytics data for admin dashboard
+ */
+async function getAdminAnalytics() {
+  const { loadSchemaMap, getSchemaMap, getDisplayColumns, getSemanticOrFirstNumeric } = require('../utils/schemaMap');
+  loadSchemaMap();
+  const map = getSchemaMap();
+  const displayCols = getDisplayColumns();
+
+  // Helper to find column by semantic tag
+  const findCol = (semanticTags) => {
+    if (!Array.isArray(semanticTags)) semanticTags = [semanticTags];
+    for (const tag of semanticTags) {
+      for (const col of displayCols) {
+        if (col.semanticTag === tag || col.name === tag) return col.name;
+      }
+    }
+    return null;
+  };
+
+  const colStudentId = findCol(['student_id', 'id']) || 'student_id';
+  const colGrade = findCol(['grade', 'final_grade']) || 'grade';
+  const colFinalScore = findCol(['final_score', 'score']) || 'final_score';
+  const colGpa = findCol(['previous_gpa', 'gpa']) || 'previous_gpa';
+  const colAttendance = findCol(['attendance_percent', 'attendance']) || 'attendance_percent';
+  const colSleep = findCol(['sleep_hours', 'sleep']) || 'sleep_hours';
+  const colStudyHours = findCol(['study_hours_per_day', 'study_hours']) || 'study_hours_per_day';
+  const colPartTimeJob = findCol(['part_time_job', 'job']) || 'part_time_job';
+  const colGender = findCol(['gender']) || 'gender';
+  const colParentalEdu = findCol(['parental_education', 'parental']) || 'parental_education';
+
+  // 1. Total Students
+  const [totalRows] = await pool.query(`SELECT COUNT(*) AS cnt FROM \`${TABLE}\``);
+  const totalStudents = totalRows[0]?.cnt || 0;
+
+  // 2. Average GPA
+  const [avgGpaRows] = await pool.query(`SELECT AVG(\`${colGpa}\`) AS val FROM \`${TABLE}\` WHERE \`${colGpa}\` IS NOT NULL`);
+  const avgGpa = avgGpaRows[0]?.val != null ? Number(avgGpaRows[0].val) : 0;
+
+  // 3. Pass Rate (Grade A, B, C)
+  const [passRows] = await pool.query(`
+    SELECT
+      SUM(CASE WHEN UPPER(\`${colGrade}\`) IN ('A','B','C') THEN 1 ELSE 0 END) AS passCount,
+      COUNT(*) AS totalCount
+    FROM \`${TABLE}\`
+    WHERE \`${colGrade}\` IS NOT NULL
+  `);
+  const passRate = passRows[0]?.totalCount > 0
+    ? (passRows[0].passCount / passRows[0].totalCount) * 100
+    : 0;
+
+  // 4. At-Risk Count (using default thresholds)
+  const atRiskResult = await getAtRiskStudents({ attendance: 75, studyHours: 2, gpa: 2.0 });
+  const atRiskCount = atRiskResult.count;
+
+  // 5. Grade Distribution (Pie chart data)
+  const [gradeDistRows] = await pool.query(`
+    SELECT UPPER(\`${colGrade}\`) AS grade, COUNT(*) AS count
+    FROM \`${TABLE}\`
+    WHERE \`${colGrade}\` IS NOT NULL
+    GROUP BY grade
+    ORDER BY
+      CASE grade
+        WHEN 'A' THEN 1 WHEN 'B' THEN 2 WHEN 'C' THEN 3
+        WHEN 'D' THEN 4 WHEN 'F' THEN 5 ELSE 6 END
+  `);
+  const gradeDistribution = gradeDistRows.map(r => ({
+    grade: r.grade,
+    count: Number(r.count),
+  }));
+
+  // 6. Attendance vs Final Score (Scatter plot data)
+  let attendanceVsScore = [];
+  if (colAttendance && colFinalScore) {
+    const [scatterRows] = await pool.query(`
+      SELECT \`${colAttendance}\` AS x, \`${colFinalScore}\` AS y
+      FROM \`${TABLE}\`
+      WHERE \`${colAttendance}\` IS NOT NULL AND \`${colFinalScore}\` IS NOT NULL
+    `);
+    attendanceVsScore = scatterRows.map(r => ({
+      x: Number(r.x),
+      y: Number(r.y),
+    }));
+  }
+
+  // 7. Part-Time Job Impact (Bar chart: avg final_score by job status)
+  let partTimeJobImpact = [];
+  if (colPartTimeJob && colFinalScore) {
+    const [jobRows] = await pool.query(`
+      SELECT \`${colPartTimeJob}\` AS category, AVG(\`${colFinalScore}\`) AS avg_score, COUNT(*) AS count
+      FROM \`${TABLE}\`
+      WHERE \`${colPartTimeJob}\` IS NOT NULL AND \`${colFinalScore}\` IS NOT NULL
+      GROUP BY \`${colPartTimeJob}\`
+    `);
+    partTimeJobImpact = jobRows.map(r => ({
+      category: String(r.category),
+      avgScore: Number(r.avg_score),
+      count: Number(r.count),
+    }));
+  }
+
+  // 8. Sleep Hours Impact (Bar chart: avg final_score by sleep buckets)
+  let sleepImpact = [];
+  if (colSleep && colFinalScore) {
+    const [sleepRows] = await pool.query(`
+      SELECT
+        CASE
+          WHEN \`${colSleep}\` < 5 THEN '0-4h'
+          WHEN \`${colSleep}\` < 6 THEN '5h'
+          WHEN \`${colSleep}\` < 7 THEN '6h'
+          WHEN \`${colSleep}\` < 8 THEN '7h'
+          WHEN \`${colSleep}\` < 9 THEN '8h'
+          ELSE '9h+'
+        END AS sleep_bucket,
+        AVG(\`${colFinalScore}\`) AS avg_score,
+        COUNT(*) AS count
+      FROM \`${TABLE}\`
+      WHERE \`${colSleep}\` IS NOT NULL AND \`${colFinalScore}\` IS NOT NULL
+      GROUP BY sleep_bucket
+      ORDER BY
+        CASE sleep_bucket
+          WHEN '0-4h' THEN 1 WHEN '5h' THEN 2 WHEN '6h' THEN 3
+          WHEN '7h' THEN 4 WHEN '8h' THEN 5 WHEN '9h+' THEN 6 END
+    `);
+    sleepImpact = sleepRows.map(r => ({
+      sleepBucket: String(r.sleep_bucket),
+      avgScore: Number(r.avg_score),
+      count: Number(r.count),
+    }));
+  }
+
+  // 9. Gender distribution
+  let genderDistribution = [];
+  if (colGender) {
+    const [genderRows] = await pool.query(`
+      SELECT \`${colGender}\` AS gender, COUNT(*) AS count
+      FROM \`${TABLE}\`
+      WHERE \`${colGender}\` IS NOT NULL
+      GROUP BY \`${colGender}\`
+    `);
+    genderDistribution = genderRows.map(r => ({
+      gender: String(r.gender),
+      count: Number(r.count),
+    }));
+  }
+
+  // 10. Parental education distribution
+  let parentalEduDistribution = [];
+  if (colParentalEdu) {
+    const [eduRows] = await pool.query(`
+      SELECT \`${colParentalEdu}\` AS education, COUNT(*) AS count
+      FROM \`${TABLE}\`
+      WHERE \`${colParentalEdu}\` IS NOT NULL
+      GROUP BY \`${colParentalEdu}\`
+    `);
+    parentalEduDistribution = eduRows.map(r => ({
+      education: String(r.education),
+      count: Number(r.count),
+    }));
+  }
+
+  return {
+    kpis: {
+      totalStudents,
+      avgGpa: Number(avgGpa.toFixed(2)),
+      passRate: Number(passRate.toFixed(1)),
+      atRiskCount,
+    },
+    charts: {
+      gradeDistribution,
+      attendanceVsScore,
+      partTimeJobImpact,
+      sleepImpact,
+      genderDistribution,
+      parentalEduDistribution,
+    },
+    // Filter options for dropdowns
+    filterOptions: {
+      grades: gradeDistribution.map(g => g.grade).filter(g => g),
+      genders: genderDistribution.map(g => g.gender).filter(g => g),
+      partTimeJobs: partTimeJobImpact.map(j => j.category).filter(j => j),
+      parentalEducation: parentalEduDistribution.map(e => e.education).filter(e => e),
+    },
+  };
+}
+
+/**
+ * Get students for bulk operations (export, bulk AI evaluate).
+ * @param {Object} opts { ids?: number[], filters?: Object, page?, size? }
+ * @returns {Promise<Array>} Student rows
+ */
+async function getStudentsForBulk({ ids = [], filters = {}, page = 1, size = 1000 } = {}) {
+  const { validateSortColumn, validateSortDir, clampPagination, getSearchableColumns } = require('../utils/columns');
+  const { loadSchemaMap, getSchemaMap } = require('../utils/schemaMap');
+
+  let whereClauses = [];
+  let params = [];
+
+  // If specific IDs provided
+  if (ids.length > 0) {
+    const placeholders = ids.map(() => '?').join(',');
+    whereClauses.push(`\`id\` IN (${placeholders})`);
+    params.push(...ids);
+  }
+
+  // Apply filters (same logic as listStudents)
+  const searchable = getSearchableColumns();
+  if (filters.q && filters.q.trim() && searchable.length > 0) {
+    const searchTerm = `%${filters.q.trim()}%`;
+    const condSql = searchable.map(col => `\`${col}\` LIKE ?`).join(' OR ');
+    whereClauses.push(`(${condSql})`);
+    searchable.forEach(() => params.push(searchTerm));
+  }
+  if (filters.grade && filters.grade !== 'all') {
+    whereClauses.push('`grade` = ?');
+    params.push(filters.grade);
+  }
+  if (filters.gender && filters.gender !== 'all') {
+    whereClauses.push('`gender` = ?');
+    params.push(filters.gender);
+  }
+  if (filters.part_time_job && filters.part_time_job !== 'all') {
+    whereClauses.push('`part_time_job` = ?');
+    params.push(filters.part_time_job);
+  }
+  if (filters.parental_education && filters.parental_education !== 'all') {
+    whereClauses.push('`parental_education` = ?');
+    params.push(filters.parental_education);
+  }
+  if (filters.at_risk && filters.at_risk !== 'all') {
+    const map = getSchemaMap();
+    const atRiskConditions = [];
+    for (const [key] of [
+      ['attendance_percent', 'attendance'],
+      ['study_hours_per_day', 'study_hours'],
+      ['previous_gpa', 'gpa'],
+    ]) {
+      const col = map[key];
+      if (col) {
+        if (/attendance/i.test(col.name)) atRiskConditions.push(`\`${col.name}\` < 75`);
+        else if (/study.*hour/i.test(col.name)) atRiskConditions.push(`\`${col.name}\` < 2`);
+        else if (/gpa/i.test(col.name)) atRiskConditions.push(`\`${col.name}\` < 2.0`);
+      }
+    }
+    if (atRiskConditions.length) {
+      whereClauses.push(`(${atRiskConditions.join(' OR ')})`);
+    }
+  }
+
+  const whereSql = whereClauses.length ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+  const { page: p, size: s, offset } = clampPagination(page, size);
+  const sql = `SELECT * FROM \`${TABLE}\` ${whereSql} ORDER BY \`id\` ASC LIMIT ? OFFSET ?`;
+  params.push(s, offset);
+
+  const [rows] = await pool.query(sql, params);
+  return rows;
+}
+
+/**
+ * Generate AI intervention note for a specific student.
+ * @param {number} studentId
+ * @returns {Promise<Object>} { interventionNote: string }
+ */
+async function generateInterventionNote(studentId) {
+  const student = await findById(studentId);
+  if (!student) throw new Error('Student not found');
+
+  const { loadSchemaMap, getSchemaMap, getDisplayColumns, getSemanticOrFirstNumeric } = require('../utils/schemaMap');
+  loadSchemaMap();
+  const map = getSchemaMap();
+  const displayCols = getDisplayColumns();
+
+  // Helper to find column by semantic tag
+  const findCol = (semanticTags) => {
+    if (!Array.isArray(semanticTags)) semanticTags = [semanticTags];
+    for (const tag of semanticTags) {
+      for (const col of displayCols) {
+        if (col.semanticTag === tag || col.name === tag) return col.name;
+      }
+    }
+    return null;
+  };
+
+  const colGrade = findCol(['grade', 'final_grade']) || 'grade';
+  const colFinalScore = findCol(['final_score', 'score']) || 'final_score';
+  const colGpa = findCol(['previous_gpa', 'gpa']) || 'previous_gpa';
+  const colAttendance = findCol(['attendance_percent', 'attendance']) || 'attendance_percent';
+  const colSleep = findCol(['sleep_hours', 'sleep']) || 'sleep_hours';
+  const colStudyHours = findCol(['study_hours_per_day', 'study_hours']) || 'study_hours_per_day';
+  const colPartTimeJob = findCol(['part_time_job', 'job']) || 'part_time_job';
+  const colGender = findCol(['gender']) || 'gender';
+  const colParentalEdu = findCol(['parental_education', 'parental']) || 'parental_education';
+
+  // Build profile for AI feedback
+  const profile = {
+    gender: student[colGender] || 'Female',
+    age: student.age || 20,
+    study_hours_per_day: student[colStudyHours] || 4,
+    attendance_percent: student[colAttendance] || 85,
+    sleep_hours: student[colSleep] || 7,
+    previous_gpa: student[colGpa] || 3.0,
+    parental_education: student[colParentalEdu] || 'Bachelors',
+    internet_access: student.internet_access || 'Yes',
+    extracurricular: student.extracurricular || 'Yes',
+    part_time_job: student[colPartTimeJob] || 'No',
+  };
+
+  // Get prediction from ML
+  const { spawn } = require('child_process');
+  const path = require('path');
+
+  const pythonInput = { ...profile };
+  for (const key of ['internet_access', 'extracurricular', 'part_time_job']) {
+    if (typeof pythonInput[key] === 'string') {
+      pythonInput[key] = pythonInput[key].toLowerCase() === 'yes' ? 1 : 0;
+    }
+  }
+
+  return new Promise((resolve, reject) => {
+    const scriptPath = path.join(__dirname, '..', '..', 'ml', 'inference.py');
+    const proc = spawn('py', [scriptPath, '--json', '-'], {
+      maxBuffer: 1024 * 1024,
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    proc.stdout.on('data', (data) => { stdout += data; });
+    proc.stderr.on('data', (data) => { stderr += data; });
+
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        console.error('[generateInterventionNote] Python error:', stderr);
+        return reject(new Error('Prediction failed'));
+      }
+
+      try {
+        const prediction = JSON.parse(stdout.trim());
+        const { generateFeedback } = require('../utils/feedbackTemplates');
+        const feedback = generateFeedback(profile, prediction);
+
+        // Build personalized intervention note
+        const grade = prediction.grade || 'C';
+        const score = prediction.final_score || 0;
+        const conflictingRecs = feedback.recommendations
+          .filter(r => r.severity === 'danger' || r.severity === 'warning')
+          .map(r => r.text)
+          .join(' ');
+
+        const positiveRecs = feedback.recommendations
+          .filter(r => r.severity === 'success')
+          .map(r => r.text)
+          .join(' ');
+
+        let interventionNote = `Academic Intervention Note for Student #${studentId}\n\n`;
+        interventionNote += `Predicted Grade: ${grade} (${score}/100)\n`;
+        interventionNote += `Current Attendance: ${profile.attendance_percent}%\n`;
+        interventionNote += `Study Hours/Day: ${profile.study_hours_per_day}\n`;
+        interventionNote += `Sleep Hours: ${profile.sleep_hours}\n`;
+        interventionNote += `Previous GPA: ${profile.previous_gpa}\n`;
+        interventionNote += `Part-Time Job: ${profile.part_time_job}\n\n`;
+
+        if (conflictingRecs) {
+          interventionNote += `Areas of Concern:\n${conflictingRecs}\n\n`;
+        }
+
+        if (positiveRecs) {
+          interventionNote += `Strengths:\n${positiveRecs}\n\n`;
+        }
+
+        interventionNote += `Recommended Actions:\n`;
+        interventionNote += `1. Schedule weekly check-ins with academic advisor\n`;
+        interventionNote += `2. Enroll in study skills workshop\n`;
+        interventionNote += `3. Set up structured study schedule (minimum 3 hrs/day)\n`;
+        interventionNote += `4. Monitor sleep hygiene (target 7-8 hrs/night)\n`;
+        interventionNote += `5. ${grade === 'F' || grade === 'D' ? 'Consider reducing work hours or requesting academic accommodations' : 'Maintain current positive habits and seek advanced challenges'}\n\n`;
+        interventionNote += `-- Generated by AI Academic Counselor`;
+
+        resolve({ interventionNote });
+      } catch (parseErr) {
+        console.error('[generateInterventionNote] Parse error:', parseErr);
+        console.error('[generateInterventionNote] stdout:', stdout);
+        reject(new Error('Failed to parse prediction result'));
+      }
+    });
+
+    proc.on('error', (error) => {
+      console.error('[generateInterventionNote] Process error:', error);
+      reject(new Error('Prediction failed'));
+    });
+
+    proc.stdin.write(JSON.stringify(pythonInput));
+    proc.stdin.end();
+  });
+}
+
+/**
+ * Summarize student habits for notes field.
+ * @param {number} studentId
+ * @returns {Promise<Object>} { summary: string }
+ */
+async function summarizeHabits(studentId) {
+  const student = await findById(studentId);
+  if (!student) throw new Error('Student not found');
+
+  const { loadSchemaMap, getSchemaMap, getDisplayColumns } = require('../utils/schemaMap');
+  loadSchemaMap();
+  const map = getSchemaMap();
+  const displayCols = getDisplayColumns();
+
+  const findCol = (semanticTags) => {
+    if (!Array.isArray(semanticTags)) semanticTags = [semanticTags];
+    for (const tag of semanticTags) {
+      for (const col of displayCols) {
+        if (col.semanticTag === tag || col.name === tag) return col.name;
+      }
+    }
+    return null;
+  };
+
+  const colGrade = findCol(['grade', 'final_grade']) || 'grade';
+  const colFinalScore = findCol(['final_score', 'score']) || 'final_score';
+  const colGpa = findCol(['previous_gpa', 'gpa']) || 'previous_gpa';
+  const colAttendance = findCol(['attendance_percent', 'attendance']) || 'attendance_percent';
+  const colSleep = findCol(['sleep_hours', 'sleep']) || 'sleep_hours';
+  const colStudyHours = findCol(['study_hours_per_day', 'study_hours']) || 'study_hours_per_day';
+  const colPartTimeJob = findCol(['part_time_job', 'job']) || 'part_time_job';
+  const colGender = findCol(['gender']) || 'gender';
+  const colParentalEdu = findCol(['parental_education', 'parental']) || 'parental_education';
+
+  let summary = `Student Profile Summary (Auto-generated)\n`;
+  summary += `Generated: ${new Date().toLocaleString()}\n\n`;
+  summary += `Student ID: ${student.student_id || student.id}\n`;
+  summary += `Gender: ${student[colGender] || 'N/A'}\n`;
+  summary += `Age: ${student.age || 'N/A'}\n`;
+  summary += `Grade: ${student[colGrade] || 'N/A'} (${student[colFinalScore] || 'N/A'}/100)\n`;
+  summary += `Previous GPA: ${student[colGpa] || 'N/A'}\n\n`;
+  summary += `Study Habits:\n`;
+  summary += `  - Study Hours/Day: ${student[colStudyHours] || 'N/A'}\n`;
+  summary += `  - Attendance: ${student[colAttendance] || 'N/A'}%\n`;
+  summary += `  - Sleep Hours: ${student[colSleep] || 'N/A'}\n`;
+  summary += `  - Part-Time Job: ${student[colPartTimeJob] || 'N/A'}\n`;
+  summary += `  - Internet Access: ${student.internet_access || 'N/A'}\n`;
+  summary += `  - Extracurricular: ${student.extracurricular || 'N/A'}\n\n`;
+  summary += `Background:\n`;
+  summary += `  - Parental Education: ${student[colParentalEdu] || 'N/A'}\n`;
+  summary += `  - Special Notes: ${student.notes || 'None'}\n`;
+
+  return { summary };
 }
 
 module.exports = {
@@ -358,4 +937,8 @@ module.exports = {
   deleteStudent,
   getDashboardStats,
   getAtRiskStudents,
+  getAdminAnalytics,
+  getStudentsForBulk,
+  generateInterventionNote,
+  summarizeHabits,
 };
