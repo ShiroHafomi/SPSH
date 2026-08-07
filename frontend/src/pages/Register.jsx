@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '../hooks/useAuth';
 import { useFlash } from '../components/FlashProvider';
+import { useLanguage } from '../hooks/useLanguage';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(100, 'Name too long'),
@@ -43,16 +44,11 @@ function calculatePasswordStrength(password) {
   return { score: Math.min(score, 4), checks };
 }
 
-function getStrengthLabel(score) {
-  const labels = ['Very Weak', 'Weak', 'Fair', 'Strong', 'Very Strong'];
-  const colors = ['danger', 'warning', 'accent', 'success', 'success'];
-  return { label: labels[score], color: colors[score] };
-}
-
 export default function Register() {
   const { register: registerUser } = useAuth();
   const { addFlash } = useFlash();
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -64,16 +60,15 @@ export default function Register() {
 
   const password = watch('password') || '';
   const { score, checks } = calculatePasswordStrength(password);
-  const { label: strengthLabel, color: strengthColor } = getStrengthLabel(score);
 
   const onSubmit = async (data) => {
     setLoading(true);
     try {
       await registerUser(data.name, data.email, data.password, data.confirm_password);
-      addFlash('Account created successfully!', 'success');
+      addFlash(t('register.accountCreated'), 'success');
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      addFlash(err.message || 'Registration failed. Please try again.', 'error');
+      addFlash(err.message || t('register.registrationFailed'), 'error');
     } finally {
       setLoading(false);
     }
@@ -92,8 +87,8 @@ export default function Register() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                 </svg>
               </div>
-              <h1 className="text-3xl font-bold text-primary-950 dark:text-gray-100 mb-3">Create Your Account</h1>
-              <p className="text-primary-500 dark:text-gray-400 text-lg mb-8">Join to track performance, get AI predictions, and improve study habits.</p>
+              <h1 className="text-3xl font-bold text-primary-950 dark:text-gray-100 mb-3">{t('register.createAccount')}</h1>
+              <p className="text-primary-500 dark:text-gray-400 text-lg mb-8">{t('register.joinMessage')}</p>
 
               <div className="space-y-4 text-left">
                 <div className="flex items-center gap-4 p-4 bg-primary-50/60 dark:bg-primary-950/20 rounded-2xl">
@@ -103,8 +98,8 @@ export default function Register() {
                     </svg>
                   </div>
                   <div>
-                    <p className="font-semibold text-primary-950 dark:text-gray-100">Personal Dashboard</p>
-                    <p className="text-sm text-primary-500 dark:text-gray-400">KPIs, charts & your performance trends</p>
+                    <p className="font-semibold text-primary-950 dark:text-gray-100">{t('register.personalDashboard')}</p>
+                    <p className="text-sm text-primary-500 dark:text-gray-400">{t('register.personalDashboardDesc')}</p>
                   </div>
                 </div>
 
@@ -115,8 +110,8 @@ export default function Register() {
                     </svg>
                   </div>
                   <div>
-                    <p className="font-semibold text-primary-950 dark:text-gray-100">AI Academic Counselor</p>
-                    <p className="text-sm text-primary-500 dark:text-gray-400">Grade predictions & personalized study advice</p>
+                    <p className="font-semibold text-primary-950 dark:text-gray-100">{t('register.aiCounselor')}</p>
+                    <p className="text-sm text-primary-500 dark:text-gray-400">{t('register.aiCounselorDesc')}</p>
                   </div>
                 </div>
 
@@ -127,8 +122,8 @@ export default function Register() {
                     </svg>
                   </div>
                   <div>
-                    <p className="font-semibold text-primary-950 dark:text-gray-100">First User = Admin</p>
-                    <p className="text-sm text-primary-500 dark:text-gray-400">Create the first account to manage users</p>
+                    <p className="font-semibold text-primary-950 dark:text-gray-100">{t('register.firstUserAdmin')}</p>
+                    <p className="text-sm text-primary-500 dark:text-gray-400">{t('register.firstUserAdminDesc')}</p>
                   </div>
                 </div>
               </div>
@@ -140,26 +135,26 @@ export default function Register() {
             <div className="lg:hidden text-center mb-8">
               <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-success-500 to-emerald-400 flex items-center justify-center shadow-clay-md">
                 <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-3-5a4 4 0 11-8 0 4 4 0 018 0zM12 20a6 6 0 0112 0v1H3v-1z" />
                 </svg>
               </div>
-              <h1 className="text-2xl font-bold text-primary-950 dark:text-gray-100">Create Account</h1>
+              <h1 className="text-2xl font-bold text-primary-950 dark:text-gray-100">{t('register.createAccountShort')}</h1>
             </div>
 
             <div className="lg:block text-center mb-8">
-              <p className="text-primary-500 dark:text-gray-400">The first registered user receives administrator privileges.</p>
+              <p className="text-primary-500 dark:text-gray-400">{t('register.firstUserNotice')}</p>
             </div>
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
               {/* Full Name */}
               <div>
-                <label htmlFor="name" className="label">Full Name</label>
+                <label htmlFor="name" className="label">{t('register.fullName')}</label>
                 <input
                   {...register('name')}
                   type="text"
                   id="name"
                   autoComplete="name"
-                  placeholder="Your full name"
+                  placeholder={t('register.fullNamePlaceholder')}
                   className={`input ${errors.name ? 'border-danger-500 focus:ring-danger-500/20' : ''}`}
                   aria-invalid={errors.name ? 'true' : 'false'}
                   aria-describedby={errors.name ? 'name-error' : undefined}
@@ -174,13 +169,13 @@ export default function Register() {
 
               {/* Email */}
               <div>
-                <label htmlFor="email" className="label">Email Address</label>
+                <label htmlFor="email" className="label">{t('register.email')}</label>
                 <input
                   {...register('email')}
                   type="email"
                   id="email"
                   autoComplete="email"
-                  placeholder="you@example.com"
+                  placeholder={t('register.emailPlaceholder')}
                   className={`input ${errors.email ? 'border-danger-500 focus:ring-danger-500/20' : ''}`}
                   aria-invalid={errors.email ? 'true' : 'false'}
                   aria-describedby={errors.email ? 'email-error' : undefined}
@@ -195,14 +190,14 @@ export default function Register() {
 
               {/* Password */}
               <div>
-                <label htmlFor="password" className="label">Password</label>
+                <label htmlFor="password" className="label">{t('register.password')}</label>
                 <div className="relative">
                   <input
                     {...register('password')}
                     type={showPassword ? 'text' : 'password'}
                     id="password"
                     autoComplete="new-password"
-                    placeholder="At least 8 characters, mixed case & a number"
+                    placeholder={t('register.passwordPlaceholder')}
                     className={`input pr-12 ${errors.password ? 'border-danger-500 focus:ring-danger-500/20' : ''}`}
                     aria-invalid={errors.password ? 'true' : 'false'}
                     aria-describedby={errors.password ? 'password-error' : undefined}
@@ -212,7 +207,7 @@ export default function Register() {
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-primary-400 hover:text-primary-600 dark:text-gray-400 dark:hover:text-primary-400"
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-label={showPassword ? t('register.hidePassword') : t('register.showPassword')}
                   >
                     {showPassword ? (
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -241,7 +236,6 @@ export default function Register() {
                         className="h-full rounded-full transition-all duration-300"
                         style={{
                           width: `${(score / 4) * 100}%`,
-                          backgroundColor: `rgb(var(--tw-colors-${strengthColor}-500) / 1)`
                         }}
                       />
                     </div>
@@ -259,12 +253,12 @@ export default function Register() {
                               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                             )}
                           </svg>
-                          <span>{key.charAt(0).toUpperCase() + key.slice(1)}</span>
+                          <span>{t(`register.${key}`)}</span>
                         </div>
                       ))}
                     </div>
-                    <p className="text-xs font-medium" style={{ color: `rgb(var(--tw-colors-${strengthColor}-600) / 1)` }}>
-                      Strength: {strengthLabel}
+                    <p className="text-xs font-medium">
+                      {t('register.strengthLabel', { label: t(`register.strength${['VeryWeak', 'Weak', 'Fair', 'Strong', 'VeryStrong'][score]}`) })}
                     </p>
                   </div>
                 )}
@@ -272,14 +266,14 @@ export default function Register() {
 
               {/* Confirm Password */}
               <div>
-                <label htmlFor="confirm_password" className="label">Confirm Password</label>
+                <label htmlFor="confirm_password" className="label">{t('register.confirmPassword')}</label>
                 <div className="relative">
                   <input
                     {...register('confirm_password')}
                     type={showConfirm ? 'text' : 'password'}
                     id="confirm_password"
                     autoComplete="new-password"
-                    placeholder="Repeat your password"
+                    placeholder={t('register.confirmPasswordPlaceholder')}
                     className={`input pr-12 ${errors.confirm_password ? 'border-danger-500 focus:ring-danger-500/20' : ''}`}
                     aria-invalid={errors.confirm_password ? 'true' : 'false'}
                     aria-describedby={errors.confirm_password ? 'confirm-error' : undefined}
@@ -289,7 +283,7 @@ export default function Register() {
                     type="button"
                     onClick={() => setShowConfirm(!showConfirm)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-primary-400 hover:text-primary-600 dark:text-gray-400 dark:hover:text-primary-400"
-                    aria-label={showConfirm ? 'Hide password' : 'Show password'}
+                    aria-label={showConfirm ? t('register.hidePassword') : t('register.showPassword')}
                   >
                     {showConfirm ? (
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -309,7 +303,7 @@ export default function Register() {
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
-                    Passwords match
+                    {t('register.passwordsMatch')}
                   </p>
                 )}
                 {errors.confirm_password && (
@@ -331,18 +325,18 @@ export default function Register() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
-                    Creating account…
+                    {t('common.creatingAccount')}
                   </span>
                 ) : (
-                  'Create Account'
+                  t('register.createAccountShort')
                 )}
               </button>
             </form>
 
             <p className="mt-6 text-center text-sm text-primary-400 dark:text-gray-500">
-              Already have an account?{' '}
+              {t('register.haveAccount')}{' '}
               <Link to="/login" className="text-primary-600 dark:text-primary-400 font-semibold hover:text-primary-700 dark:hover:text-primary-300 transition-colors">
-                Sign in
+                {t('register.signIn')}
               </Link>
             </p>
           </div>

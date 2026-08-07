@@ -3,11 +3,13 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useFlash } from '../components/FlashProvider';
 import { useAuth } from '../hooks/useAuth';
+import { useLanguage } from '../hooks/useLanguage';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { SkeletonCard } from '../components/Skeleton';
 
 export default function AdminUsers() {
   const { user: currentUser, addFlash } = useAuth();
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState([]);
   const [confirmDialog, setConfirmDialog] = useState({ open: false, id: null, name: '' });
@@ -37,7 +39,7 @@ export default function AdminUsers() {
     const { id, name } = confirmDialog;
     try {
       await api.delete(`/admin/users/${id}/delete`);
-      addFlash(`User "${name}" deleted successfully.`, 'success');
+      addFlash(t('admin.userDeleted', { name }), 'success');
       fetchUsers();
     } catch (err) {
       addFlash(err.message, 'error');
@@ -69,8 +71,8 @@ export default function AdminUsers() {
           </svg>
         </div>
         <div>
-          <h2 className="text-xl font-bold text-primary-950 dark:text-gray-100">Manage Users</h2>
-          <p className="text-sm text-primary-500 dark:text-gray-400">View and manage user accounts. Admin accounts cannot be deleted.</p>
+          <h2 className="text-xl font-bold text-primary-950 dark:text-gray-100">{t('admin.manageUsers')}</h2>
+          <p className="text-sm text-primary-500 dark:text-gray-400">{t('admin.manageUsersDesc')}</p>
         </div>
       </div>
 
@@ -80,19 +82,19 @@ export default function AdminUsers() {
           <table className="w-full">
             <thead className="bg-primary-50/60 dark:bg-gray-900 border-b border-primary-100 dark:border-gray-800">
               <tr>
-                <th className="table-header-th">ID</th>
-                <th className="table-header-th">Name</th>
-                <th className="table-header-th">Email</th>
-                <th className="table-header-th">Role</th>
-                <th className="table-header-th">Created</th>
-                <th className="table-header-th text-right">Actions</th>
+                <th className="table-header-th">{t('admin.id')}</th>
+                <th className="table-header-th">{t('admin.name')}</th>
+                <th className="table-header-th">{t('admin.email')}</th>
+                <th className="table-header-th">{t('admin.role')}</th>
+                <th className="table-header-th">{t('admin.created')}</th>
+                <th className="table-header-th text-right">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-primary-100 dark:divide-gray-800">
               {users.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-16 text-center text-primary-400 dark:text-gray-500">
-                    No users found
+                    {t('admin.noUsersFound')}
                   </td>
                 </tr>
               ) : (
@@ -101,14 +103,14 @@ export default function AdminUsers() {
                     <td className="px-4 py-3 text-sm text-primary-400 dark:text-gray-500">{u.id}</td>
                     <td className="px-4 py-3 text-sm text-primary-950 dark:text-gray-100 font-medium">
                       {u.name}
-                      {u.id === currentUser?.id && <span className="text-xs text-primary-300 dark:text-gray-500 ml-1">(you)</span>}
+                      {u.id === currentUser?.id && <span className="text-xs text-primary-300 dark:text-gray-500 ml-1">{t('admin.you')}</span>}
                     </td>
                     <td className="px-4 py-3 text-sm text-primary-700 dark:text-gray-300">{u.email}</td>
                     <td className="px-4 py-3 text-sm">
                       {u.role === 'admin' ? (
-                        <span className="badge badge-warning">Admin</span>
+                        <span className="badge badge-warning">{t('nav.admin')}</span>
                       ) : (
-                        <span className="badge badge-gray">User</span>
+                        <span className="badge badge-gray">{t('admin.user')}</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-sm text-primary-400 dark:text-gray-500">
@@ -121,7 +123,7 @@ export default function AdminUsers() {
                           disabled={u.id === currentUser?.id}
                           className={`btn-danger ${u.id === currentUser?.id ? 'opacity-50' : ''}`}
                         >
-                          Delete
+                          {t('common.delete')}
                         </button>
                       ) : (
                         <span className="text-sm text-gray-400">—</span>
@@ -135,13 +137,13 @@ export default function AdminUsers() {
         </div>
 
         <div className="p-4 border-t border-primary-100 dark:border-gray-800 text-sm text-primary-500 dark:text-gray-400">
-          {users.length} user{users.length !== 1 ? 's' : ''} total
+          {t('admin.usersTotal', { count: users.length })}
         </div>
       </div>
 
       <div className="mt-4">
         <Link to="/dashboard" className="text-sm text-primary-600 hover:text-primary-700 transition-colors">
-          ← Back to Dashboard
+          {t('common.backToDashboard')}
         </Link>
       </div>
 
@@ -149,9 +151,9 @@ export default function AdminUsers() {
         isOpen={confirmDialog.open}
         onClose={() => setConfirmDialog({ open: false, id: null, name: '' })}
         onConfirm={confirmDelete}
-        title="Delete User"
-        message={`Are you sure you want to delete user "${confirmDialog.name}"? This cannot be undone.`}
-        confirmText="Delete"
+        title={t('admin.deleteUser')}
+        message={t('admin.deleteUserConfirm', { name: confirmDialog.name })}
+        confirmText={t('common.delete')}
         variant="danger"
       />
     </div>

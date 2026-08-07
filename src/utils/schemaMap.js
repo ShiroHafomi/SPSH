@@ -82,10 +82,27 @@ function getSemanticOrFirstNumeric(key) {
   return nums[0];
 }
 
+/**
+ * Convert snake_case or underscore-separated labels to Title Case with spaces
+ * e.g., "Study_Hours_Per_Day" → "Study Hours Per Day"
+ */
+function formatDisplayLabel(label) {
+  return label
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .trim();
+}
+
 function getDisplayColumns() {
   // Columns to show in table/form (exclude surrogate id + timestamps)
   const cols = getColumns();
-  return cols.filter(c => c.name !== 'id' && c.name !== 'created_at' && c.name !== 'updated_at');
+  return cols
+    .filter(c => c.name !== 'id' && c.name !== 'created_at' && c.name !== 'updated_at')
+    .map(c => ({
+      ...c,
+      displayLabel: c.displayLabel ? formatDisplayLabel(c.displayLabel) : c.name,
+    }));
 }
 
 module.exports = {

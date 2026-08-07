@@ -13,6 +13,7 @@ const apiRoutes = require('./routes/apiRoutes');
 
 const isDev = process.env.NODE_ENV !== 'production';
 const frontendDevOrigin = 'http://localhost:5173';
+const frontendDevOriginAlt = 'http://localhost:5174';
 const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
 
 function createApp() {
@@ -66,11 +67,11 @@ function createApp() {
       const referer = req.get('Referer') || '';
       const allowed = `http://localhost:${process.env.PORT || 3000}`;
       // In development, also allow Vite dev server origin
-      const allowedDev = isDev ? frontendDevOrigin : '';
-      if (origin && !origin.startsWith(allowed) && origin !== allowedDev) {
+      const allowedDev = isDev ? [frontendDevOrigin, frontendDevOriginAlt] : [];
+      if (origin && !origin.startsWith(allowed) && !allowedDev.includes(origin)) {
         return res.status(403).json({ error: 'Cross-origin requests are not allowed.' });
       }
-      if (!origin && referer && !referer.startsWith(allowed) && !referer.startsWith(allowedDev)) {
+      if (!origin && referer && !referer.startsWith(allowed) && !allowedDev.some(o => referer.startsWith(o))) {
         return res.status(403).json({ error: 'Cross-origin requests are not allowed.' });
       }
     }

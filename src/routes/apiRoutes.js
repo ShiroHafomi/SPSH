@@ -27,6 +27,7 @@ const {
   apiAdminBulkAiEvaluate,
   apiAdminGenerateIntervention,
   apiAdminSummarizeHabits,
+  apiAdminAtRisk,
 } = require('../controllers/apiController');
 
 const router = express.Router();
@@ -53,6 +54,9 @@ router.post('/students/:id/delete', requireApiAuth, apiDeleteStudent);
 // ─── Admin (requires admin) ───────────────────────────────────────────────────
 // Analytics
 router.get('/admin/analytics', requireApiAuth, requireApiAdmin, apiAdminAnalytics);
+
+// At-Risk Students
+router.get('/admin/at-risk', requireApiAuth, requireApiAdmin, apiAdminAtRisk);
 
 // Student management (filtered, with search/sort/pagination)
 router.get('/admin/students', requireApiAuth, requireApiAdmin, apiAdminListStudents);

@@ -1,22 +1,25 @@
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
+import { useLanguage, LANG_FLAGS } from '../hooks/useLanguage';
 import { Link, useLocation } from 'react-router-dom';
 
 export function Navbar() {
   const { user, logout, isAdmin } = useAuth();
   const { toggleTheme, isDark } = useTheme();
+  const { lang, toggleLang, langFlag } = useLanguage();
+  const { t } = useLanguage();
   const location = useLocation();
 
   if (!user) return null;
 
   const navLinks = [
-    { path: '/dashboard', label: 'Dashboard' },
-    { path: '/students', label: 'Students' },
-    { path: '/predictor', label: 'AI Counselor' },
+    { path: '/dashboard', label: t('nav.dashboard') },
+    { path: '/students', label: t('nav.students') },
+    { path: '/predictor', label: t('nav.aiCounselor') },
   ];
 
   const adminLinks = [
-    { path: '/admin', label: 'Admin Dashboard' },
+    { path: '/admin', label: t('nav.adminDashboard') },
   ];
 
   return (
@@ -28,7 +31,7 @@ export function Navbar() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
             </svg>
           </div>
-          <span className="hidden sm:inline text-base">Student Performance</span>
+          <span className="hidden sm:inline text-base">{t('nav.studentPerformance')}</span>
         </Link>
 
         <div className="flex items-center gap-5">
@@ -65,7 +68,7 @@ export function Navbar() {
             <span className="hidden sm:inline-flex items-center gap-1.5 text-sm text-primary-600 dark:text-gray-400">
               <span className="w-2 h-2 rounded-full bg-success-500" />
               {user.name}
-              {isAdmin && <span className="badge badge-warning text-[10px]">Admin</span>}
+              {isAdmin && <span className="badge badge-warning text-[10px]">{t('nav.admin')}</span>}
             </span>
 
             {isAdmin && (
@@ -76,14 +79,24 @@ export function Navbar() {
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
                 </svg>
-                Users
+                {t('nav.users')}
               </Link>
             )}
+
+            {/* Language Switcher */}
+            <button
+              onClick={toggleLang}
+              className="w-9 h-9 flex items-center justify-center rounded-full text-xs font-bold text-primary-600 dark:text-gray-400 hover:bg-primary-100 dark:hover:bg-gray-800 rounded-xl transition-colors cursor-pointer"
+              title={t('nav.switchLang', { lang: lang === 'en' ? 'Tiếng Việt' : 'English' })}
+              aria-label={t('nav.switchLang', { lang: lang === 'en' ? 'Tiếng Việt' : 'English' })}
+            >
+              {langFlag}
+            </button>
 
             <button
               onClick={toggleTheme}
               className="p-2 text-primary-600 dark:text-gray-400 hover:bg-primary-100 dark:hover:bg-gray-800 rounded-xl transition-colors cursor-pointer"
-              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={isDark ? t('nav.switchToLight') : t('nav.switchToDark')}
               aria-label="Toggle theme"
             >
               {isDark ? (
@@ -104,7 +117,7 @@ export function Navbar() {
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
-              Logout
+              {t('nav.logout')}
             </button>
           </div>
         </div>

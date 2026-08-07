@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../api';
+import { useLanguage } from '../hooks/useLanguage';
 import { Doughnut, Scatter, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -69,6 +70,7 @@ function ChartWrapper({ title, children, className = '' }) {
 }
 
 export default function AdminDashboard() {
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [analytics, setAnalytics] = useState(null);
@@ -84,7 +86,7 @@ export default function AdminDashboard() {
       if (err instanceof ApiError) {
         setError(err.message);
       } else {
-        setError('Failed to load analytics');
+        setError(t('admin.failedToLoad'));
       }
     } finally {
       setLoading(false);
@@ -123,10 +125,10 @@ export default function AdminDashboard() {
     return (
       <div className="text-center py-12">
         <AlertTriangle className="w-12 h-12 text-error-500 mx-auto mb-4" />
-        <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-2">Failed to load analytics</h3>
+        <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-2">{t('admin.failedToLoad')}</h3>
         <p className="text-primary-500 dark:text-gray-400 mb-4">{error}</p>
         <button onClick={fetchAnalytics} className="btn-primary">
-          <RefreshCw className="w-4 h-4 mr-2" /> Retry
+          <RefreshCw className="w-4 h-4 mr-2" /> {t('common.tryAgain')}
         </button>
       </div>
     );
@@ -184,7 +186,7 @@ export default function AdminDashboard() {
     cutout: '60%',
   };
 
-  // Attendance vs Score Scatter Chart - backend returns [{x: 85, y: 90}, ...]
+  // Attendance vs Score Scatter Chart - backend returns ['x': 85, 'y': 90}, ...]
   const attendanceVsScore = charts.attendanceVsScore || [];
   const attendanceVsScoreData = {
     datasets: [{
@@ -205,20 +207,20 @@ export default function AdminDashboard() {
       legend: { display: false },
       tooltip: {
         callbacks: {
-          label: (context) => `Attendance: ${context.raw.x}%, Final Score: ${context.raw.y}`,
+          label: (context) => `${t('admin.attendance')}: ${context.raw.x}%, ${t('admin.finalScore')}: ${context.raw.y}`,
         },
       },
     },
     scales: {
       x: {
-        title: { display: true, text: 'Attendance (%)', color: '#475569' },
+        title: { display: true, text: t('admin.attendance') + ' (%)', color: '#475569' },
         min: 0,
         max: 100,
         grid: { color: 'rgba(71, 85, 105, 0.1)' },
         ticks: { color: '#475569' },
       },
       y: {
-        title: { display: true, text: 'Final Score', color: '#475569' },
+        title: { display: true, text: t('admin.finalScore'), color: '#475569' },
         min: 0,
         max: 100,
         grid: { color: 'rgba(71, 85, 105, 0.1)' },
@@ -227,12 +229,12 @@ export default function AdminDashboard() {
     },
   };
 
-  // Part-Time Job Impact Bar Chart - backend returns [{category: 'Yes', avgScore: 75, count: 10}, ...]
+  // Part-Time Job Impact Bar Chart - backend returns ['category': 'Yes', avgScore: 75, count: 10}, ...]
   const partTimeJob = charts.partTimeJobImpact || [];
   const partTimeJobData = {
     labels: partTimeJob.map(d => d.category),
     datasets: [{
-      label: 'Average Final Score',
+      label: `Average ${t('admin.finalScore')}`,
       data: partTimeJob.map(d => Number(d.avgScore?.toFixed(1) || 0)),
       backgroundColor: partTimeJob.map((_, i) => i === 0 ? 'rgba(34, 197, 94, 0.8)' : 'rgba(239, 68, 68, 0.8)'),
       borderRadius: 8,
@@ -250,12 +252,12 @@ export default function AdminDashboard() {
     },
   };
 
-  // Sleep Impact Bar Chart - backend returns [{sleepBucket: '7h', avgScore: 82, count: 5}, ...]
+  // Sleep Impact Bar Chart - backend returns ['sleepBucket': '7h', avgScore: 82, count: 5}, ...]
   const sleepImpact = charts.sleepImpact || [];
   const sleepImpactData = {
     labels: sleepImpact.map(d => d.sleepBucket),
     datasets: [{
-      label: 'Average Final Score',
+      label: `Average ${t('admin.finalScore')}`,
       data: sleepImpact.map(d => Number(d.avgScore?.toFixed(1) || 0)),
       backgroundColor: 'rgba(139, 92, 246, 0.8)',
       borderRadius: 8,
@@ -273,7 +275,7 @@ export default function AdminDashboard() {
     },
   };
 
-  // Gender Distribution Bar Chart - backend returns [{gender: 'Female', count: 15}, ...]
+  // Gender Distribution Bar Chart - backend returns ['gender': 'Female', count: 15}, ...]
   const genderDist = charts.genderDistribution || [];
   const genderData = {
     labels: genderDist.map(d => d.gender),
@@ -324,8 +326,8 @@ export default function AdminDashboard() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-primary-950 dark:text-gray-100">Admin Dashboard</h1>
-          <p className="text-primary-500 dark:text-gray-400 mt-1">Overview of student performance metrics and analytics</p>
+          <h1 className="text-2xl font-bold text-primary-950 dark:text-gray-100">{t('nav.adminDashboard')}</h1>
+          <p className="text-primary-500 dark:text-gray-400 mt-1">{t('admin.analyticsDesc')}</p>
         </div>
         <button
           onClick={() => { setRefreshing(true); fetchAnalytics(); }}
@@ -333,32 +335,32 @@ export default function AdminDashboard() {
           className="btn-secondary flex items-center gap-2"
         >
           <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-          Refresh
+          {t('admin.refresh')}
         </button>
       </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <KPICard
-          title="Total Students"
+          title={t('admin.totalStudents')}
           value={kpis.totalStudents?.toLocaleString() || '0'}
           icon={Users}
           colorClass={KPI_CARD_STYLES.blue}
         />
         <KPICard
-          title="Average GPA"
+          title={t('admin.averageGPA')}
           value={kpis.avgGpa?.toFixed(2) || '0.00'}
           icon={GraduationCap}
           colorClass={KPI_CARD_STYLES.green}
         />
         <KPICard
-          title="Pass Rate"
+          title={t('admin.passRate')}
           value={`${(kpis.passRate || 0).toFixed(1)}%`}
           icon={TrendingUp}
           colorClass={KPI_CARD_STYLES.purple}
         />
         <KPICard
-          title="At-Risk Students"
+          title={t('admin.atRiskCount')}
           value={kpis.atRiskCount?.toLocaleString() || '0'}
           icon={AlertTriangle}
           colorClass={KPI_CARD_STYLES.orange}
@@ -367,27 +369,27 @@ export default function AdminDashboard() {
 
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ChartWrapper title="Grade Distribution">
+        <ChartWrapper title={t('admin.gradeDistribution')}>
           <Doughnut data={gradeDistributionData} options={gradeDistributionOptions} />
         </ChartWrapper>
 
-        <ChartWrapper title="Attendance vs Final Score">
+        <ChartWrapper title={t('admin.attendanceVsScore')}>
           <Scatter data={attendanceVsScoreData} options={attendanceVsScoreOptions} />
         </ChartWrapper>
 
-        <ChartWrapper title="Part-Time Job Impact on Scores">
+        <ChartWrapper title={t('admin.partTimeJobImpact')}>
           <Bar data={partTimeJobData} options={partTimeJobOptions} />
         </ChartWrapper>
 
-        <ChartWrapper title="Sleep Hours Impact on Scores">
+        <ChartWrapper title={t('admin.sleepImpact')}>
           <Bar data={sleepImpactData} options={sleepImpactOptions} />
         </ChartWrapper>
 
-        <ChartWrapper title="Gender Distribution" className="lg:col-span-2">
+        <ChartWrapper title={t('admin.genderDistribution')} className="lg:col-span-2">
           <Bar data={genderData} options={genderOptions} />
         </ChartWrapper>
 
-        <ChartWrapper title="Parental Education Distribution" className="lg:col-span-2">
+        <ChartWrapper title={t('admin.parentalEduDistribution')} className="lg:col-span-2">
           <Bar data={parentalEduData} options={parentalEduOptions} />
         </ChartWrapper>
       </div>

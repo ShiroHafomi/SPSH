@@ -522,6 +522,56 @@ async function apiAdminAnalytics(req, res) {
   }
 }
 
+/** GET /api/admin/at-risk — Get at-risk students with risk assessment */
+async function apiAdminAtRisk(req, res) {
+  try {
+    const attendance = parseInt(req.query.attendance, 10) || 75;
+    const studyHours = parseFloat(req.query.study_hours) || 2;
+    const gpa = parseFloat(req.query.gpa) || 2.5;
+
+    const result = await studentService.getAtRiskStudents({ attendance, studyHours, gpa });
+
+    // Add risk_level and risk_score to each student for frontend
+    const studentsWithRisk = result.students.map(student => {
+      let riskScore = 0;
+      let riskFactors = [];
+
+      if (student.attendance_percent !== null && student.attendance_percent < attendance) {
+        riskScore += (attendance - student.attendance_percent);
+        riskFactors.push('attendance');
+      }
+      if (student.study_hours_per_day !== null && student.study_hours_per_day < studyHours) {
+        riskScore += (studyHours - student.study_hours_per_day) * 10;
+        riskFactors.push('study_hours');
+      }
+      if (student.previous_gpa !== null && student.previous_gpa < gpa) {
+        riskScore += (gpa - student.previous_gpa) * 20;
+        riskFactors.push('gpa');
+      }
+
+      let riskLevel = 'low';
+      if (riskScore >= 30) riskLevel = 'high';
+      else if (riskScore >= 15) riskLevel = 'medium';
+
+      return {
+        ...student,
+        risk_level: riskLevel,
+        risk_score: Math.round(riskScore),
+        risk_factors: riskFactors,
+      };
+    });
+
+    res.json({
+      students: studentsWithRisk,
+      total: studentsWithRisk.length,
+      thresholds: { attendance, study_hours: studyHours, gpa }
+    });
+  } catch (err) {
+    console.error('[apiAdminAtRisk]', err);
+    res.status(500).json({ error: 'Failed to load at-risk students.' });
+  }
+}
+
 /** GET /api/admin/students — Filtered student list with pagination */
 async function apiAdminListStudents(req, res) {
   const { loadSchemaMap, getDisplayColumns, getSchemaMap } = require('../utils/schemaMap');
@@ -719,4 +769,5 @@ module.exports = {
   apiAdminBulkAiEvaluate,
   apiAdminGenerateIntervention,
   apiAdminSummarizeHabits,
+  apiAdminAtRisk,
 };

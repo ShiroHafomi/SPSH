@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useLanguage } from '../hooks/useLanguage';
 
 export function ConfirmDialog({
   isOpen,
@@ -6,13 +7,17 @@ export function ConfirmDialog({
   onConfirm,
   title = 'Are you sure?',
   message = 'This action cannot be undone.',
-  confirmText = 'Delete',
-  cancelText = 'Cancel',
+  confirmText,
+  cancelText,
   variant = 'danger',
   loading = false,
 }) {
+  const { t } = useLanguage();
   const overlayRef = useRef(null);
   const dialogRef = useRef(null);
+
+  const resolvedConfirmText = confirmText ?? t('common.delete');
+  const resolvedCancelText = cancelText ?? t('common.cancel');
 
   useEffect(() => {
     if (isOpen) {
@@ -71,10 +76,10 @@ export function ConfirmDialog({
         <p className="text-primary-600 dark:text-gray-400 mb-6">{message}</p>
         <div className="flex justify-end gap-3">
           <button onClick={onClose} disabled={loading} className="btn-secondary">
-            {cancelText}
+            {resolvedCancelText}
           </button>
           <button onClick={onConfirm} disabled={loading} className={variant === 'danger' ? 'btn-danger' : 'btn-primary'}>
-            {loading ? 'Deleting...' : confirmText}
+            {loading ? t('common.deleting') : resolvedConfirmText}
           </button>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api, ApiError } from '../api';
 import { useFlash } from '../components/FlashProvider';
+import { useLanguage } from '../hooks/useLanguage';
 import {
   Search,
   Filter,
@@ -37,15 +38,21 @@ const PART_TIME_JOB_OPTIONS = ['Yes', 'No'];
 const PARENTAL_EDU_OPTIONS = ['High School', 'Bachelor', 'Masters', 'PhD', 'None'];
 
 function RiskBadge({ riskLevel }) {
+  const { t } = useLanguage();
   const styles = {
     high: 'bg-error-100 dark:bg-error-900/30 text-error-700 dark:text-error-300',
     medium: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300',
     low: 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-300',
     unknown: 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300',
   };
+  const riskLabels = {
+    high: t('admin.highRisk'),
+    medium: t('admin.mediumRisk'),
+    low: t('admin.lowRisk'),
+  };
   return (
     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${styles[riskLevel] || styles.unknown}`}>
-      {riskLevel?.charAt(0).toUpperCase() + riskLevel?.slice(1) || 'Unknown'}
+      {riskLabels[riskLevel] || riskLevel?.charAt(0).toUpperCase() + riskLevel?.slice(1) || 'Unknown'}
     </span>
   );
 }
@@ -85,6 +92,7 @@ function SelectFilter({ label, value, options, onChange, placeholder = 'All' }) 
 
 export default function AdminStudents() {
   const { flash, addFlash } = useFlash();
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [students, setStudents] = useState([]);
   const [total, setTotal] = useState(0);
@@ -220,9 +228,9 @@ export default function AdminStudents() {
       a.download = `students_export_${new Date().toISOString().split('T')[0]}.csv`;
       a.click();
       window.URL.revokeObjectURL(url);
-      addFlash({ type: 'success', message: 'Export completed successfully' });
+      addFlash({ type: 'success', message: t('admin.exportCompleted') });
     } catch (err) {
-      addFlash({ type: 'error', message: 'Failed to export students' });
+      addFlash({ type: 'error', message: t('admin.exportFailed') });
     } finally {
       setActionLoading(null);
     }
@@ -231,17 +239,17 @@ export default function AdminStudents() {
   const handleBulkAiEvaluate = async () => {
     const ids = selectedIds.size > 0 ? Array.from(selectedIds) : null;
     if (!ids || ids.length === 0) {
-      addFlash({ type: 'error', message: 'Please select students first' });
+      addFlash({ type: 'error', message: t('admin.selectStudentsFirst') });
       return;
     }
     if (ids.length > 50) {
-      addFlash({ type: 'error', message: 'Maximum 50 students for bulk AI evaluation' });
+      addFlash({ type: 'error', message: t('admin.maxStudents') });
       return;
     }
     try {
       setActionLoading('ai');
       const data = await api.post('/admin/students/bulk-ai-evaluate', { student_ids: ids });
-      addFlash({ type: 'success', message: `AI evaluation completed for ${data.processed} students` });
+      addFlash({ type: 'success', message: t('admin.aiEvalCompleted', { count: data.processed }) });
       fetchStudents();
     } catch (err) {
       if (err instanceof ApiError) {
@@ -258,13 +266,13 @@ export default function AdminStudents() {
     try {
       setActionLoading(`intervention-${studentId}`);
       const data = await api.post(`/admin/students/${studentId}/intervention`);
-      addFlash({ type: 'success', message: 'Intervention note generated and saved to student notes' });
+      addFlash({ type: 'success', message: t('admin.interventionGenerated') });
       fetchStudents();
     } catch (err) {
       if (err instanceof ApiError) {
         addFlash({ type: 'error', message: err.message });
       } else {
-        addFlash({ type: 'error', message: 'Failed to generate intervention' });
+        addFlash({ type: 'error', message: t('admin.interventionFailed') });
       }
     } finally {
       setActionLoading(null);
@@ -273,12 +281,12 @@ export default function AdminStudents() {
 
   const handleDelete = async (studentId) => {
     setConfirmDialog({
-      title: 'Delete Student',
-      message: 'Are you sure you want to delete this student? This action cannot be undone.',
+      title: t('students.deleteStudent'),
+      message: t('admin.deleteStudentConfirm'),
       onConfirm: async () => {
         try {
           await api.post(`/admin/students/${studentId}/delete`);
-          addFlash({ type: 'success', message: 'Student deleted successfully' });
+          addFlash({ type: 'success', message: t('admin.studentDeleted') });
           fetchStudents();
         } catch (err) {
           if (err instanceof ApiError) {
@@ -292,7 +300,6 @@ export default function AdminStudents() {
   };
 
   const handleView = (student) => {
-    // Navigate to detail view or open modal
     window.open(`/students/${student.id}`, '_blank');
   };
 
@@ -313,13 +320,26 @@ export default function AdminStudents() {
     );
   }
 
+  const tableHeaders = [
+    { key: 'student_id', label: t('admin.studentID') },
+    { key: 'name', label: t('admin.name') },
+    { key: 'grade', label: 'Grade' },
+    { key: 'final_score', label: t('admin.finalScore') },
+    { key: 'attendance_percent', label: t('admin.attendance') },
+    { key: 'previous_gpa', label: t('admin.gpa') },
+    { key: 'study_hours_per_day', label: t('admin.studyHours') },
+    { key: 'sleep_hours', label: t('admin.sleepHours') },
+    { key: 'part_time_job', label: t('admin.partTime') },
+    { key: 'risk_level', label: t('admin.risk') },
+  ];
+
   return (
     <div className="space-y-6">
       {/* Header & Toolbar */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-primary-950 dark:text-gray-100">Student Management</h1>
-          <p className="text-primary-500 dark:text-gray-400 mt-1">Manage student records with advanced filtering and AI tools</p>
+          <h1 className="text-2xl font-bold text-primary-950 dark:text-gray-100">{t('admin.studentManagement')}</h1>
+          <p className="text-primary-500 dark:text-gray-400 mt-1">{t('admin.studentsHeaderDesc')}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -327,7 +347,7 @@ export default function AdminStudents() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-primary-400" />
             <input
               type="text"
-              placeholder="Search by Student ID or Notes..."
+              placeholder={t('admin.searchPlaceholder')}
               value={search}
               onChange={handleSearch}
               className="w-full pl-10 pr-4 py-2 text-sm bg-white dark:bg-gray-800 border border-primary-100 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
@@ -339,7 +359,7 @@ export default function AdminStudents() {
             className="btn-secondary flex items-center gap-2 px-4"
           >
             <Filter className="w-4 h-4" />
-            Filters {hasActiveFilters && (
+            {t('admin.filters')} {hasActiveFilters && (
               <span className="bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-xs px-2 py-0.5 rounded-full">
                 {Object.values(filters).filter(v => v).length}
               </span>
@@ -349,15 +369,15 @@ export default function AdminStudents() {
           {selectedIds.size > 0 && (
             <div className="flex items-center gap-2 border-l border-primary-200 dark:border-gray-700 pl-4">
               <span className="text-sm text-primary-600 dark:text-gray-400">
-                {selectedIds.size} selected
+                {selectedIds.size} {t('admin.selected')}
               </span>
               <button onClick={handleBulkExport} disabled={actionLoading === 'export'} className="btn-secondary text-xs flex items-center gap-1.5">
                 <Download className="w-3.5 h-3.5" />
-                Export CSV
+                {t('common.exportCSV')}
               </button>
               <button onClick={handleBulkAiEvaluate} disabled={actionLoading === 'ai' || selectedIds.size > 50} className="btn-primary text-xs flex items-center gap-1.5">
                 <Brain className="w-3.5 h-3.5" />
-                Bulk AI Evaluate
+                {t('admin.bulkAiEvaluate')}
               </button>
             </div>
           )}
@@ -377,7 +397,7 @@ export default function AdminStudents() {
           {hasActiveFilters && (
             <button onClick={clearFilters} className="text-sm text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-1.5">
               <X className="w-3.5 h-3.5" />
-              Clear all filters
+              {t('admin.clearFilters')}
             </button>
           )}
         </div>
@@ -398,18 +418,7 @@ export default function AdminStudents() {
                     className="w-4 h-4 rounded border-primary-200 dark:border-gray-700 text-primary-600 focus:ring-primary-500 cursor-pointer"
                   />
                 </th>
-                {[
-                  { key: 'student_id', label: 'Student ID' },
-                  { key: 'name', label: 'Name' },
-                  { key: 'grade', label: 'Grade' },
-                  { key: 'final_score', label: 'Final Score' },
-                  { key: 'attendance_percent', label: 'Attendance' },
-                  { key: 'previous_gpa', label: 'GPA' },
-                  { key: 'study_hours_per_day', label: 'Study Hrs' },
-                  { key: 'sleep_hours', label: 'Sleep Hrs' },
-                  { key: 'part_time_job', label: 'Part-Time' },
-                  { key: 'risk_level', label: 'Risk' },
-                ].map(col => (
+                {tableHeaders.map(col => (
                   <th
                     key={col.key}
                     className="px-4 py-3 text-left text-xs font-semibold text-primary-500 dark:text-primary-400 uppercase tracking-wider cursor-pointer hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
@@ -424,7 +433,7 @@ export default function AdminStudents() {
                   </th>
                 ))}
                 <th className="px-4 py-3 text-right text-xs font-semibold text-primary-500 dark:text-primary-400 uppercase tracking-wider">
-                  Actions
+                  {t('common.actions')}
                 </th>
               </tr>
             </thead>
@@ -432,7 +441,7 @@ export default function AdminStudents() {
               {students.length === 0 ? (
                 <tr>
                   <td colSpan={13} className="px-4 py-12 text-center text-primary-500 dark:text-gray-400">
-                    No students found matching your criteria
+                    {t('admin.noStudentsFound')}
                   </td>
                 </tr>
               ) : (
@@ -474,14 +483,14 @@ export default function AdminStudents() {
                         <button
                           onClick={() => handleView(student)}
                           className="p-2 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-xl transition-colors"
-                          title="View Details"
+                          title={t('admin.viewDetails')}
                         >
                           <Eye className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleEdit(student)}
                           className="p-2 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-xl transition-colors"
-                          title="Edit"
+                          title={t('common.edit')}
                         >
                           <Edit className="w-4 h-4" />
                         </button>
@@ -489,14 +498,14 @@ export default function AdminStudents() {
                           onClick={() => handleGenerateIntervention(student.id)}
                           disabled={actionLoading === `intervention-${student.id}`}
                           className="p-2 text-violet-600 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/30 rounded-xl transition-colors"
-                          title="AI Intervention"
+                          title={t('admin.aiIntervention')}
                         >
                           <Brain className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDelete(student.id)}
                           className="p-2 text-error-600 dark:text-error-400 hover:bg-error-100 dark:hover:bg-error-900/30 rounded-xl transition-colors"
-                          title="Delete"
+                          title={t('common.delete')}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -513,7 +522,7 @@ export default function AdminStudents() {
         {totalPages > 1 && (
           <div className="px-4 py-3 border-t border-primary-100 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="text-sm text-primary-500 dark:text-gray-400">
-              Showing {((page - 1) * pageSize) + 1} to {Math.min(page * pageSize, total)} of {total} students
+              {t('admin.showing')} {((page - 1) * pageSize) + 1} {t('admin.to')} {Math.min(page * pageSize, total)} {t('admin.of')} {total} {t('admin.students')}
             </div>
             <div className="flex items-center gap-2">
               <button

@@ -5,6 +5,18 @@
  */
 const { getSchemaMap, getSemantic, getNumericColumns, getCategoryColumns, getDisplayColumns } = require('./schemaMap');
 
+/**
+ * Format label: replace underscores with spaces, Title Case
+ */
+function formatLabel(label) {
+  if (!label) return '';
+  return label
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .trim();
+}
+
 let _chartConfig = null;
 
 /**
@@ -54,7 +66,7 @@ function buildChartConfig() {
   if (kpis.length === 1) {
     // Only total students — add first 2 numeric columns as generic KPIs
     numeric.slice(0, 2).forEach(c => {
-      kpis.push({ label: `Avg ${c.displayLabel}`, column: c.name, agg: 'avg', format: 'dec1' });
+      kpis.push({ label: `Avg ${formatLabel(c.displayLabel)}`, column: c.name, agg: 'avg', format: 'dec1' });
     });
   }
 
@@ -63,7 +75,7 @@ function buildChartConfig() {
   if (score && gender) {
     barChart = {
       type: 'bar',
-      title: `Average ${score.displayLabel} by ${gender.displayLabel}`,
+      title: `Average ${formatLabel(score.displayLabel)} by ${formatLabel(gender.displayLabel)}`,
       xColumn: gender.name,
       yColumn: score.name,
       agg: 'avg',
@@ -72,7 +84,7 @@ function buildChartConfig() {
   } else if (score && firstCategorical) {
     barChart = {
       type: 'bar',
-      title: `Average ${score.displayLabel} by ${firstCategorical.displayLabel}`,
+      title: `Average ${formatLabel(score.displayLabel)} by ${formatLabel(firstCategorical.displayLabel)}`,
       xColumn: firstCategorical.name,
       yColumn: score.name,
       agg: 'avg',
@@ -82,7 +94,7 @@ function buildChartConfig() {
     // Two numeric columns: first categorical-ish becomes X, second numeric becomes Y
     barChart = {
       type: 'bar',
-      title: `${displayCols[1]?.displayLabel || 'Value'} by ${displayCols[0]?.displayLabel || 'Category'}`,
+      title: `${formatLabel(displayCols[1]?.displayLabel || 'Value')} by ${formatLabel(displayCols[0]?.displayLabel || 'Category')}`,
       xColumn: displayCols[0]?.name,
       yColumn: displayCols[1]?.name,
       agg: 'avg',
@@ -95,20 +107,20 @@ function buildChartConfig() {
   if (studyHours && score) {
     scatterChart = {
       type: 'scatter',
-      title: `${studyHours.displayLabel} vs ${score.displayLabel}`,
+      title: `${formatLabel(studyHours.displayLabel)} vs ${formatLabel(score.displayLabel)}`,
       xColumn: studyHours.name,
       yColumn: score.name,
-      xLabel: studyHours.displayLabel,
-      yLabel: score.displayLabel,
+      xLabel: formatLabel(studyHours.displayLabel),
+      yLabel: formatLabel(score.displayLabel),
     };
   } else if (numeric.length >= 2) {
     scatterChart = {
       type: 'scatter',
-      title: `${firstNumeric.displayLabel} vs ${secondNumeric.displayLabel}`,
+      title: `${formatLabel(firstNumeric.displayLabel)} vs ${formatLabel(secondNumeric.displayLabel)}`,
       xColumn: firstNumeric.name,
       yColumn: secondNumeric.name,
-      xLabel: firstNumeric.displayLabel,
-      yLabel: secondNumeric.displayLabel,
+      xLabel: formatLabel(firstNumeric.displayLabel),
+      yLabel: formatLabel(secondNumeric.displayLabel),
     };
   }
 
@@ -118,7 +130,7 @@ function buildChartConfig() {
   if (histTarget) {
     histogramChart = {
       type: 'histogram',
-      title: `Distribution of ${histTarget.displayLabel}`,
+      title: `Distribution of ${formatLabel(histTarget.displayLabel)}`,
       column: histTarget.name,
       label: histTarget.displayLabel,
       bins: 10,
@@ -130,8 +142,8 @@ function buildChartConfig() {
     kpis,
     charts: [barChart, scatterChart, histogramChart].filter(Boolean),
     meta: {
-      numericColumns: numeric.map(c => ({ name: c.name, label: c.displayLabel, role: c.semantic })),
-      categoryColumns: categorical.map(c => ({ name: c.name, label: c.displayLabel, role: c.semantic })),
+      numericColumns: numeric.map(c => ({ name: c.name, label: formatLabel(c.displayLabel), role: c.semantic })),
+      categoryColumns: categorical.map(c => ({ name: c.name, label: formatLabel(c.displayLabel), role: c.semantic })),
     },
   };
 

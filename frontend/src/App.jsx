@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './hooks/useAuth';
 import { ThemeProvider } from './hooks/useTheme';
+import { LanguageProvider } from './hooks/useLanguage';
 import { Navbar } from './components/Navbar';
 import { FlashProvider, useFlash } from './components/FlashProvider';
 import { FlashContainer } from './components/FlashMessage';
@@ -27,7 +28,8 @@ function App() {
   return (
     <AuthProvider>
       <ThemeProvider>
-        <FlashProvider>
+        <LanguageProvider>
+          <FlashProvider>
           <div className="min-h-screen bg-primary-50 dark:bg-gray-950 text-primary-950 dark:text-gray-100 transition-colors">
             <Navbar />
             <main id="app-content" className="pt-24 pb-8">
@@ -97,6 +99,7 @@ function App() {
             </main>
           </div>
         </FlashProvider>
+        </LanguageProvider>
       </ThemeProvider>
     </AuthProvider>
   );

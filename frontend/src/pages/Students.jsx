@@ -5,6 +5,7 @@ import { useFlash } from '../components/FlashProvider';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { SkeletonTableRow } from '../components/Skeleton';
 import { renderIcon } from '../components/IconMap';
+import { formatLabel, formatColumnLabel } from '../utils/formatLabel';
 
 export default function Students() {
   const { addFlash } = useFlash();
@@ -36,7 +37,23 @@ export default function Students() {
       });
       const data = await api.get(`/students?${params}`);
       setRows(data.rows);
-      setColumns(data.columns);
+      // Add "Name Student" column at the beginning
+      const columnsWithName = data.columns.map(col => ({
+        ...col,
+        // Format display labels: replace underscores with spaces using shared utility
+        displayLabel: formatColumnLabel(col.displayLabel, col.name)
+      }));
+      // Insert Name Student column if not exists
+      if (!columnsWithName.some(c => c.name === 'name')) {
+        columnsWithName.unshift({
+          name: 'name',
+          displayLabel: 'Name Student',
+          inferredType: 'text',
+          chartRole: 'label',
+          semantic: null,
+        });
+      }
+      setColumns(columnsWithName);
       setTotal(data.total);
       setTotalPages(data.totalPages);
     } catch (err) {
@@ -51,10 +68,12 @@ export default function Students() {
   }, [fetchStudents]);
 
   const handleSort = (col) => {
-    if (sort === col) {
+    // Handle virtual "name" column - sort by student_id instead
+    const sortCol = col === 'name' ? 'student_id' : col;
+    if (sort === sortCol) {
       setDir(dir === 'asc' ? 'desc' : 'asc');
     } else {
-      setSort(col);
+      setSort(sortCol);
       setDir('asc');
     }
     setPage(1);
@@ -127,6 +146,11 @@ export default function Students() {
   };
 
   const formatCell = (row, col) => {
+    // Handle Name Student column - display "Student #1001" format
+    if (col.name === 'name') {
+      return <span className="font-medium text-primary-950 dark:text-gray-100">Student #{row.student_id || row.id}</span>;
+    }
+
     const val = row[col.name];
     if (val === null || val === undefined) {
       return <span className="text-gray-300 italic">—</span>;
