@@ -363,7 +363,7 @@ export default function Dashboard() {
                 </h3>
               </div>
               <p className="text-sm text-danger-600 dark:text-danger-400/80 mb-3 ml-12">
-                Low attendance (<{atRisk.thresholds?.attendance || 75}%), study hours (<{atRisk.thresholds?.studyHours || 2}h), or GPA (<{atRisk.thresholds?.gpa || 2.5}).
+                Low attendance ({'<'}{atRisk.thresholds?.attendance || 75}%), study hours ({'<'}{atRisk.thresholds?.studyHours || 2}h), or GPA ({'<'}{atRisk.thresholds?.gpa || 2.5}).
               </p>
               <div className="flex flex-wrap gap-1.5 ml-12">
                 {atRisk.students.slice(0, 8).map((s) => (

@@ -376,14 +376,17 @@ async function apiPredict(req, res) {
   // Path to inference script
   const scriptPath = path.join(__dirname, '..', '..', 'ml', 'inference.py');
 
-  // Run Python inference
-  execFile('py', [scriptPath, '--json', '-'], {
+  const proc = execFile('py', [scriptPath, '--json', '-'], {
     maxBuffer: 1024 * 1024,
     timeout: 30000,
-  }, (error, stdout, stderr) => {
-    if (error) {
-      console.error('[apiPredict] Python error:', error);
-      console.error('[apiPredict] stderr:', stderr);
+  });
+
+  let stdout = '';
+  let stderr = '';
+
+  proc.on('close', (code) => {
+    if (code !== 0) {
+      console.error('[apiPredict] Python error:', stderr);
       return res.status(500).json({ error: 'Prediction failed', details: stderr });
     }
 
@@ -396,7 +399,20 @@ async function apiPredict(req, res) {
       console.error('[apiPredict] stdout:', stdout);
       res.status(500).json({ error: 'Failed to parse prediction result' });
     }
-  }).stdin.write(JSON.stringify(pythonInput)).end();
+  });
+
+  proc.on('error', (error) => {
+    console.error('[apiPredict] Process error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Prediction failed', details: error.message });
+    }
+  });
+
+  proc.stdout.on('data', (data) => { stdout += data; });
+  proc.stderr.on('data', (data) => { stderr += data; });
+
+  proc.stdin.write(JSON.stringify(pythonInput));
+  proc.stdin.end();
 }
 
 // ─── At-Risk Students ────────────────────────────────────────────────────────
