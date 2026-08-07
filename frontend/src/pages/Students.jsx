@@ -4,6 +4,7 @@ import { api, ApiError } from '../api';
 import { useFlash } from '../components/FlashProvider';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { SkeletonTableRow } from '../components/Skeleton';
+import { renderIcon } from '../components/IconMap';
 
 export default function Students() {
   const { addFlash } = useFlash();
@@ -169,6 +170,7 @@ export default function Students() {
               type="search"
               name="q"
               value={search}
+              onChange={(e) => setSearch(e.target.value)}
               placeholder="Search students..."
               className="flex-1 input"
               aria-label="Search students"
@@ -195,11 +197,13 @@ export default function Students() {
         {loading ? (
           <div className="p-6">
             <div className="h-8 bg-primary-100 dark:bg-gray-700 rounded-xl w-32 animate-shimmer mb-4" aria-hidden="true" />
-            <div className="space-y-3">
-              {[...Array(8)].map((_, i) => (
-                <SkeletonTableRow key={i} columns={columns.length || 5} />
-              ))}
-            </div>
+            <table className="w-full">
+              <tbody className="space-y-3">
+                {[...Array(8)].map((_, i) => (
+                  <SkeletonTableRow key={i} columns={columns.length || 5} />
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : (
           <>
@@ -388,7 +392,7 @@ export default function Students() {
                           danger: 'border-red-500 bg-red-50 dark:bg-red-900/30',
                           info: 'border-blue-500 bg-blue-50 dark:bg-blue-900/30',
                         }[rec.severity] || 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'}`}>
-                          <span>{rec.icon}</span>
+                          <span className="flex-shrink-0">{renderIcon(rec.icon, { className: 'w-5 h-5' })}</span>
                           <span className="text-primary-700 dark:text-gray-300">{rec.text}</span>
                         </div>
                       ))}

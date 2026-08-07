@@ -447,13 +447,17 @@ async function apiFeedback(req, res) {
 
   const scriptPath = path.join(__dirname, '..', '..', 'ml', 'inference.py');
 
-  execFile('py', [scriptPath, '--json', '-'], {
+  const proc = execFile('py', [scriptPath, '--json', '-'], {
     maxBuffer: 1024 * 1024,
     timeout: 30000,
-  }, (error, stdout, stderr) => {
-    if (error) {
-      console.error('[apiFeedback] Python error:', error);
-      console.error('[apiFeedback] stderr:', stderr);
+  });
+
+  let stdout = '';
+  let stderr = '';
+
+  proc.on('close', (code) => {
+    if (code !== 0) {
+      console.error('[apiFeedback] Python error:', stderr);
       return res.status(500).json({ error: 'Prediction failed', details: stderr });
     }
 
@@ -475,7 +479,20 @@ async function apiFeedback(req, res) {
       console.error('[apiFeedback] stdout:', stdout);
       res.status(500).json({ error: 'Failed to parse prediction result' });
     }
-  }).stdin.write(JSON.stringify(pythonInput)).end();
+  });
+
+  proc.on('error', (error) => {
+    console.error('[apiFeedback] Process error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Prediction failed', details: error.message });
+    }
+  });
+
+  proc.stdout.on('data', (data) => { stdout += data; });
+  proc.stderr.on('data', (data) => { stderr += data; });
+
+  proc.stdin.write(JSON.stringify(pythonInput));
+  proc.stdin.end();
 }
 
 /** GET /api/admin/analytics — Admin dashboard analytics */

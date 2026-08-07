@@ -15,7 +15,7 @@ import {
   CheckCircle,
   XCircle,
 } from 'lucide-react';
-import ConfirmDialog from '../components/ConfirmDialog';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 const GRADE_OPTIONS = ['A', 'B', 'C', 'D', 'F'];
 const RISK_LEVELS = ['High', 'Medium', 'Low'];

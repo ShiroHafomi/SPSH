@@ -19,7 +19,7 @@ import {
   Check,
   CheckCheck,
 } from 'lucide-react';
-import ConfirmDialog from '../components/ConfirmDialog';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 const SORT_OPTIONS = [
   { value: 'student_id', label: 'Student ID' },

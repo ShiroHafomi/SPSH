@@ -8,15 +8,19 @@
  */
 
 const CLEANUP_MS = 60_000; // sweep expired entries every 60s
+const isDev = process.env.NODE_ENV !== 'production';
 
-function createRateLimiter({ windowMs, max }) {
+function createRateLimiter({ windowMs, max, devMax, devWindowMs }) {
+  // Use dev limits if in development
+  const effectiveMax = isDev && devMax !== undefined ? devMax : max;
+  const effectiveWindowMs = isDev && devWindowMs !== undefined ? devWindowMs : windowMs;
   const hits = new Map(); // key -> [timestamp, ...]
   let cleanupInterval = null;
 
   function ensureCleanup() {
     if (cleanupInterval) return;
     cleanupInterval = setInterval(() => {
-      const cutoff = Date.now() - windowMs;
+      const cutoff = Date.now() - effectiveWindowMs;
       for (const [key, timestamps] of hits) {
         const fresh = timestamps.filter((t) => t > cutoff);
         if (fresh.length === 0) hits.delete(key);
@@ -34,11 +38,11 @@ function createRateLimiter({ windowMs, max }) {
   function check(key) {
     ensureCleanup();
     const now = Date.now();
-    const cutoff = now - windowMs;
+    const cutoff = now - effectiveWindowMs;
     const timestamps = (hits.get(key) || []).filter((t) => t > cutoff);
 
-    if (timestamps.length >= max) {
-      const retryAfterSeconds = Math.ceil((timestamps[0] + windowMs - now) / 1000);
+    if (timestamps.length >= effectiveMax) {
+      const retryAfterSeconds = Math.ceil((timestamps[0] + effectiveWindowMs - now) / 1000);
       return { allowed: false, remaining: 0, retryAfterSeconds };
     }
 
@@ -46,7 +50,7 @@ function createRateLimiter({ windowMs, max }) {
     hits.set(key, timestamps);
     return {
       allowed: true,
-      remaining: max - timestamps.length,
+      remaining: effectiveMax - timestamps.length,
       retryAfterSeconds: 0,
     };
   }
@@ -61,16 +65,20 @@ function createRateLimiter({ windowMs, max }) {
 
 // ─── Pre-configured limiters ──────────────────────────────────────────────────
 
-/** Login: 5 attempts per 15 minutes per IP */
+/** Login: 5 attempts per 15 minutes per IP (dev: 50 per 15 min) */
 const loginLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 5,
+  devMax: 50,
+  devWindowMs: 15 * 60 * 1000,
 });
 
-/** Register: 3 accounts per hour per IP */
+/** Register: 3 accounts per hour per IP (dev: 50 per hour) */
 const registerLimiter = createRateLimiter({
   windowMs: 60 * 60 * 1000,
   max: 3,
+  devMax: 50,
+  devWindowMs: 60 * 60 * 1000,
 });
 
 /**

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { api, ApiError } from '../api';
 import { useFlash } from '../components/FlashProvider';
 import { SkeletonCard } from '../components/Skeleton';
+import { renderIcon } from '../components/IconMap';
 
 const DEFAULT_PROFILE = {
   gender: 'Female',
@@ -323,11 +324,11 @@ export default function Predictor() {
                           <div className="flex-1 bg-primary-100 dark:bg-gray-700 rounded-full h-5 overflow-hidden">
                             <div
                               className={`h-full rounded-full transition-all duration-500 ${GRADE_COLORS[g] || ''}`}
-                              style={{ width: `${(p * 100).toFixed(0)}%`, minWidth: p > 0 ? '1.25rem' : 0 }}
+                              style={{ width: `${(prob * 100).toFixed(0)}%`, minWidth: prob > 0 ? '1.25rem' : 0 }}
                             />
                           </div>
                           <span className="text-sm font-medium text-primary-600 dark:text-primary-300 dark:text-gray-600 w-12 text-right">
-                            {(p * 100).toFixed(0)}%
+                            {(prob * 100).toFixed(0)}%
                           </span>
                         </div>
                       ))}
@@ -347,7 +348,7 @@ export default function Predictor() {
                           key={i}
                           className={`flex gap-3 p-4 border-l-4 rounded-r-lg ${SEVERITY_COLORS[rec.severity] || SEVERITY_COLORS.info}`}
                         >
-                          <span className="text-2xl flex-shrink-0">{rec.icon}</span>
+                          <span className="flex-shrink-0">{renderIcon(rec.icon, { className: 'w-6 h-6' })}</span>
                           <div>
                             <p className="font-semibold text-primary-950 dark:text-gray-100 text-sm">{rec.title}</p>
                             <p className="text-sm text-primary-600 dark:text-primary-300 dark:text-gray-600 mt-0.5">{rec.text}</p>

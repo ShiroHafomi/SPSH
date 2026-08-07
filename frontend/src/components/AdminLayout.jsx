@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+
 export function AdminLayout({ children }) {
   return (
     <div className="min-h-screen bg-primary-50 dark:bg-gray-950">
@@ -100,5 +102,3 @@ export function AdminLayout({ children }) {
     </div>
   );
 }
-
-import { Link } from 'react-router-dom';

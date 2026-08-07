@@ -12,10 +12,18 @@
   * {
     @apply border-primary-200;
   }
+  html, body, #root {
+    @apply min-h-screen;
+  }
   body {
     @apply bg-primary-50 text-primary-950 antialiased;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Fira Sans', system-ui, -apple-system, sans-serif;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+  /* Monospace for data/numbers - use Fira Code */
+  .font-mono, code, pre, kbd, samp, .tabular-nums {
+    font-family: 'Fira Code', 'SF Mono', 'Monaco', 'Menlo', monospace;
+    font-variant-numeric: tabular-nums;
   }
 }
 
@@ -108,7 +116,7 @@
   }
 
   .kpi-value {
-    @apply text-3xl font-bold text-primary-950 tabular-nums;
+    @apply text-3xl font-bold text-primary-950 tabular-nums font-mono;
   }
 
   .kpi-icon-box {
@@ -385,7 +393,7 @@
 }
 
 .dark .kpi-value {
-  @apply text-white;
+  @apply text-white font-mono;
 }
 
 .dark nav {

@@ -722,7 +722,7 @@ def compute_shap_analysis(
     logger.info("Computing SHAP analysis for %s (%s)...", model_name, task)
     start = time.time()
 
-    # Sample for efficiency (SHAP is O(n²) in TreeExplainer)
+    # Sample for efficiency (SHAP is O(n²) in TreeExplainer) 
     n_sample = min(100, X.shape[0])
     rng = np.random.RandomState(42)
     if X.shape[0] > n_sample:

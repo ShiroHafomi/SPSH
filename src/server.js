@@ -26,14 +26,14 @@ async function main() {
 
   if (!dbReady) {
     console.warn(
-      '\n⚠️  Database not ready — the app will start but show an error page.' +
+      '\n  Database not ready — the app will start but show an error page.' +
       '\n   Run: npm run import:sample   (or: npm run import -- --file <your.csv> --replace)' +
       '\n'
     );
   }
 
   app.listen(PORT, () => {
-    console.log(`🚀 Server running at http://localhost:${PORT}`);
+    console.log(` Server running at http://localhost:${PORT}`);
     console.log(`   DB ready: ${dbReady ? 'yes' : 'no'}`);
   });
 }

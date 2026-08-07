@@ -37,7 +37,7 @@ function createApp() {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      sameSite: 'strict',
+      sameSite: 'lax', // Changed from 'strict' to allow cross-origin via Vite proxy
       secure: process.env.NODE_ENV === 'production',
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
     },
