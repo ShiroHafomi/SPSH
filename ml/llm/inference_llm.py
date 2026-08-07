@@ -172,16 +172,16 @@ def main():
             print("   Example: py inference_llm.py --profile student_example.json")
             sys.exit(1)
 
-    print(f"📋 Student Profile: {json.dumps(profile, indent=2)}\n")
+    print(f" Student Profile: {json.dumps(profile, indent=2)}\n")
 
     # ── Load model ──────────────────────────────────────────────────────
-    print(f"🤖 Loading model: {args.model}")
+    print(f" Loading model: {args.model}")
     adapter = None if args.base_only else args.adapter
     model, tokenizer = load_model(args.model, adapter, args.device)
 
     # ── Generate ────────────────────────────────────────────────────────
     prompt = build_prompt(profile)
-    print("📝 Prompt:\n" + prompt + "\n")
+    print(" Prompt:\n" + prompt + "\n")
     print("=" * 60)
 
     response = generate(model, tokenizer, prompt, args.max_tokens, args.device)

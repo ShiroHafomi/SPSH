@@ -307,7 +307,7 @@ export default function AdminAtRisk() {
         className="btn-secondary flex items-center gap-2"
       >
         <Settings className="w-4 h-4" />
-        {t('admin.riskThresholds')}
+        Risk Thresholds
 
         {showThresholds && <ChevronUp className="w-4 h-4" />}
       </button>
@@ -366,9 +366,9 @@ export default function AdminAtRisk() {
       {showThresholds && (
         <div className="rounded-2xl p-4 border bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl shadow-clay-sm animate-slide-down">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-primary-950 dark:text-gray-100">{t('admin.riskThresholds')}</h3>
+            <h3 className="text-sm font-semibold text-primary-950 dark:text-gray-100">Risk Thresholds</h3>
             <button onClick={clearThresholds} className="text-xs text-primary-600 dark:text-primary-400 hover:underline">
-              {t('common.reset')}
+              Reset to defaults
             </button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -425,7 +425,7 @@ export default function AdminAtRisk() {
             </div>
           </div>
           <p className="text-xs text-primary-400 dark:text-gray-500 mt-3 text-center">
-            {t('admin.thresholdDesc')}
+            Students falling below any threshold are flagged as at-risk. Adjust sliders to update.
           </p>
         </div>
       )}

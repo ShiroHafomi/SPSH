@@ -5,7 +5,7 @@ import { Chart, registerables } from 'chart.js';
 import { Bar, Scatter, Line, Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, PointElement, ArcElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { SkeletonCard, SkeletonChart } from '../components/Skeleton';
-import { formatChartLabel } from '../utils/formatChartLabel';
+import { formatLabel } from '../utils/formatLabel';
 import { useLanguage } from '../hooks/useLanguage';
 
 ChartJS.register(...registerables);
@@ -205,9 +205,9 @@ export default function Dashboard() {
           ...chart,
           chartType: 'bar',
           data: {
-            labels: sorted.map(d => formatChartLabel(d.label)),
+            labels: sorted.map(d => formatLabel(d.label)),
             datasets: [{
-              label: formatChartLabel(chart.yLabel || 'Value'),
+              label: formatLabel(chart.yLabel || 'Value'),
               data: sorted.map(d => d.value),
               backgroundColor: colors.bg,
               borderColor: colors.border,
@@ -228,7 +228,7 @@ export default function Dashboard() {
           chartType: 'scatter',
           data: {
             datasets: [{
-              label: `${formatChartLabel(chart.yLabel)} vs ${formatChartLabel(chart.xLabel)}`,
+              label: `${formatLabel(chart.yLabel)} vs ${formatLabel(chart.xLabel)}`,
               data: chart.data.map(d => ({ x: d.x, y: d.y })),
               backgroundColor: 'rgba(16, 185, 129, 0.6)',
               borderColor: 'rgb(16, 185, 129)',
@@ -242,8 +242,8 @@ export default function Dashboard() {
             ...getChartOptions(isDark),
             scales: {
               ...getChartOptions(isDark).scales,
-              x: { ...getChartOptions(isDark).scales.x, title: { ...getChartOptions(isDark).scales.x.title, text: formatChartLabel(chart.xLabel) }, beginAtZero: true },
-              y: { ...getChartOptions(isDark).scales.y, title: { ...getChartOptions(isDark).scales.y.title, text: formatChartLabel(chart.yLabel) }, beginAtZero: true },
+              x: { ...getChartOptions(isDark).scales.x, title: { ...getChartOptions(isDark).scales.x.title, text: formatLabel(chart.xLabel) }, beginAtZero: true },
+              y: { ...getChartOptions(isDark).scales.y, title: { ...getChartOptions(isDark).scales.y.title, text: formatLabel(chart.yLabel) }, beginAtZero: true },
             },
           },
         };
@@ -255,9 +255,9 @@ export default function Dashboard() {
           ...chart,
           chartType: 'line',
           data: {
-            labels: chart.labels.map(l => formatChartLabel(l)),
+            labels: chart.labels.map(l => formatLabel(l)),
             datasets: [{
-              label: formatChartLabel(chart.yLabel || 'Value'),
+              label: formatLabel(chart.yLabel || 'Value'),
               data: chart.data,
               backgroundColor: 'rgba(99, 102, 241, 0.15)',
               borderColor: 'rgb(99, 102, 241)',
@@ -306,9 +306,9 @@ export default function Dashboard() {
         ...chart,
         chartType: 'bar',
         data: {
-          labels: chart.labels.map(l => formatChartLabel(l)),
+          labels: chart.labels.map(l => formatLabel(l)),
           datasets: [{
-            label: formatChartLabel(chart.yLabel || 'Value'),
+            label: formatLabel(chart.yLabel || 'Value'),
             data: chart.data,
             backgroundColor: colors.bg,
             borderColor: colors.border,
@@ -405,10 +405,10 @@ export default function Dashboard() {
         {charts.map((chart, idx) => (
           <div key={idx} className="card p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-primary-950 dark:text-gray-100">{formatChartLabel(chart.title)}</h3>
+              <h3 className="text-lg font-bold text-primary-950 dark:text-gray-100">{formatLabel(chart.title)}</h3>
               {chart.xLabel && chart.yLabel && (
                 <span className="text-xs text-primary-400 dark:text-gray-500 font-medium px-2 py-1 rounded-full bg-primary-50 dark:bg-primary-900/30">
-                  {formatChartLabel(chart.xLabel)} → {formatChartLabel(chart.yLabel)}
+                  {formatLabel(chart.xLabel)} → {formatLabel(chart.yLabel)}
                 </span>
               )}
             </div>

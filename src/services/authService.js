@@ -6,10 +6,11 @@ const bcrypt = require('bcryptjs');
 const { pool } = require('../config/db');
 
 const SALT_ROUNDS = 12;
+const VALID_ROLES = ['admin', 'teacher', 'student'];
 
 /**
  * Auto-create the users table on app boot.
- * Fixed schema — separate from the schema-agnostic students table.
+ * Extended schema with 3 roles, student linkage, and audit fields.
  */
 async function ensureUsersTable() {
   await pool.query(`
@@ -18,9 +19,40 @@ async function ensureUsersTable() {
       email VARCHAR(255) NOT NULL UNIQUE,
       password_hash VARCHAR(255) NOT NULL,
       name VARCHAR(100) NOT NULL,
-      role ENUM('admin', 'user') DEFAULT 'user',
+      role ENUM('admin', 'teacher', 'student') DEFAULT 'student',
+      student_id INT UNSIGNED NULL,
+      department VARCHAR(100) NULL,
+      is_active BOOLEAN DEFAULT TRUE,
+      last_login_at TIMESTAMP NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_role (role),
+      INDEX idx_student_id (student_id),
+      INDEX idx_email (email)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `);
+}
+
+/**
+ * Auto-create the audit_logs table on app boot.
+ * Tracks all admin/teacher mutating operations.
+ */
+async function ensureAuditLogsTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      user_id INT UNSIGNED NULL,
+      action VARCHAR(50) NOT NULL,
+      resource_type VARCHAR(50) NOT NULL,
+      resource_id INT UNSIGNED NULL,
+      metadata JSON NULL,
+      ip_address VARCHAR(45) NULL,
+      user_agent TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_user_id (user_id),
+      INDEX idx_action (action),
+      INDEX idx_resource (resource_type, resource_id),
+      INDEX idx_created_at (created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
 }
@@ -57,7 +89,15 @@ async function loginUser({ email, password }) {
   const match = await bcrypt.compare(password, user.password_hash);
   if (!match) return null;
 
-  return { id: user.id, email: user.email, name: user.name, role: user.role };
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    student_id: user.student_id,
+    department: user.department,
+    is_active: user.is_active,
+  };
 }
 
 /**
@@ -66,7 +106,7 @@ async function loginUser({ email, password }) {
  */
 async function findById(id) {
   const [rows] = await pool.query(
-    'SELECT id, email, name, role, created_at FROM users WHERE id = ?',
+    'SELECT id, email, name, role, student_id, department, is_active, created_at FROM users WHERE id = ?',
     [id]
   );
   return rows.length ? rows[0] : null;
@@ -104,12 +144,201 @@ async function deleteUser(id) {
   return result.affectedRows;
 }
 
+/**
+ * Create a user with specific role (admin only).
+ * Returns the created user object (without password_hash).
+ */
+async function createUser({ email, password, name, role = 'student', studentId = null, department = null }) {
+  if (!VALID_ROLES.includes(role)) {
+    throw new Error(`Invalid role: ${role}. Must be one of: ${VALID_ROLES.join(', ')}`);
+  }
+
+  // If role is student, student_id can be linked; if teacher, department is optional
+  const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
+
+  const [result] = await pool.query(
+    'INSERT INTO users (email, password_hash, name, role, student_id, department) VALUES (?, ?, ?, ?, ?, ?)',
+    [email, password_hash, name, role, studentId, department]
+  );
+
+  return { id: result.insertId, email, name, role, studentId, department };
+}
+
+/**
+ * Update user details (admin only).
+ * Allows updating name, role, password, department, is_active.
+ */
+async function updateUser(id, { name, role, password, department, isActive }) {
+  const fields = [];
+  const values = [];
+
+  if (name !== undefined) {
+    fields.push('name = ?');
+    values.push(name);
+  }
+  if (role !== undefined) {
+    if (!VALID_ROLES.includes(role)) {
+      throw new Error(`Invalid role: ${role}`);
+    }
+    fields.push('role = ?');
+    values.push(role);
+  }
+  if (password !== undefined) {
+    const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
+    fields.push('password_hash = ?');
+    values.push(password_hash);
+  }
+  if (department !== undefined) {
+    fields.push('department = ?');
+    values.push(department);
+  }
+  if (isActive !== undefined) {
+    fields.push('is_active = ?');
+    values.push(isActive ? 1 : 0);
+  }
+
+  if (fields.length === 0) {
+    throw new Error('No fields to update');
+  }
+
+  values.push(id);
+
+  const [result] = await pool.query(
+    `UPDATE users SET ${fields.join(', ')} WHERE id = ?`,
+    values
+  );
+
+  return result.affectedRows > 0;
+}
+
+/**
+ * Get user by ID with all fields except password_hash.
+ */
+async function getUserById(id) {
+  const [rows] = await pool.query(
+    'SELECT id, email, name, role, student_id, department, is_active, last_login_at, created_at, updated_at FROM users WHERE id = ?',
+    [id]
+  );
+  return rows.length ? rows[0] : null;
+}
+
+/**
+ * Get user by email with all fields (for authentication).
+ */
+async function getUserByEmail(email) {
+  const [rows] = await pool.query(
+    'SELECT * FROM users WHERE email = ?',
+    [email]
+  );
+  return rows.length ? rows[0] : null;
+}
+
+/**
+ * Update last login timestamp.
+ */
+async function updateLastLogin(id) {
+  await pool.query(
+    'UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [id]
+  );
+}
+
+/**
+ * Verify user is active.
+ */
+async function isUserActive(id) {
+  const [rows] = await pool.query(
+    'SELECT is_active FROM users WHERE id = ?',
+    [id]
+  );
+  return rows.length ? Boolean(rows[0].is_active) : false;
+}
+
+/**
+ * Ensure audit_logs table exists.
+ */
+async function ensureAuditLogsTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      user_id INT UNSIGNED NULL,
+      action VARCHAR(50) NOT NULL,
+      resource_type VARCHAR(50) NOT NULL,
+      resource_id INT UNSIGNED NULL,
+      metadata JSON NULL,
+      ip_address VARCHAR(45) NULL,
+      user_agent TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_user_id (user_id),
+      INDEX idx_action (action),
+      INDEX idx_resource (resource_type, resource_id),
+      INDEX idx_created_at (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `);
+}
+
+/**
+ * Log an audit event.
+ */
+async function logAuditEvent({ userId, action, resourceType, resourceId, metadata, ipAddress, userAgent }) {
+  await pool.query(
+    `INSERT INTO audit_logs (user_id, action, resource_type, resource_id, metadata, ip_address, user_agent)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [userId, action, resourceType, resourceId, metadata ? JSON.stringify(metadata) : null, ipAddress, userAgent]
+  );
+}
+
+/**
+ * Get audit logs with pagination and filters.
+ */
+async function getAuditLogs({ page = 1, size = 50, action, resourceType, userId }) {
+  const offset = (page - 1) * size;
+  const conditions = [];
+  const values = [];
+
+  if (action) {
+    conditions.push('action = ?');
+    values.push(action);
+  }
+  if (resourceType) {
+    conditions.push('resource_type = ?');
+    values.push(resourceType);
+  }
+  if (userId) {
+    conditions.push('user_id = ?');
+    values.push(userId);
+  }
+
+  const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const [logs] = await pool.query(
+    `SELECT * FROM audit_logs ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+    [...values, size, offset]
+  );
+
+  const [{ total }] = await pool.query(
+    `SELECT COUNT(*) AS total FROM audit_logs ${whereClause}`,
+    values
+  );
+
+  return { logs, total, page, totalPages: Math.ceil(total / size) };
+}
+
 module.exports = {
   ensureUsersTable,
+  ensureAuditLogsTable,
   registerUser,
   loginUser,
   findById,
+  getUserById,
+  getUserByEmail,
   emailExists,
   listUsers,
   deleteUser,
+  createUser,
+  updateUser,
+  updateLastLogin,
+  isUserActive,
+  logAuditEvent,
+  getAuditLogs,
 };

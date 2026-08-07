@@ -928,17 +928,292 @@ async function summarizeHabits(studentId) {
   return { summary };
 }
 
+/**
+ * Find student by student_id (display ID from CSV).
+ */
+async function findByStudentId(studentId) {
+  const sql = `SELECT * FROM \`${TABLE}\` WHERE \`student_id\` = ?`;
+  const [rows] = await pool.query(sql, [studentId]);
+  return rows[0] || null;
+}
+
+/**
+ * Get distinct values for a column (for filter dropdowns).
+ */
+async function getDistinctValues(column) {
+  const allowedColumns = ['grade', 'gender', 'part_time_job', 'parental_education'];
+  if (!allowedColumns.includes(column)) {
+    throw new Error(`Column ${column} not allowed for distinct query`);
+  }
+  const sql = `SELECT DISTINCT \`${column}\` FROM \`${TABLE}\` WHERE \`${column}\` IS NOT NULL ORDER BY \`${column}\``;
+  const [rows] = await pool.query(sql);
+  return rows.map(r => r[column]).filter(v => v !== null && v !== '');
+}
+
+/**
+ * Get student percentiles (class ranking for each metric).
+ */
+async function getStudentPercentiles(studentId) {
+  const { loadSchemaMap, getSchemaMap, getDisplayColumns } = require('../utils/schemaMap');
+  loadSchemaMap();
+  const map = getSchemaMap();
+  const displayCols = getDisplayColumns();
+
+  const findCol = (semanticTags) => {
+    if (!Array.isArray(semanticTags)) semanticTags = [semanticTags];
+    for (const tag of semanticTags) {
+      for (const col of displayCols) {
+        if (col.semanticTag === tag || col.name === tag) return col.name;
+      }
+    }
+    return null;
+  };
+
+  const colFinalScore = findCol(['final_score', 'score']) || 'final_score';
+  const colGpa = findCol(['previous_gpa', 'gpa']) || 'previous_gpa';
+  const colAttendance = findCol(['attendance_percent', 'attendance']) || 'attendance_percent';
+  const colStudyHours = findCol(['study_hours_per_day', 'study_hours']) || 'study_hours_per_day';
+  const colSleep = findCol(['sleep_hours', 'sleep']) || 'sleep_hours';
+
+  // Get student's values
+  const student = await findById(studentId);
+  if (!student) return {};
+
+  // Calculate percentile for each metric
+  const metrics = [
+    { key: 'finalScore', column: colFinalScore, studentVal: student[colFinalScore], higherIsBetter: true },
+    { key: 'gpa', column: colGpa, studentVal: student[colGpa], higherIsBetter: true },
+    { key: 'attendance', column: colAttendance, studentVal: student[colAttendance], higherIsBetter: true },
+    { key: 'studyHours', column: colStudyHours, studentVal: student[colStudyHours], higherIsBetter: true },
+    { key: 'sleep', column: colSleep, studentVal: student[colSleep], higherIsBetter: true },
+  ];
+
+  const percentiles = {};
+
+  for (const metric of metrics) {
+    if (metric.studentVal === null || metric.studentVal === undefined) {
+      percentiles[metric.key] = null;
+      continue;
+    }
+
+    const [rows] = await pool.query(
+      `SELECT COUNT(*) AS cnt FROM \`${TABLE}\` WHERE \`${metric.column}\` IS NOT NULL`
+    );
+    const total = rows[0]?.cnt || 1;
+
+    const op = metric.higherIsBetter ? '<=' : '<';
+    const [lessRows] = await pool.query(
+      `SELECT COUNT(*) AS cnt FROM \`${TABLE}\` WHERE \`${metric.column}\` IS NOT NULL AND \`${metric.column}\` ${op} ?`,
+      [metric.studentVal]
+    );
+    const lessOrEqual = lessRows[0]?.cnt || 0;
+
+    percentiles[metric.key] = Math.round((lessOrEqual / total) * 100);
+  }
+
+  return percentiles;
+}
+
+/**
+ * Check personal risk alerts for a student.
+ * Returns array of alert objects for the student portal banner.
+ */
+async function checkPersonalRiskAlerts(student) {
+  const alerts = [];
+  const thresholds = {
+    attendance: 75,
+    studyHours: 2,
+    gpa: 2.5,
+    sleepHours: 5.5,
+  };
+
+  // Attendance
+  if (student.attendance_percent !== null && student.attendance_percent < thresholds.attendance) {
+    if (student.attendance_percent < 60) {
+      alerts.push({
+        type: 'danger',
+        icon: 'AlertTriangle',
+        title: 'Critical: Exam Ban Risk',
+        message: `Tỷ lệ điểm danh ${student.attendance_percent}% - Nguy cơ bị cấm thi`,
+      });
+    } else {
+      alerts.push({
+        type: 'warning',
+        icon: 'AlertTriangle',
+        title: 'Low Attendance',
+        message: `Tỷ lệ điểm danh ${student.attendance_percent}% - Dưới ngưỡng an toàn (${thresholds.attendance}%)`,
+      });
+    }
+  }
+
+  // Study hours
+  if (student.study_hours_per_day !== null && student.study_hours_per_day < thresholds.studyHours) {
+    alerts.push({
+      type: 'warning',
+      icon: 'BookOpen',
+      title: 'Insufficient Study Time',
+      message: `Chỉ học ${student.study_hours_per_day}h/ngày - Khuyến nghị ${thresholds.studyHours}+h để cải thiện kết quả`,
+    });
+  }
+
+  // GPA
+  if (student.previous_gpa !== null && student.previous_gpa < thresholds.gpa) {
+    alerts.push({
+      type: 'danger',
+      icon: 'AlertTriangle',
+      title: 'Low Academic Foundation',
+      message: `GPA trước ${student.previous_gpa} - Dưới ngưỡng ${thresholds.gpa}, cần can thiệp gấp`,
+    });
+  }
+
+  // Sleep
+  if (student.sleep_hours !== null && student.sleep_hours < thresholds.sleepHours) {
+    if (student.sleep_hours < 4) {
+      alerts.push({
+        type: 'danger',
+        icon: 'Moon',
+        title: 'Severe Sleep Deprivation',
+        message: `Chỉ ngủ ${student.sleep_hours}h/đêm - Ảnh hưởng nghiêm trọng đến인지 và trí nhớ`,
+      });
+    } else {
+      alerts.push({
+        type: 'warning',
+        icon: 'Moon',
+        title: 'Insufficient Sleep',
+        message: `Ngủ ${student.sleep_hours}h/đêm - Dưới khuyến nghị ${thresholds.sleepHours}h, ảnh hưởng tập trung`,
+      });
+    }
+  }
+
+  // Part-time job balance
+  if (student.part_time_job && student.study_hours_per_day < 3) {
+    alerts.push({
+      type: 'info',
+      icon: 'Briefcase',
+      title: 'Work-Study Balance',
+      message: 'Có làm thêm nhưng giờ học thấp - Cần lập lịch học tập chặt chẽ hơn',
+    });
+  }
+
+  return alerts;
+}
+
+/**
+ * Assess student risk with detailed breakdown (for teacher/detail view).
+ */
+async function assessStudentRisk(studentId) {
+  const student = await findById(studentId);
+  if (!student) return null;
+
+  const { checkPersonalRiskAlerts } = require('./studentService');
+  const alerts = await checkPersonalRiskAlerts(student);
+
+  // Determine overall risk level
+  let riskLevel = 'low';
+  const hasCritical = alerts.some(a => a.type === 'danger');
+  const hasWarning = alerts.some(a => a.type === 'warning');
+
+  if (hasCritical) riskLevel = 'high';
+  else if (hasWarning) riskLevel = 'medium';
+
+  return {
+    riskLevel,
+    alertCount: alerts.length,
+    criticalCount: alerts.filter(a => a.type === 'danger').length,
+    warningCount: alerts.filter(a => a.type === 'warning').length,
+    alerts,
+  };
+}
+
+/**
+ * Get teacher analytics - extended version of admin analytics for teacher dashboard.
+ */
+async function getTeacherAnalytics() {
+  // Reuse admin analytics but add teacher-specific computations
+  const adminAnalytics = await getAdminAnalytics();
+
+  // Add teacher-specific: class comparison, trend
+  const { loadSchemaMap, getSchemaMap, getDisplayColumns } = require('../utils/schemaMap');
+  loadSchemaMap();
+  const map = getSchemaMap();
+  const displayCols = getDisplayColumns();
+
+  const findCol = (semanticTags) => {
+    if (!Array.isArray(semanticTags)) semanticTags = [semanticTags];
+    for (const tag of semanticTags) {
+      for (const col of displayCols) {
+        if (col.semanticTag === tag || col.name === tag) return col.name;
+      }
+    }
+    return null;
+  };
+
+  const colFinalScore = findCol(['final_score', 'score']) || 'final_score';
+  const colAttendance = findCol(['attendance_percent', 'attendance']) || 'attendance_percent';
+  const colStudyHours = findCol(['study_hours_per_day', 'study_hours']) || 'study_hours_per_day';
+  const colSleep = findCol(['sleep_hours', 'sleep']) || 'sleep_hours';
+  const colGrade = findCol(['grade', 'final_grade']) || 'grade';
+
+  // Grade distribution with percentages
+  const gradeDist = adminAnalytics.charts.gradeDistribution;
+  const totalStudents = adminAnalytics.kpis.totalStudents;
+  const gradeDistributionWithPct = gradeDist.map(g => ({
+    ...g,
+    percentage: totalStudents > 0 ? Number(((g.count / totalStudents) * 100).toFixed(1)) : 0,
+  }));
+
+  // Habit correlation charts
+  let studyHoursCorrelation = [];
+  if (colStudyHours && colFinalScore) {
+    const [rows] = await pool.query(`
+      SELECT \`${colStudyHours}\` AS x, \`${colFinalScore}\` AS y
+      FROM \`${TABLE}\`
+      WHERE \`${colStudyHours}\` IS NOT NULL AND \`${colFinalScore}\` IS NOT NULL
+    `);
+    studyHoursCorrelation = rows.map(r => ({ x: Number(r.x), y: Number(r.y) }));
+  }
+
+  let sleepCorrelation = [];
+  if (colSleep && colFinalScore) {
+    const [rows] = await pool.query(`
+      SELECT \`${colSleep}\` AS x, \`${colFinalScore}\` AS y
+      FROM \`${TABLE}\`
+      WHERE \`${colSleep}\` IS NOT NULL AND \`${colFinalScore}\` IS NOT NULL
+    `);
+    sleepCorrelation = rows.map(r => ({ x: Number(r.x), y: Number(r.y) }));
+  }
+
+  return {
+    ...adminAnalytics,
+    kpis: {
+      ...adminAnalytics.kpis,
+      gradeDistribution: gradeDistributionWithPct,
+    },
+    charts: {
+      ...adminAnalytics.charts,
+      studyHoursCorrelation,
+      sleepCorrelation,
+    },
+  };
+}
+
 module.exports = {
   listStudents,
   countStudents,
   findById,
+  findByStudentId,
   createStudent,
   updateStudent,
   deleteStudent,
   getDashboardStats,
   getAtRiskStudents,
   getAdminAnalytics,
+  getTeacherAnalytics,
   getStudentsForBulk,
   generateInterventionNote,
   summarizeHabits,
+  getDistinctValues,
+  getStudentPercentiles,
+  checkPersonalRiskAlerts,
+  assessStudentRisk,
 };

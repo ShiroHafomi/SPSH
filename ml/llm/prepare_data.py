@@ -130,7 +130,7 @@ def generate_dataset(df, output_path):
         for record in records:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
-    print(f"✅ Wrote {len(records)} training examples to {output_path}")
+    print(f" Wrote {len(records)} training examples to {output_path}")
     return output_path
 
 
@@ -145,7 +145,7 @@ def main():
     )
     args = parser.parse_args()
 
-    print("📥 Fetching students from MySQL...")
+    print(" Fetching students from MySQL...")
     df = fetch_students()
     print(f"   {len(df)} students loaded")
 
@@ -161,11 +161,11 @@ def main():
     with open(train_path, encoding="utf-8") as f:
         lines = f.readlines()
 
-    print(f"\n📊 Dataset statistics:")
+    print(f"\n Dataset statistics:")
     print(f"   Total examples: {len(lines)}")
 
     tok_estimate = sum(len(line.split()) for line in lines)
-    print(f"   Estimated tokens: ~{tok_estimate:,} (characters)")
+    print(f"   Estimated tokens: ~{tok_estimate:,} (characters) ")
     print(f"\n🔜 Next step: python train_lora.py")
 
 

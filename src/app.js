@@ -3,9 +3,9 @@
  */
 require('dotenv').config();
 const express = require('express');
+const cookieParser = require('cookie-parser');
 const path = require('path');
 const morgan = require('morgan');
-const session = require('express-session');
 
 const { ensureReady } = require('./config/db');
 const authService = require('./services/authService');
@@ -29,29 +29,29 @@ function createApp() {
   }
   app.use(express.urlencoded({ extended: true }));
   app.use(express.json());
+  app.use(cookieParser());
 
-  // --- Session middleware ---
-  app.use(session({
-    name: 'spsh.sid',
-    secret: process.env.SESSION_SECRET || 'change-me-in-production',
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      httpOnly: true,
-      sameSite: 'lax', // Changed from 'strict' to allow cross-origin via Vite proxy
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    },
-  }));
-
-  // --- Current user middleware ---
+  // --- Current user middleware (JWT-based) ---
+  const { verifyAccessToken, extractToken } = require('./utils/jwtUtils');
   app.use(async (req, res, next) => {
-    if (req.session && req.session.userId) {
+    const token = extractToken(req);
+    if (token) {
       try {
-        const user = await authService.findById(req.session.userId);
-        res.locals.currentUser = user;
+        const decoded = verifyAccessToken(token);
+        const user = await authService.findById(decoded.id);
+        if (user && user.is_active) {
+          res.locals.currentUser = {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            student_id: user.student_id,
+            department: user.department,
+          };
+        } else {
+          res.locals.currentUser = null;
+        }
       } catch {
-        req.session.destroy(() => {});
         res.locals.currentUser = null;
       }
     } else {
@@ -96,6 +96,8 @@ function createApp() {
           students: '/api/students*',
           dashboard: '/api/dashboard/*',
           admin: '/api/admin/*',
+          teacher: '/api/teacher/*',
+          student: '/api/student/*',
         },
       });
     });

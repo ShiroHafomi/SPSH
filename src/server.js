@@ -5,7 +5,7 @@
 require('dotenv').config();
 const { createApp } = require('./app');
 const { ensureReady } = require('./config/db');
-const { ensureUsersTable } = require('./services/authService');
+const { ensureUsersTable, ensureAuditLogsTable } = require('./services/authService');
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -22,6 +22,14 @@ async function main() {
     console.log('   Users table: ready');
   } catch (err) {
     console.error('   Users table: FAILED —', err.message);
+  }
+
+  // Auto-create the audit_logs table
+  try {
+    await ensureAuditLogsTable();
+    console.log('   Audit logs table: ready');
+  } catch (err) {
+    console.error('   Audit logs table: FAILED —', err.message);
   }
 
   if (!dbReady) {
