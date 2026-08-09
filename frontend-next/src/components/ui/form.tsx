@@ -26,7 +26,7 @@ export const FormField = React.forwardRef<
       control={control}
       rules={rules}
       render={({ field }) => (
-        <Slot.Root ref={ref} {...props} {...field} />
+        <Slot {...props} {...field} />
       )}
     />
   );
@@ -53,7 +53,7 @@ FormLabel.displayName = 'FormLabel';
 export interface FormControlProps extends React.ComponentPropsWithoutRef<typeof Slot> {}
 
 export const FormControl = React.forwardRef<React.ElementRef<typeof Slot>, FormControlProps>(({ className, ...props }, ref) => (
-  <Slot.Root ref={ref} className={cn('', className)} {...props} />
+  <Slot ref={ref} className={cn('', className)} {...props} />
 ));
 FormControl.displayName = 'FormControl';
 

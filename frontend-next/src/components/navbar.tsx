@@ -1,9 +1,11 @@
 'use client';
 
+import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
-import { Moon, Sun, Menu, X, LayoutDashboard, Users, GraduationCap, User, BarChart2, AlertTriangle, Bot, Settings, LogOut } from 'lucide-react';
+import { useLocale } from '@/i18n/navigation';
+import { Moon, Sun, Menu, X, LayoutDashboard, Users, GraduationCap, User, BarChart2, AlertTriangle, Bot, Settings, LogOut, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
@@ -31,11 +33,18 @@ const navItems: NavItem[] = [
   { label: 'AI Advisor', href: '/student/advisor', icon: <Bot className="h-4 w-4" />, roles: ['student'] },
 ];
 
+const locales = [
+  { code: 'en', name: 'English', flag: '🇺🇸' },
+  { code: 'vi', name: 'Tiếng Việt', flag: '🇻🇳' },
+] as const;
+
 export function Navbar() {
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
+  const locale = useLocale();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [userMenuOpen, setUserMenuOpen] = React.useState(false);
+  const [langMenuOpen, setLangMenuOpen] = React.useState(false);
 
   const userRole = Cookies.get('user_role') || 'student';
   const userName = Cookies.get('user_name') || 'User';
@@ -49,14 +58,20 @@ export function Navbar() {
     Cookies.remove('user_role');
     Cookies.remove('user_name');
     Cookies.remove('user_email');
-    window.location.href = '/login';
+    window.location.href = `/${locale}/login`;
+  };
+
+  const switchLocale = (newLocale: string) => {
+    const pathWithoutLocale = pathname.replace(/^\/[a-z]{2}/, '') || '/dashboard';
+    window.location.href = `/${newLocale}${pathWithoutLocale}`;
+    setLangMenuOpen(false);
   };
 
   return (
     <header className="fixed top-4 left-4 right-4 z-50 glass-border rounded-xl bg-background/80 backdrop-blur-sm border border-border/50 shadow-lg transition-all duration-300">
       <nav className="flex h-16 items-center justify-between px-4" aria-label="Main navigation">
         <div className="flex items-center gap-8">
-          <Link href="/dashboard" className="flex items-center gap-2 font-semibold text-xl text-primary">
+          <Link href={`/${locale}/dashboard`} className="flex items-center gap-2 font-semibold text-xl text-primary">
             <GraduationCap className="h-6 w-6" />
             <span className="hidden sm:block">Student Performance</span>
           </Link>
@@ -65,10 +80,10 @@ export function Navbar() {
             {filteredNavItems.map((item) => (
               <Link
                 key={item.href}
-                href={item.href}
+                href={`/${locale}${item.href}`}
                 className={cn(
                   'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                  pathname === item.href
+                  pathname === `/${locale}${item.href}`
                     ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                 )}
@@ -81,6 +96,29 @@ export function Navbar() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Language Selector */}
+          <DropdownMenu open={langMenuOpen} onOpenChange={setLangMenuOpen}>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-9 w-9">
+                <Globe className="h-5 w-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-40" align="end" forceMount>
+              {locales.map((l) => (
+                <DropdownMenuItem
+                  key={l.code}
+                  onSelect={() => switchLocale(l.code)}
+                  className={cn('flex items-center gap-2', locale === l.code && 'bg-accent')}
+                >
+                  <span>{l.flag}</span>
+                  <span>{l.name}</span>
+                  {locale === l.code && <span className="ml-auto text-primary">✓</span>}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Theme Toggle */}
           <Button
             variant="ghost"
             size="icon"
@@ -131,11 +169,11 @@ export function Navbar() {
             {filteredNavItems.map((item) => (
               <Link
                 key={item.href}
-                href={item.href}
+                href={`/${locale}${item.href}`}
                 onClick={() => setMobileMenuOpen(false)}
                 className={cn(
                   'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-                  pathname === item.href
+                  pathname === `/${locale}${item.href}`
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                 )}

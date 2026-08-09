@@ -67,26 +67,29 @@ async function listStudents({ q = '', sort = 'id', dir = 'asc', page = 1, size =
         switch (col.semanticTag || key) {
           case 'attendance':
           case 'attendance_percent':
-            atRiskConditions.push(`\`${col.name}\` < 75`);
+            atRiskConditions.push(`\`${col.name}\` < ?`);
             atRiskParams.push(75);
             break;
           case 'study_hours':
           case 'study_hours_per_day':
-            atRiskConditions.push(`\`${col.name}\` < 2`);
+            atRiskConditions.push(`\`${col.name}\` < ?`);
             atRiskParams.push(2);
             break;
           case 'gpa':
           case 'previous_gpa':
-            atRiskConditions.push(`\`${col.name}\` < 2.0`);
+            atRiskConditions.push(`\`${col.name}\` < ?`);
             atRiskParams.push(2.0);
             break;
           default:
             if (/attendance/i.test(col.name)) {
-              atRiskConditions.push(`\`${col.name}\` < 75`);
+              atRiskConditions.push(`\`${col.name}\` < ?`);
+              atRiskParams.push(75);
             } else if (/study.*hour/i.test(col.name)) {
-              atRiskConditions.push(`\`${col.name}\` < 2`);
+              atRiskConditions.push(`\`${col.name}\` < ?`);
+              atRiskParams.push(2);
             } else if (/gpa/i.test(col.name)) {
-              atRiskConditions.push(`\`${col.name}\` < 2.0`);
+              atRiskConditions.push(`\`${col.name}\` < ?`);
+              atRiskParams.push(2.0);
             }
         }
       }
@@ -160,26 +163,29 @@ async function countStudents({ q = '', filters = {} } = {}) {
         switch (col.semanticTag || key) {
           case 'attendance':
           case 'attendance_percent':
-            atRiskConditions.push(`\`${col.name}\` < 75`);
+            atRiskConditions.push(`\`${col.name}\` < ?`);
             atRiskParams.push(75);
             break;
           case 'study_hours':
           case 'study_hours_per_day':
-            atRiskConditions.push(`\`${col.name}\` < 2`);
+            atRiskConditions.push(`\`${col.name}\` < ?`);
             atRiskParams.push(2);
             break;
           case 'gpa':
           case 'previous_gpa':
-            atRiskConditions.push(`\`${col.name}\` < 2.0`);
+            atRiskConditions.push(`\`${col.name}\` < ?`);
             atRiskParams.push(2.0);
             break;
           default:
             if (/attendance/i.test(col.name)) {
-              atRiskConditions.push(`\`${col.name}\` < 75`);
+              atRiskConditions.push(`\`${col.name}\` < ?`);
+              atRiskParams.push(75);
             } else if (/study.*hour/i.test(col.name)) {
-              atRiskConditions.push(`\`${col.name}\` < 2`);
+              atRiskConditions.push(`\`${col.name}\` < ?`);
+              atRiskParams.push(2);
             } else if (/gpa/i.test(col.name)) {
-              atRiskConditions.push(`\`${col.name}\` < 2.0`);
+              atRiskConditions.push(`\`${col.name}\` < ?`);
+              atRiskParams.push(2.0);
             }
         }
       }
