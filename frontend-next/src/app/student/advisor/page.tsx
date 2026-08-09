@@ -124,7 +124,7 @@ export default function StudentAdvisorPage() {
             </CardHeader>
             <CardContent>
               <p className="text-lg leading-relaxed">{advisor?.advice?.overview}</p>
-            </CardContent
+            </CardContent>
           </Card>
 
           {/* Strengths */}
@@ -145,7 +145,7 @@ export default function StudentAdvisorPage() {
                     </li>
                   ))}
                 </ul>
-              </CardContent
+              </CardContent>
             </Card>
           )}
 
@@ -167,7 +167,7 @@ export default function StudentAdvisorPage() {
                     </li>
                   ))}
                 </ul>
-              </CardContent
+              </CardContent>
             </Card>
           )}
 
@@ -193,7 +193,7 @@ export default function StudentAdvisorPage() {
                     </li>
                   ))}
                 </ol>
-              </CardContent
+              </CardContent>
             </Card>
           )}
 
@@ -208,7 +208,7 @@ export default function StudentAdvisorPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-lg italic leading-relaxed text-primary-foreground">{advisor.advice.encouragement}</p>
-              </CardContent
+              </CardContent>
             </Card>
           )}
 
@@ -225,7 +225,7 @@ export default function StudentAdvisorPage() {
                 <p className="text-muted-foreground">Use active recall and spaced repetition</p>
                 <p className="text-muted-foreground">Break study sessions into 25-min blocks (Pomodoro)</p>
                 <p className="text-muted-foreground">Teach concepts to someone else to verify understanding</p>
-              </CardContent
+              </CardContent>
             </Card>
 
             <Card>
@@ -239,7 +239,7 @@ export default function StudentAdvisorPage() {
                 <p className="text-muted-foreground">Aim for 7-9 hours of quality sleep</p>
                 <p className="text-muted-foreground">Avoid screens 1 hour before bed</p>
                 <p className="text-muted-foreground">Stay hydrated and exercise regularly</p>
-              </CardContent
+              </CardContent>
             </Card>
 
             <Card>
@@ -253,7 +253,7 @@ export default function StudentAdvisorPage() {
                 <p className="text-muted-foreground">Set specific, measurable weekly goals</p>
                 <p className="text-muted-foreground">Track progress in a study journal</p>
                 <p className="text-muted-foreground">Celebrate small wins along the way</p>
-              </CardContent
+              </CardContent>
             </Card>
           </div>
 

@@ -201,7 +201,8 @@ export default function TeacherAnalyticsPage() {
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-              </CardContent            </Card>
+              </CardContent>
+            </Card>
 
             {/* Study Hours vs Score Correlation */}
             <Card className="md:col-span-2 lg:col-span-3">
@@ -223,7 +224,7 @@ export default function TeacherAnalyticsPage() {
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-              </CardContent
+              </CardContent>
             </Card>
           </div>
         </div>

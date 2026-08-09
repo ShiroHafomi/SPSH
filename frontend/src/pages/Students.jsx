@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../api';
 import { useFlash } from '../components/FlashProvider';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -10,6 +10,8 @@ import { formatLabel, formatColumnLabel } from '../utils/formatLabel';
 export default function Students() {
   const { addFlash } = useFlash();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const atRisk = searchParams.get('at_risk') === '1';
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
   const [columns, setColumns] = useState([]);
@@ -35,6 +37,7 @@ export default function Students() {
         page,
         size: pageSize,
       });
+      if (atRisk) params.set('at_risk', 'true');
       const data = await api.get(`/students?${params}`);
       setRows(data.rows);
       // Add "Name Student" column at the beginning
@@ -61,7 +64,7 @@ export default function Students() {
     } finally {
       setLoading(false);
     }
-  }, [search, sort, dir, page, pageSize, addFlash]);
+  }, [search, sort, dir, page, pageSize, atRisk, addFlash]);
 
   useEffect(() => {
     fetchStudents();
@@ -215,6 +218,24 @@ export default function Students() {
           </Link>
         </div>
       </div>
+
+      {/* At-Risk Filter Banner */}
+      {atRisk && (
+        <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border border-danger-200 dark:border-danger-900 bg-danger-50/70 dark:bg-danger-950/20">
+          <div className="flex items-center gap-2 text-sm font-medium text-danger-700 dark:text-danger-300">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+            Showing students at risk — low attendance, study hours, or GPA
+          </div>
+          <Link
+            to="/students"
+            className="text-sm font-semibold text-danger-600 dark:text-danger-400 hover:underline flex-shrink-0"
+          >
+            Clear filter
+          </Link>
+        </div>
+      )}
 
       {/* Table */}
       <div className="card overflow-hidden">

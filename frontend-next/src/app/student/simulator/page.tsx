@@ -306,7 +306,8 @@ export default function StudentSimulatorPage() {
                     {error}
                   </div>
                 )}
-              </CardContent            </Card>
+              </CardContent>
+            </Card>
 
             {/* Current vs Simulated Comparison */}
             <Card>
@@ -377,7 +378,7 @@ export default function StudentSimulatorPage() {
                     </div>
                   )}
                 </div>
-              </CardContent
+              </CardContent>
             </Card>
           </div>
 
@@ -418,7 +419,7 @@ export default function StudentSimulatorPage() {
                     </div>
                   ))}
                 </div>
-              </CardContent
+              </CardContent>
             </Card>
           )}
 
@@ -454,7 +455,7 @@ export default function StudentSimulatorPage() {
                       </Badge>
                     ))}
                 </div>
-              </CardContent
+              </CardContent>
             </Card>
           )}
         </div>

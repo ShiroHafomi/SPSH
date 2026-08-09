@@ -246,7 +246,8 @@ export default function StudentProfilePage() {
                       <Progress value={Math.min(((student?.previous_gpa || 0) / 4) * 100, 100)} className="h-3" />
                     </div>
                   </div>
-                </CardContent              </Card>
+                </CardContent>
+              </Card>
 
               {/* Tabs for Details */}
               <Tabs defaultValue="academic" className="space-y-4">
@@ -428,7 +429,8 @@ export default function StudentProfilePage() {
                     <p className="text-2xl font-bold text-primary">{student?.final_score?.toFixed(1) || 'N/A'}</p>
                     <p className="text-muted-foreground">out of 100</p>
                   </div>
-                </CardContent              </Card>
+                </CardContent>
+              </Card>
 
               {/* Percentile Comparison Bar Chart */}
               <Card>
@@ -457,7 +459,7 @@ export default function StudentProfilePage() {
                     </ResponsiveContainer>
                   </div>
                   <p className="text-center text-sm text-muted-foreground mt-2">Higher percentile = better relative performance</p>
-                </CardContent
+                </CardContent>
               </Card>
 
               {/* Habits Radar-like Bar Chart */}
@@ -486,7 +488,7 @@ export default function StudentProfilePage() {
                     </ResponsiveContainer>
                   </div>
                   <p className="text-center text-sm text-muted-foreground mt-2">Normalized habit scores (100% = optimal)</p>
-                </CardContent
+                </CardContent>
               </Card>
             </div>
           </div>

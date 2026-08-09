@@ -206,11 +206,12 @@ async function apiListStudents(req, res) {
   const dir = req.query.dir || 'asc';
   const page = parseInt(req.query.page, 10) || 1;
   const size = parseInt(req.query.size, 10) || 20;
+  const filters = { at_risk: req.query.at_risk || 'all' };
 
   try {
     const [rows, total] = await Promise.all([
-      studentService.listStudents({ q, sort, dir, page, size }),
-      studentService.countStudents({ q }),
+      studentService.listStudents({ q, sort, dir, page, size, filters }),
+      studentService.countStudents({ q, filters }),
     ]);
 
     const totalPages = Math.ceil(total / size);
@@ -421,7 +422,7 @@ async function apiPredict(req, res) {
 async function apiAtRiskStudents(req, res) {
   const thresholds = {
     attendance: parseInt(req.query.attendance, 10) || 75,
-    studyHours: parseFloat(req.query.study) || 2,
+    studyHours: parseFloat(req.query.study_hours ?? req.query.study) || 2,
     gpa: parseFloat(req.query.gpa) || 2.5,
   };
 

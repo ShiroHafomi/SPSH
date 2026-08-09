@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AlertTriangle, GraduationCap, TrendingUp, Clock, Brain, Download, Filter, Search, ArrowRight } from 'lucide-react';
+import { AlertTriangle, GraduationCap, TrendingUp, Clock, Brain, Download, Filter, Search, ArrowRight, CheckCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import Cookies from 'js-cookie';
 
 interface AtRiskStudent {
@@ -193,7 +194,7 @@ export default function TeacherAtRiskPage() {
                   <p className="text-xs text-muted-foreground">Flag if sleep hours below this</p>
                 </div>
               </div>
-            </CardContent
+            </CardContent>
           </Card>
 
           {/* Summary Cards */}
@@ -279,7 +280,7 @@ export default function TeacherAtRiskPage() {
                   </Select>
                 </div>
               </div>
-            </CardContent
+            </CardContent>
           </Card>
 
           {/* Students Table */}
@@ -337,7 +338,7 @@ export default function TeacherAtRiskPage() {
                             <div className="flex flex-wrap gap-1">
                               {student.risk_factors.map((factor, i) => (
                                 <Badge key={i} variant="outline" className="text-xs">
-                                  {factor.field.replace('_', ' ')}: {factor.value} < {factor.threshold}
+                                  {factor.field.replace('_', ' ')}: {factor.value} {'<'} {factor.threshold}
                                 </Badge>
                               ))}
                             </div>
@@ -358,7 +359,7 @@ export default function TeacherAtRiskPage() {
                   </Table>
                 </>
               )}
-            </CardContent
+            </CardContent>
           </Card>
         </div>
       </div>

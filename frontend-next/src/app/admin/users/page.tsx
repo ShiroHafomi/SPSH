@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Users, Plus, Edit, Trash2, X, Check, UserPlus, Shield, GraduationCap, Loader2 } from 'lucide-react';
+import { Users, Plus, Edit, Trash2, X, Check, UserPlus, Shield, GraduationCap, Loader2, Activity } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Form, FormField, FormItem, FormLabel, FormControl, FormDescription, FormMessage, useForm } from 'react-hook-form';
+import { Form, FormField, FormItem, FormLabel, FormControl, FormDescription, FormMessage } from '@/components/ui/form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Label } from '@/components/ui/label';
@@ -190,18 +191,16 @@ export default function AdminUsersPage() {
             </div>
             <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
               <DialogTrigger asChild>
-                <Form {...form}>
-                  <Button type="button">
-                    <UserPlus className="mr-2 h-4 w-4" />
-                    Create User
-                  </Button>
-                </Form>
+                <Button>
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Create User
+                </Button>
               </DialogTrigger>
               <DialogContent className="max-w-lg">
                 <DialogHeader>
                   <DialogTitle>Create New User</DialogTitle>
                 </DialogHeader>
-                <Form {...form} onSubmit={form.handleSubmit(onSubmit)}>
+                <Form onSubmit={form.handleSubmit(onSubmit)}>
                   <div className="grid gap-4 py-4">
                     <FormField
                       control={form.control}

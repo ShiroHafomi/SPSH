@@ -214,7 +214,7 @@ export default function AdminAnalyticsPage() {
             <p className="text-muted-foreground mt-1">System-wide overview and management</p>
           </div>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <Tabs value={activeTab} onValueChange={(value: string) => setActiveTab(value as 'overview' | 'users' | 'audit')} className="w-full">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="overview">
                 <BarChart2 className="mr-2 h-4 w-4" />
@@ -386,7 +386,8 @@ export default function AdminAnalyticsPage() {
                       ))}
                     </TableBody>
                   </Table>
-                </CardContent              </Card>
+                </CardContent>
+              </Card>
             </TabsContent>
 
             {/* Users Tab */}

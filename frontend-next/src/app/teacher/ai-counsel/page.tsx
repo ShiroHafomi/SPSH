@@ -77,7 +77,7 @@ export default function TeacherAiCounselPage() {
   };
 
   const handleGenerateCounsel = async (studentId: number, prompt?: string) => {
-    setGenerating(prev => new Set(prev).add(studentId));
+    setGenerating((prev) => new Set(prev).add(studentId));
     try {
       const token = Cookies.get('access_token');
       const res = await fetch('http://localhost:3001/api/teacher/ai-counsel', {
@@ -95,7 +95,7 @@ export default function TeacherAiCounselPage() {
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to generate AI counsel');
     } finally {
-      setGenerating(prev => {
+      setGenerating((prev) => {
         const next = new Set(prev);
         next.delete(studentId);
         return next;
@@ -157,7 +157,7 @@ export default function TeacherAiCounselPage() {
                   </p>
                 </div>
               </div>
-            </CardContent
+            </CardContent>
           </Card>
 
           {/* Students Table */}
@@ -250,7 +250,7 @@ export default function TeacherAiCounselPage() {
                   </Table>
                 </>
               )}
-            </CardContent
+            </CardContent>
           </Card>
 
           {/* Last Result Display */}
@@ -289,7 +289,7 @@ export default function TeacherAiCounselPage() {
                       </Badge>
                     ))}
                 </div>
-              </CardContent
+              </CardContent>
             </Card>
           )}
 

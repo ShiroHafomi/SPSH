@@ -9,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Form, FormField, FormItem, FormLabel, FormControl, FormDescription, FormMessage, useForm } from 'react-hook-form';
+import { Form, FormField, FormItem, FormLabel, FormControl, FormDescription, FormMessage } from '@/components/ui/form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Label } from '@/components/ui/label';
@@ -159,18 +160,18 @@ export default function AdminStudentsPage() {
     setSelectedStudent(student);
     form.reset({
       student_id: student.student_id,
-      gender: student.gender,
+      gender: student.gender as 'Male' | 'Female',
       age: student.age,
       study_hours_per_day: student.study_hours_per_day,
       attendance_percent: student.attendance_percent,
       sleep_hours: student.sleep_hours,
       previous_gpa: student.previous_gpa,
-      parental_education: student.parental_education,
-      internet_access: student.internet_access,
-      extracurricular: student.extracurricular,
-      part_time_job: student.part_time_job,
+      parental_education: student.parental_education as 'High School' | 'Bachelor' | 'Master' | 'PhD',
+      internet_access: student.internet_access as 'Yes' | 'No',
+      extracurricular: student.extracurricular as 'Yes' | 'No',
+      part_time_job: student.part_time_job as 'Yes' | 'No',
       final_score: student.final_score,
-      grade: student.grade,
+      grade: student.grade as 'A' | 'B' | 'C' | 'D' | 'F',
       notes: student.notes || '',
     });
     setEditDialogOpen(true);
@@ -374,7 +375,7 @@ export default function AdminStudentsPage() {
                   </Select>
                 </div>
                 <div className="flex gap-2">
-                  <Select value={pageSize} onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}>
+                  <Select value={pageSize.toString()} onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}>
                     <SelectTrigger className="w-[120px]">
                       <SelectValue />
                     </SelectTrigger>
@@ -438,9 +439,8 @@ export default function AdminStudentsPage() {
                                 ) : col.name === 'final_score' ? (
                                   <span className="font-medium">{student.final_score.toFixed(1)}</span>
                                 ) : (
-                                  // @ts-ignore
-                                  student[col.name] !== null && student[col.name] !== undefined
-                                    ? String(student[col.name])
+                                  student[col.name as keyof Student] !== null && student[col.name as keyof Student] !== undefined
+                                    ? String(student[col.name as keyof Student])
                                     : '-'
                                 )}
                               </TableCell>
@@ -510,8 +510,7 @@ export default function AdminStudentsPage() {
               <DialogHeader>
                 <DialogTitle>Edit Student Record</DialogTitle>
               </DialogHeader>
-              <Form {...form} onSubmit={form.handleSubmit(onSubmit)}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 p-4">
+              <Form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 p-4">
                   <div className="grid gap-4 md:grid-cols-2">
                     {columns.map(col => (
                       <FormField
@@ -593,7 +592,6 @@ export default function AdminStudentsPage() {
                       {submitting ? 'Saving...' : 'Save Changes'}
                     </Button>
                   </DialogFooter>
-                </form>
               </Form>
             </DialogContent>
           </Dialog>

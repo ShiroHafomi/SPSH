@@ -335,7 +335,8 @@ export default function TeacherStudentsPage() {
                           </TableCell>
                         </TableRow>
                       ))}
-                    </TableBody                  </Table>
+                    </TableBody>
+                  </Table>
                   <div className="flex items-center justify-between p-4 border-t">
                     <div className="flex items-center gap-2">
                       <span className="text-sm text-muted-foreground">
