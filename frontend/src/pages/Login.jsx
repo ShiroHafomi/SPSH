@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth, homeForRole } from '../hooks/useAuth';
 import { useFlash } from '../components/FlashProvider';
 import { useLanguage } from '../hooks/useLanguage';
 
@@ -21,7 +21,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  const from = location.state?.from?.pathname || '/dashboard';
+  const from = location.state?.from?.pathname || null;
 
   const {
     register,
@@ -35,9 +35,11 @@ export default function Login() {
   const onSubmit = async (data) => {
     setLoading(true);
     try {
-      await login(data.email, data.password);
+      const user = await login(data.email, data.password);
       addFlash(t('login.welcome'), 'success');
-      navigate(from, { replace: true });
+      // Redirect based on role
+      const targetPath = from || homeForRole(user.role);
+      navigate(targetPath, { replace: true });
     } catch (err) {
       addFlash(err.message || t('login.loginFailed'), 'error');
     } finally {
@@ -203,10 +205,7 @@ export default function Login() {
             </form>
 
             <p className="mt-6 text-center text-sm text-primary-400 dark:text-gray-500">
-              {t('login.noAccount')}{' '}
-              <Link to="/register" className="text-primary-600 dark:text-primary-400 font-semibold hover:text-primary-700 dark:hover:text-primary-300 transition-colors">
-                {t('login.createOne')}
-              </Link>
+              {t('login.contactAdmin')}
             </p>
           </div>
         </div>

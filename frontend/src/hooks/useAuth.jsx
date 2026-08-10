@@ -4,6 +4,14 @@ import { api, setNavigate } from '../api';
 
 const AuthContext = createContext(null);
 
+// Default landing route for a given role. Used by ProtectedRoute (role gate),
+// Login redirect, and Navbar. Pure utility — safe to import anywhere.
+export function homeForRole(role) {
+  if (role === 'student') return '/student';
+  if (role === 'teacher') return '/teacher';
+  return '/dashboard'; // admin (and any unknown role)
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -51,7 +59,9 @@ export function AuthProvider({ children }) {
     register,
     logout,
     refreshUser,
+    homeForRole,
     isAdmin: user?.role === 'admin',
+    isTeacher: user?.role === 'teacher',
   };
 
   return (

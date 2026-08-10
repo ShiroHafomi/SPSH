@@ -154,29 +154,55 @@ async function optionalAuth(req, res, next) {
 }
 
 /**
- * Middleware to ensure user can only access their own student data.
- * For student role: req.user.studentId must match the requested student.
- * For admin/teacher: allowed to access any student.
+ * Require admin role specifically.
+ */
+function requireAdmin(req, res, next) {
+  return requireRole('admin')(req, res, next);
+}
+
+/**
+ * Require teacher or admin role.
+ */
+function requireTeacherOrAdmin(req, res, next) {
+  return requireRole('admin', 'teacher')(req, res, next);
+}
+
+/**
+ * Require student role specifically.
+ */
+function requireStudent(req, res, next) {
+  return requireRole('student')(req, res, next);
+}
+
+/**
+ * Require user to be authenticated (any role).
+ */
+function requireAnyRole(req, res, next) {
+  return requireAuth(req, res, next);
+}
+
+/**
+ * Require student access - students can only access their own data,
+ * teachers and admins can access any student's data.
  */
 function requireStudentAccess(req, res, next) {
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required', code: 'UNAUTHENTICATED' });
   }
 
-  // Admin and teacher can access all students
-  if (['admin', 'teacher'].includes(req.user.role)) {
+  // Admin and teacher can access any student
+  if (req.user.role === 'admin' || req.user.role === 'teacher') {
     return next();
   }
 
   // Student can only access their own data
-  const requestedStudentId = parseInt(req.params.id || req.params.studentId || req.body.student_id, 10);
-
-  if (isNaN(requestedStudentId)) {
-    return res.status(400).json({ error: 'Invalid student ID', code: 'INVALID_STUDENT_ID' });
-  }
-
-  if (req.user.studentId !== requestedStudentId) {
-    return res.status(403).json({ error: 'Access denied to this student record', code: 'FORBIDDEN' });
+  // Check if the requested studentId matches their own
+  const requestedStudentId = parseInt(req.params.id || req.params.studentId || req.body.studentId, 10);
+  if (req.user.studentId && requestedStudentId && req.user.studentId !== requestedStudentId) {
+    return res.status(403).json({
+      error: 'Students can only access their own data',
+      code: 'FORBIDDEN',
+    });
   }
 
   next();
@@ -187,4 +213,8 @@ module.exports = {
   requireRole,
   optionalAuth,
   requireStudentAccess,
+  requireAdmin,
+  requireTeacherOrAdmin,
+  requireStudent,
+  requireAnyRole,
 };

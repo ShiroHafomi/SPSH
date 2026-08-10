@@ -7,12 +7,16 @@ import { FlashProvider, useFlash } from './components/FlashProvider';
 import { FlashContainer } from './components/FlashMessage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AdminLayout } from './components/AdminLayout';
+import { TeacherLayout } from './components/TeacherLayout';
+import { StudentLayout } from './components/StudentLayout';
 import Login from './pages/Login';
-import Register from './pages/Register';
+// import Register from './pages/Register'; // Disabled - Admin only creates users
 import Dashboard from './pages/Dashboard';
 import Students from './pages/Students';
 import StudentForm from './pages/StudentForm';
 import Predictor from './pages/Predictor';
+import StudentDashboard from './pages/StudentDashboard';
+import TeacherDashboard from './pages/TeacherDashboard';
 import AdminUsers from './pages/AdminUsers';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminStudents from './pages/AdminStudents';
@@ -30,75 +34,93 @@ function App() {
       <ThemeProvider>
         <LanguageProvider>
           <FlashProvider>
-          <div className="min-h-screen bg-primary-50 dark:bg-gray-950 text-primary-950 dark:text-gray-100 transition-colors">
-            <Navbar />
-            <main id="app-content" className="pt-24 pb-8">
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <FlashArea />
-                <Routes>
-                  <Route path="/login" element={<Login />} />
-                  <Route path="/register" element={<Register />} />
-                  <Route
-                    path="/dashboard"
-                    element={
+            <div className="min-h-screen bg-primary-50 dark:bg-gray-950 text-primary-950 dark:text-gray-100 transition-colors">
+              <Navbar />
+              <main id="app-content" className="pt-24 pb-8">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                  <FlashArea />
+                  <Routes>
+                    {/* Public routes */}
+                    <Route path="/login" element={<Login />} />
+                    {/* <Route path="/register" element={<Register />} /> */} {/* Disabled - Admin only creates users */}
+
+                    {/* Admin routes - Admin only */}
+                    <Route element={
+                      <ProtectedRoute roles={['admin']}>
+                        <AdminLayout />
+                      </ProtectedRoute>
+                    }>
+                      <Route path="/admin" element={<AdminDashboard />} />
+                      <Route path="/admin/students" element={<AdminStudents />} />
+                      <Route path="/admin/at-risk" element={<AdminAtRisk />} />
+                      <Route path="/admin/ai-tools" element={<AdminAITools />} />
+                      <Route path="/admin/users" element={<AdminUsers />} />
+                    </Route>
+
+                    {/* Teacher routes - Teacher or Admin */}
+                    <Route element={
+                      <ProtectedRoute roles={['teacher', 'admin']}>
+                        <TeacherLayout />
+                      </ProtectedRoute>
+                    }>
+                      <Route path="/teacher" element={<TeacherDashboard />} />
+                      <Route path="/teacher/students" element={<Students />} />
+                      <Route path="/teacher/students/new" element={<StudentForm />} />
+                      <Route path="/teacher/students/:id/edit" element={<StudentForm />} />
+                      <Route path="/teacher/at-risk" element={<AdminAtRisk />} />
+                    </Route>
+
+                    {/* Student routes - Student only */}
+                    <Route element={
+                      <ProtectedRoute roles={['student']}>
+                        <StudentLayout />
+                      </ProtectedRoute>
+                    }>
+                      <Route path="/student" element={<StudentDashboard />} />
+                    </Route>
+
+                    {/* Legacy/Shared routes - Any authenticated user */}
+                    <Route element={
                       <ProtectedRoute>
                         <Dashboard />
                       </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/students"
-                    element={
-                      <ProtectedRoute>
+                    }>
+                      <Route path="/dashboard" element={<Dashboard />} />
+                    </Route>
+
+                    <Route element={
+                      <ProtectedRoute roles={['teacher', 'admin']}>
                         <Students />
                       </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/students/new"
-                    element={
-                      <ProtectedRoute>
+                    }>
+                      <Route path="/students" element={<Students />} />
+                    </Route>
+
+                    <Route element={
+                      <ProtectedRoute roles={['teacher', 'admin']}>
                         <StudentForm />
                       </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/students/:id/edit"
-                    element={
-                      <ProtectedRoute>
-                        <StudentForm />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/predictor"
-                    element={
+                    }>
+                      <Route path="/students/new" element={<StudentForm />} />
+                      <Route path="/students/:id/edit" element={<StudentForm />} />
+                    </Route>
+
+                    <Route element={
                       <ProtectedRoute>
                         <Predictor />
                       </ProtectedRoute>
-                    }
-                  />
+                    }>
+                      <Route path="/predictor" element={<Predictor />} />
+                    </Route>
 
-                  {/* Admin Routes with AdminLayout */}
-                  <Route element={
-                    <ProtectedRoute adminOnly>
-                      <AdminLayout />
-                    </ProtectedRoute>
-                  }>
-                    <Route path="/admin" element={<AdminDashboard />} />
-                    <Route path="/admin/students" element={<AdminStudents />} />
-                    <Route path="/admin/at-risk" element={<AdminAtRisk />} />
-                    <Route path="/admin/ai-tools" element={<AdminAITools />} />
-                    <Route path="/admin/users" element={<AdminUsers />} />
-                  </Route>
-
-                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                  <Route path="*" element={<Navigate to="/dashboard" replace />} />
-                </Routes>
-              </div>
-            </main>
-          </div>
-        </FlashProvider>
+                    {/* Default redirects based on role */}
+                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                    <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                  </Routes>
+                </div>
+              </main>
+            </div>
+          </FlashProvider>
         </LanguageProvider>
       </ThemeProvider>
     </AuthProvider>

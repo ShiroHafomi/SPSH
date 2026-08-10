@@ -61,6 +61,13 @@ const vi = {
     switchToLight: 'Chuyển sang chế độ sáng',
     switchToDark: 'Chuyển sang chế độ tối',
     switchLang: 'Chuyển sang {lang}',
+    teacherDashboard: 'Bảng điều khiển Giáo viên',
+    myPortal: 'Cổng thông tin cá nhân',
+    role: {
+      admin: 'Quản trị',
+      teacher: 'Giáo viên',
+      student: 'Sinh viên',
+    },
   },
 
   login: {
@@ -84,6 +91,7 @@ const vi = {
     showPassword: 'Hiện mật khẩu',
     loginFailed: 'Đăng nhập thất bại. Vui lòng thử lại.',
     welcome: 'Chào mừng trở lại!',
+    contactAdmin: 'Liên hệ quản trị viên để tạo tài khoản.',
   },
 
   register: {
@@ -212,7 +220,14 @@ const vi = {
     gradeProbDist: 'Phân phối Xác suất Xếp loại',
     recommendationsTitle: 'Khuyến Nghị Học Tập Cá Nhân',
     emptyTitle: 'Điều chỉnh hồ sơ và nhấn Dự đoán',
-    emptyDesc: 'Nhận dự đoán bằng AI và lời khuyên cá nhân hóa',
+    emptyDesc: 'Nhận dự đoán bằng AI và lời khuyên cá nhân化',
+  },
+
+  student: {
+    myPortal: 'Cổng thông tin cá nhân',
+    overview: 'Tổng quan',
+    whatIfSimulator: 'Mô phỏng What-If',
+    aiAdvisor: 'Cố vấn AI',
   },
 
   admin: {

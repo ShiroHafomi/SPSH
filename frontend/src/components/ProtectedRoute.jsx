@@ -1,7 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth, homeForRole } from '../hooks/useAuth';
 
-export function ProtectedRoute({ children, adminOnly = false }) {
+export function ProtectedRoute({ children, adminOnly = false, roles }) {
   const { user, loading } = useAuth();
   const location = useLocation();
 
@@ -17,8 +17,12 @@ export function ProtectedRoute({ children, adminOnly = false }) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (adminOnly && user.role !== 'admin') {
-    return <Navigate to="/dashboard" replace />;
+  // Role gate: when an explicit list of allowed roles is given, bounce
+  // disallowed users to their own role's home instead of a shared dashboard.
+  // `adminOnly` is preserved as a shorthand for roles={['admin']}.
+  const allowedRoles = roles || (adminOnly ? ['admin'] : null);
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    return <Navigate to={homeForRole(user.role)} replace />;
   }
 
   return children;

@@ -27,4 +27,26 @@ function requireApiAdmin(req, res, next) {
   next();
 }
 
-module.exports = { requireApiAuth, requireApiAdmin };
+/**
+ * Require teacher or admin role for API access.
+ */
+function requireApiTeacherOrAdmin(req, res, next) {
+  const user = res.locals.currentUser;
+  if (!user || !['admin', 'teacher'].includes(user.role)) {
+    return res.status(403).json({ error: 'Forbidden. Teacher or admin access required.' });
+  }
+  next();
+}
+
+/**
+ * Require student role for API access.
+ */
+function requireApiStudent(req, res, next) {
+  const user = res.locals.currentUser;
+  if (!user || user.role !== 'student') {
+    return res.status(403).json({ error: 'Forbidden. Student access required.' });
+  }
+  next();
+}
+
+module.exports = { requireApiAuth, requireApiAdmin, requireApiTeacherOrAdmin, requireApiStudent };

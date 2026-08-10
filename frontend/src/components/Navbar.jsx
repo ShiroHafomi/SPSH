@@ -1,4 +1,4 @@
-import { useAuth } from '../hooks/useAuth';
+import { useAuth, homeForRole } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
 import { useLanguage, LANG_FLAGS } from '../hooks/useLanguage';
 import { Link, useLocation } from 'react-router-dom';
@@ -12,15 +12,39 @@ export function Navbar() {
 
   if (!user) return null;
 
-  const navLinks = [
-    { path: '/dashboard', label: t('nav.dashboard') },
-    { path: '/students', label: t('nav.students') },
-    { path: '/predictor', label: t('nav.aiCounselor') },
-  ];
+  // Role-based navigation links
+  const getNavLinks = () => {
+    switch (user.role) {
+      case 'admin':
+        return [
+          { path: '/admin', label: t('nav.adminDashboard') },
+          { path: '/teacher', label: t('nav.teacherDashboard') },
+          { path: '/students', label: t('nav.students') },
+          { path: '/predictor', label: t('nav.aiCounselor') },
+        ];
+      case 'teacher':
+        return [
+          { path: '/teacher', label: t('nav.teacherDashboard') },
+          { path: '/students', label: t('nav.students') },
+          { path: '/predictor', label: t('nav.aiCounselor') },
+        ];
+      case 'student':
+        return [
+          { path: '/student', label: t('nav.myPortal') },
+        ];
+      default:
+        return [];
+    }
+  };
 
-  const adminLinks = [
-    { path: '/admin', label: t('nav.adminDashboard') },
-  ];
+  const navLinks = getNavLinks();
+
+  // Determine role badge color
+  const roleBadgeColors = {
+    admin: 'bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-400',
+    teacher: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+    student: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  };
 
   return (
     <nav className="fixed top-4 left-4 right-4 z-50 max-w-7xl mx-auto bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border border-primary-100 dark:border-gray-800 rounded-3xl shadow-clay-sm">
@@ -41,20 +65,7 @@ export function Navbar() {
                 key={path}
                 to={path}
                 className={`px-3.5 py-2 text-sm font-semibold rounded-xl transition-all duration-200 ${
-                  location.pathname === path
-                    ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300'
-                    : 'text-primary-600 dark:text-gray-400 hover:bg-primary-50 dark:hover:bg-gray-800 hover:text-primary-700 dark:hover:text-gray-200'
-                }`}
-              >
-                {label}
-              </Link>
-            ))}
-            {isAdmin && adminLinks.map(({ path, label }) => (
-              <Link
-                key={path}
-                to={path}
-                className={`px-3.5 py-2 text-sm font-semibold rounded-xl transition-all duration-200 ${
-                  location.pathname === path
+                  location.pathname === path || location.pathname.startsWith(path + '/')
                     ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300'
                     : 'text-primary-600 dark:text-gray-400 hover:bg-primary-50 dark:hover:bg-gray-800 hover:text-primary-700 dark:hover:text-gray-200'
                 }`}
@@ -65,21 +76,23 @@ export function Navbar() {
           </div>
 
           <div className="flex items-center gap-2.5">
-            <span className="hidden sm:inline-flex items-center gap-1.5 text-sm text-primary-600 dark:text-gray-400">
-              <span className="w-2 h-2 rounded-full bg-success-500" />
+            <span className="hidden sm:inline-flex items-center gap-1.5 text-sm text-primary-600 dark:text-γ-400">
+              <span className={`w-2 h-2 rounded-full ${user.role === 'admin' ? 'bg-danger-500' : user.role === 'teacher' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
               {user.name}
-              {isAdmin && <span className="badge badge-warning text-[10px]">{t('nav.admin')}</span>}
+              <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full ${roleBadgeColors[user.role] || 'bg-gray-100 text-gray-700'}`}>
+                {t(`nav.role.${user.role}`)}
+              </span>
             </span>
 
-            {isAdmin && (
+            {(user.role === 'admin' || user.role === 'teacher') && (
               <Link
-                to="/admin/users"
+                to={user.role === 'admin' ? '/admin/users' : '/teacher/students'}
                 className="hidden sm:inline-flex btn-ghost text-xs"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
                 </svg>
-                {t('nav.users')}
+                {user.role === 'admin' ? t('nav.users') : t('nav.students')}
               </Link>
             )}
 

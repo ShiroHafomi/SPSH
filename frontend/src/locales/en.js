@@ -46,6 +46,13 @@ const en = {
     switchToLight: 'Switch to light mode',
     switchToDark: 'Switch to dark mode',
     switchLang: 'Switch to {lang}',
+    teacherDashboard: 'Teacher Dashboard',
+    myPortal: 'My Portal',
+    role: {
+      admin: 'Admin',
+      teacher: 'Teacher',
+      student: 'Student',
+    },
   },
 
   admin: {
@@ -193,6 +200,7 @@ const en = {
     showPassword: 'Show password',
     loginFailed: 'Login failed. Please try again.',
     welcome: 'Welcome back!',
+    contactAdmin: 'Contact your administrator to create an account.',
   },
 
   register: {
@@ -327,6 +335,13 @@ const en = {
     human: 'Human review recommended',
     ai_risk: 'AI-generated risk assessment',
     data_point: 'Data-driven insight',
+  },
+
+  student: {
+    myPortal: 'My Portal',
+    overview: 'Overview',
+    whatIfSimulator: 'What-If Simulator',
+    aiAdvisor: 'AI Advisor',
   },
 };
 

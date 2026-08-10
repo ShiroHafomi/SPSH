@@ -148,11 +148,11 @@ async function apiStudentAdvisor(req, res) {
       return res.status(404).json({ error: 'Student record not found.' });
     }
 
-    // Get current prediction
-    const prediction = await runWhatIfSimulation(student, {});
+    // Get current prediction (returns { current, simulated })
+    const { current } = await runWhatIfSimulation(student, {});
 
-    // Generate personalized advice
-    const advice = await generateStudentAdvice(student, prediction);
+    // Generate personalized advice using current prediction
+    const advice = await generateStudentAdvice(student, current);
 
     // Log audit event
     await logAuditEvent({
@@ -168,8 +168,8 @@ async function apiStudentAdvisor(req, res) {
     res.json({
       studentId: student.student_id,
       name: student.name,
-      currentGrade: prediction.grade,
-      currentScore: prediction.final_score,
+      currentGrade: current.grade,
+      currentScore: current.final_score,
       advice,
     });
   } catch (err) {

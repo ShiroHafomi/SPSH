@@ -8,6 +8,13 @@ const { pool } = require('../config/db');
 const SALT_ROUNDS = 12;
 const VALID_ROLES = ['admin', 'teacher', 'student'];
 
+// Role hierarchy for admin checks (teacher > student, admin > all)
+const ROLE_HIERARCHY = {
+  admin: 3,
+  teacher: 2,
+  student: 1,
+};
+
 /**
  * Auto-create the users table on app boot.
  * Extended schema with 3 roles, student linkage, and audit fields.
@@ -59,13 +66,13 @@ async function ensureAuditLogsTable() {
 
 /**
  * Register a new user.
- * First user gets admin role; subsequent users get 'user'.
+ * First user gets admin role; subsequent users get 'student' (default).
  * Returns the created user object (without password_hash).
  */
 async function registerUser({ email, password, name }) {
-  // Determine role: first user is admin
+  // Determine role: first user is admin, rest default to student
   const [{ count }] = await pool.query('SELECT COUNT(*) AS count FROM users');
-  const role = count === 0 ? 'admin' : 'user';
+  const role = count === 0 ? 'admin' : 'student';
 
   const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
 
@@ -234,6 +241,39 @@ async function getUserByEmail(email) {
 }
 
 /**
+ * Check if a user has admin privileges.
+ * @param {Object} user - User object with role property
+ * @returns {boolean} True if user is admin
+ */
+function isAdmin(user) {
+  return user && user.role === 'admin';
+}
+
+/**
+ * Check if a user has teacher or admin privileges.
+ * @param {Object} user - User object with role property
+ * @returns {boolean} True if user is teacher or admin
+ */
+function isTeacherOrAdmin(user) {
+  return user && (user.role === 'teacher' || user.role === 'admin');
+}
+
+/**
+ * Check if a user can access student data.
+ * @param {Object} user - User object with role and studentId properties
+ * @param {number} studentId - Target student ID
+ * @returns {boolean} True if user can access this student's data
+ */
+function canAccessStudent(user, studentId) {
+  if (!user) return false;
+  // Admin and teacher can access all students
+  if (['admin', 'teacher'].includes(user.role)) return true;
+  // Student can only access their own data
+  if (user.role === 'student' && user.studentId === studentId) return true;
+  return false;
+}
+
+/**
  * Update last login timestamp.
  */
 async function updateLastLogin(id) {
@@ -341,4 +381,7 @@ module.exports = {
   isUserActive,
   logAuditEvent,
   getAuditLogs,
+  isAdmin,
+  isTeacherOrAdmin,
+  canAccessStudent,
 };

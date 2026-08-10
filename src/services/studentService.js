@@ -51,7 +51,7 @@ async function listStudents({ q = '', sort = 'id', dir = 'asc', page = 1, size =
   }
   if (filters.at_risk && filters.at_risk !== 'all') {
     // At-risk filter uses the same logic as getAtRiskStudents
-    const { loadSchemaMap, getSchemaMap } = require('./schemaMap');
+    const { loadSchemaMap, getSchemaMap, getColumnByName } = require('../utils/schemaMap');
     loadSchemaMap();
     const map = getSchemaMap();
     const atRiskConditions = [];
@@ -62,9 +62,9 @@ async function listStudents({ q = '', sort = 'id', dir = 'asc', page = 1, size =
       ['study_hours_per_day', 'study_hours'],
       ['previous_gpa', 'gpa'],
     ]) {
-      const col = map[key];
+      const col = getColumnByName(key);
       if (col) {
-        switch (col.semanticTag || key) {
+        switch (col.semantic || key) {
           case 'attendance':
           case 'attendance_percent':
             atRiskConditions.push(`\`${col.name}\` < ?`);
@@ -147,7 +147,7 @@ async function countStudents({ q = '', filters = {} } = {}) {
     params.push(filters.parental_education);
   }
   if (filters.at_risk && filters.at_risk !== 'all') {
-    const { loadSchemaMap, getSchemaMap } = require('./schemaMap');
+    const { loadSchemaMap, getSchemaMap, getColumnByName } = require('../utils/schemaMap');
     loadSchemaMap();
     const map = getSchemaMap();
     const atRiskConditions = [];
@@ -158,9 +158,9 @@ async function countStudents({ q = '', filters = {} } = {}) {
       ['study_hours_per_day', 'study_hours'],
       ['previous_gpa', 'gpa'],
     ]) {
-      const col = map[key];
+      const col = getColumnByName(key);
       if (col) {
-        switch (col.semanticTag || key) {
+        switch (col.semantic || key) {
           case 'attendance':
           case 'attendance_percent':
             atRiskConditions.push(`\`${col.name}\` < ?`);
@@ -712,22 +712,36 @@ async function getStudentsForBulk({ ids = [], filters = {}, page = 1, size = 100
     params.push(filters.parental_education);
   }
   if (filters.at_risk && filters.at_risk !== 'all') {
-    const map = getSchemaMap();
+    loadSchemaMap();
+    const { getColumnByName } = require('../utils/schemaMap');
     const atRiskConditions = [];
     for (const [key] of [
       ['attendance_percent', 'attendance'],
       ['study_hours_per_day', 'study_hours'],
       ['previous_gpa', 'gpa'],
     ]) {
-      const col = map[key];
+      const col = getColumnByName(key);
       if (col) {
-        if (/attendance/i.test(col.name)) atRiskConditions.push(`\`${col.name}\` < 75`);
-        else if (/study.*hour/i.test(col.name)) atRiskConditions.push(`\`${col.name}\` < 2`);
-        else if (/gpa/i.test(col.name)) atRiskConditions.push(`\`${col.name}\` < 2.0`);
+        if (/attendance/i.test(col.name)) atRiskConditions.push(`\`${col.name}\` < ?`);
+        else if (/study.*hour/i.test(col.name)) atRiskConditions.push(`\`${col.name}\` < ?`);
+        else if (/gpa/i.test(col.name)) atRiskConditions.push(`\`${col.name}\` < ?`);
       }
     }
     if (atRiskConditions.length) {
       whereClauses.push(`(${atRiskConditions.join(' OR ')})`);
+      // Add parameters for the thresholds (same order as conditions)
+      for (const [k] of [
+        ['attendance_percent', 'attendance'],
+        ['study_hours_per_day', 'study_hours'],
+        ['previous_gpa', 'gpa'],
+      ]) {
+        const c = getColumnByName(k);
+        if (c) {
+          if (/attendance/i.test(c.name)) params.push(75);
+          else if (/study.*hour/i.test(c.name)) params.push(2);
+          else if (/gpa/i.test(c.name)) params.push(2.0);
+        }
+      }
     }
   }
 

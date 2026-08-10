@@ -266,7 +266,7 @@ async function apiGetAuditLogs(req, res) {
 async function apiAdminAnalytics(req, res) {
   try {
     // Get user counts by role
-    const [{ userStats }] = await pool.query(`
+    const [userStatsRows] = await pool.query(`
       SELECT
         COUNT(*) as totalUsers,
         SUM(role = 'admin') as adminCount,
@@ -290,7 +290,7 @@ async function apiAdminAnalytics(req, res) {
     `);
 
     res.json({
-      userStats: userStats[0] || {},
+      userStats: userStatsRows[0] || {},
       studentStats,
       recentLogins,
     });
