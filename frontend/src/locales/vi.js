@@ -116,6 +116,11 @@ const vi = {
     avgGPA: 'GPA trung bình',
     passRate: 'Tỷ lệ đạt',
     atRiskCount: 'Số nguy cơ',
+    // KPI subtext
+    kpiStudents: 'sinh viên',
+    kpiOutOfFour: '/ 4.0',
+    kpiGradeABC: 'Xếp loại A–C',
+    kpiNeedsAttention: 'cần chú ý',
     // Charts
     gradeDistribution: 'Phân phối Xếp loại',
     attendanceVsScore: 'Điểm danh vs Điểm Cuối',

@@ -85,7 +85,7 @@ def load_model(base_model, adapter_path=None, device="cuda"):
         model = PeftModel.from_pretrained(model, adapter_path)
         model = model.merge_and_unload()
     elif adapter_path:
-        print(f"⚠️  Adapter not found at {adapter_path} — using base model only")
+        print(f"  Adapter not found at {adapter_path} — using base model only")
 
     model.eval()
     return model, tokenizer
@@ -186,7 +186,7 @@ def main():
 
     response = generate(model, tokenizer, prompt, args.max_tokens, args.device)
     print(response)
-    print("\n" + "=" * 60 + "\n✅ Done")
+    print("\n" + "=" * 60 + "\n Done")
 
 
 def torch_available():

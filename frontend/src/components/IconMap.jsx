@@ -15,6 +15,20 @@ const iconMap = {
   X: Lucide.X,
   Info: Lucide.Info,
   Loader: Lucide.Loader,
+  HelpCircle: Lucide.HelpCircle,
+
+  // Layout & Navigation
+  LayoutDashboard: Lucide.LayoutDashboard,
+  LayoutGrid: Lucide.LayoutGrid,
+  LayoutList: Lucide.LayoutList,
+  Layout: Lucide.Layout,
+  PanelLeft: Lucide.PanelLeft,
+  PanelRight: Lucide.PanelRight,
+  PanelTop: Lucide.PanelTop,
+  PanelBottom: Lucide.PanelBottom,
+  Square: Lucide.Square,
+  RectangleHorizontal: Lucide.RectangleHorizontal,
+  RectangleVertical: Lucide.RectangleVertical,
 
   // Academic / Education
   BookOpen: Lucide.BookOpen,

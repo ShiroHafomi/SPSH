@@ -124,6 +124,7 @@ export default function TeacherDashboard() {
   const [counselLoading, setCounselLoading] = useState(false);
   const [isDark, setIsDark] = useState(false);
 
+  // ─── Theme detection ──────────────────────────────────────────────────────────
   useEffect(() => {
     const darkMode = document.documentElement.classList.contains('dark');
     setIsDark(darkMode);
@@ -132,11 +133,98 @@ export default function TeacherDashboard() {
     return () => observer.disconnect();
   }, []);
 
+  // ─── Data fetching ────────────────────────────────────────────────────────────
   useEffect(() => {
     fetchAnalytics();
     fetchStudents();
     fetchAtRiskStudents();
   }, [activeTab, filters, pagination.page]);
+
+  // ─── Charts memo (must be before any early return to avoid hooks violation) ───
+  const charts = useMemo(() => {
+    if (!analytics?.charts) return [];
+    return [
+      // Grade Distribution - Bar Chart
+      analytics.charts.gradeDistribution && {
+        chartType: 'bar',
+        data: {
+          labels: analytics.charts.gradeDistribution.map(g => `Grade ${g.grade}`),
+          datasets: [{
+            label: t('teacher.gradeDistribution'),
+            data: analytics.charts.gradeDistribution.map(g => g.count),
+            backgroundColor: analytics.charts.gradeDistribution.map(g => GRADE_COLORS[g.grade]?.bg || MULTI_SERIES_COLORS[0].bg),
+            borderColor: analytics.charts.gradeDistribution.map(g => GRADE_COLORS[g.grade]?.border || MULTI_SERIES_COLORS[0].border),
+            borderWidth: 2,
+            borderRadius: 8,
+            borderSkipped: false,
+            maxBarThickness: 52,
+            hoverBackgroundColor: analytics.charts.gradeDistribution.map(g => GRADE_COLORS[g.grade]?.solid || MULTI_SERIES_COLORS[0].solid),
+            hoverBorderColor: analytics.charts.gradeDistribution.map(g => GRADE_COLORS[g.grade]?.border || MULTI_SERIES_COLORS[0].border),
+          }],
+        },
+        options: getChartOptions(isDark),
+      },
+      // Attendance vs Score - Scatter Plot
+      analytics.charts.attendanceVsScore && {
+        chartType: 'scatter',
+        data: {
+          datasets: [{
+            label: `${t('common.attendance')} vs ${t('common.finalScore')}`,
+            data: analytics.charts.attendanceVsScore.map(d => ({ x: d.x, y: d.y })),
+            backgroundColor: MULTI_SERIES_COLORS[0].solid + 'B3',
+            borderColor: MULTI_SERIES_COLORS[0].solid,
+            borderWidth: 2,
+            pointRadius: 7,
+            pointHoverRadius: 9,
+            pointBorderWidth: 2,
+            pointBorderColor: isDark ? '#0f172a' : '#ffffff',
+            pointStyle: 'circle',
+          }],
+        },
+        options: getScatterOptions(isDark, t('common.attendance'), t('common.finalScore')),
+      },
+      // Sleep Impact - Horizontal Bar Chart
+      analytics.charts.sleepImpact && {
+        chartType: 'bar',
+        data: {
+          labels: analytics.charts.sleepImpact.map(s => s.sleepBucket),
+          datasets: [{
+            label: t('teacher.sleepImpact'),
+            data: analytics.charts.sleepImpact.map(s => s.avgScore),
+            backgroundColor: MULTI_SERIES_COLORS[1].bg,
+            borderColor: MULTI_SERIES_COLORS[1].border,
+            borderWidth: 2,
+            borderRadius: 8,
+            borderSkipped: false,
+            maxBarThickness: 40,
+            hoverBackgroundColor: MULTI_SERIES_COLORS[1].solid,
+            hoverBorderColor: MULTI_SERIES_COLORS[1].border,
+          }],
+        },
+        options: getHorizontalBarOptions(isDark),
+      },
+      // Part-Time Job Impact - Horizontal Bar Chart
+      analytics.charts.partTimeJobImpact && {
+        chartType: 'bar',
+        data: {
+          labels: analytics.charts.partTimeJobImpact.map(j => j.category),
+          datasets: [{
+            label: t('teacher.partTimeJobImpact'),
+            data: analytics.charts.partTimeJobImpact.map(j => j.avgScore),
+            backgroundColor: MULTI_SERIES_COLORS[3].bg,
+            borderColor: MULTI_SERIES_COLORS[3].border,
+            borderWidth: 2,
+            borderRadius: 8,
+            borderSkipped: false,
+            maxBarThickness: 40,
+            hoverBackgroundColor: MULTI_SERIES_COLORS[3].solid,
+            hoverBorderColor: MULTI_SERIES_COLORS[3].border,
+          }],
+        },
+        options: getHorizontalBarOptions(isDark),
+      },
+    ].filter(Boolean);
+  }, [analytics, isDark, t]);
 
   const fetchAnalytics = async () => {
     try {
@@ -235,92 +323,6 @@ export default function TeacherDashboard() {
     };
     return colors[grade] || 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
   };
-
-  // Transform analytics charts to Chart.js format
-  const charts = useMemo(() => {
-    if (!analytics?.charts) return [];
-    return [
-      // Grade Distribution - Bar Chart
-      analytics.charts.gradeDistribution && {
-        chartType: 'bar',
-        data: {
-          labels: analytics.charts.gradeDistribution.map(g => `Grade ${g.grade}`),
-          datasets: [{
-            label: t('teacher.gradeDistribution'),
-            data: analytics.charts.gradeDistribution.map(g => g.count),
-            backgroundColor: analytics.charts.gradeDistribution.map(g => GRADE_COLORS[g.grade]?.bg || MULTI_SERIES_COLORS[0].bg),
-            borderColor: analytics.charts.gradeDistribution.map(g => GRADE_COLORS[g.grade]?.border || MULTI_SERIES_COLORS[0].border),
-            borderWidth: 2,
-            borderRadius: 8,
-            borderSkipped: false,
-            maxBarThickness: 52,
-            hoverBackgroundColor: analytics.charts.gradeDistribution.map(g => GRADE_COLORS[g.grade]?.solid || MULTI_SERIES_COLORS[0].solid),
-            hoverBorderColor: analytics.charts.gradeDistribution.map(g => GRADE_COLORS[g.grade]?.border || MULTI_SERIES_COLORS[0].border),
-          }],
-        },
-        options: getChartOptions(isDark),
-      },
-      // Attendance vs Score - Scatter Plot
-      analytics.charts.attendanceVsScore && {
-        chartType: 'scatter',
-        data: {
-          datasets: [{
-            label: `${t('common.attendance')} vs ${t('common.finalScore')}`,
-            data: analytics.charts.attendanceVsScore.map(d => ({ x: d.x, y: d.y })),
-            backgroundColor: MULTI_SERIES_COLORS[0].solid + 'B3',
-            borderColor: MULTI_SERIES_COLORS[0].solid,
-            borderWidth: 2,
-            pointRadius: 7,
-            pointHoverRadius: 9,
-            pointBorderWidth: 2,
-            pointBorderColor: isDark ? '#0f172a' : '#ffffff',
-            pointStyle: 'circle',
-          }],
-        },
-        options: getScatterOptions(isDark, t('common.attendance'), t('common.finalScore')),
-      },
-      // Sleep Impact - Horizontal Bar Chart
-      analytics.charts.sleepImpact && {
-        chartType: 'bar',
-        data: {
-          labels: analytics.charts.sleepImpact.map(s => s.sleepBucket),
-          datasets: [{
-            label: t('teacher.sleepImpact'),
-            data: analytics.charts.sleepImpact.map(s => s.avgScore),
-            backgroundColor: MULTI_SERIES_COLORS[1].bg,
-            borderColor: MULTI_SERIES_COLORS[1].border,
-            borderWidth: 2,
-            borderRadius: 8,
-            borderSkipped: false,
-            maxBarThickness: 40,
-            hoverBackgroundColor: MULTI_SERIES_COLORS[1].solid,
-            hoverBorderColor: MULTI_SERIES_COLORS[1].border,
-          }],
-        },
-        options: getHorizontalBarOptions(isDark),
-      },
-      // Part-Time Job Impact - Horizontal Bar Chart
-      analytics.charts.partTimeJobImpact && {
-        chartType: 'bar',
-        data: {
-          labels: analytics.charts.partTimeJobImpact.map(j => j.category),
-          datasets: [{
-            label: t('teacher.partTimeJobImpact'),
-            data: analytics.charts.partTimeJobImpact.map(j => j.avgScore),
-            backgroundColor: MULTI_SERIES_COLORS[3].bg,
-            borderColor: MULTI_SERIES_COLORS[3].border,
-            borderWidth: 2,
-            borderRadius: 8,
-            borderSkipped: false,
-            maxBarThickness: 40,
-            hoverBackgroundColor: MULTI_SERIES_COLORS[3].solid,
-            hoverBorderColor: MULTI_SERIES_COLORS[3].border,
-          }],
-        },
-        options: getHorizontalBarOptions(isDark),
-      },
-    ].filter(Boolean);
-  }, [analytics, isDark, t]);
 
   // Helper components
   const Card = ({ children, className = '', ...props }) => (
@@ -450,25 +452,31 @@ export default function TeacherDashboard() {
 
       {/* Tab Panels */}
       {/* Analytics Tab */}
-      {activeTab === 'analytics' && analytics && (
-        <div className="space-y-6">
-          {/* KPI Cards */}
+      {activeTab === 'analytics' && analytics && (() => {
+        const { kpis = {}, charts = {} } = analytics;
+        return (
+          <div className="space-y-6">
+          {/* KPI Cards - Using actual backend KPIs: totalStudents, avgGpa, passRate, atRiskCount */}
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             <Card className="p-6">
               <p className="text-sm text-primary-500 dark:text-gray-400">{t('teacher.totalStudents')}</p>
-              <p className="text-3xl font-bold font-mono text-primary-950 dark:text-gray-100 mt-1">{analytics.kpis.totalStudents}</p>
+              <p className="text-3xl font-bold font-mono text-primary-950 dark:text-gray-100 mt-1">{kpis.totalStudents}</p>
+              <p className="text-xs text-primary-400 dark:text-gray-500 mt-1">{t('teacher.kpiStudents')}</p>
             </Card>
             <Card className="p-6">
               <p className="text-sm text-primary-500 dark:text-gray-400">{t('teacher.avgGPA')}</p>
-              <p className="text-3xl font-bold font-mono text-primary-950 dark:text-gray-100 mt-1">{analytics.kpis.avgGpa?.toFixed(2)}</p>
+              <p className="text-3xl font-bold font-mono text-primary-950 dark:text-gray-100 mt-1">{kpis.avgGpa?.toFixed(2)}</p>
+              <p className="text-xs text-primary-400 dark:text-gray-500 mt-1">{t('teacher.kpiOutOfFour')}</p>
             </Card>
             <Card className="p-6">
               <p className="text-sm text-primary-500 dark:text-gray-400">{t('teacher.passRate')}</p>
-              <p className="text-3xl font-bold font-mono text-success-600 dark:text-success-400 mt-1">{analytics.kpis.passRate?.toFixed(1)}%</p>
+              <p className="text-3xl font-bold font-mono text-success-600 dark:text-success-400 mt-1">{kpis.passRate?.toFixed(1)}%</p>
+              <p className="text-xs text-primary-400 dark:text-gray-500 mt-1">{t('teacher.kpiGradeABC')}</p>
             </Card>
             <Card className="p-6">
               <p className="text-sm text-primary-500 dark:text-gray-400">{t('teacher.atRiskCount')}</p>
-              <p className="text-3xl font-bold font-mono text-danger-600 dark:text-danger-400 mt-1">{analytics.kpis.atRiskCount}</p>
+              <p className="text-3xl font-bold font-mono text-danger-600 dark:text-danger-400 mt-1">{kpis.atRiskCount}</p>
+              <p className="text-xs text-primary-400 dark:text-gray-500 mt-1">{t('teacher.kpiNeedsAttention')}</p>
             </Card>
           </div>
 
@@ -478,9 +486,9 @@ export default function TeacherDashboard() {
               <Card key={idx} className="p-6">
                 <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
                   <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100">
-                    {formatLabel(analytics.charts?.gradeDistribution && idx === 0 ? 'Grade Distribution' :
-                      analytics.charts?.attendanceVsScore && idx === 1 ? 'Attendance vs Final Score' :
-                      analytics.charts?.sleepImpact && (analytics.charts?.gradeDistribution || analytics.charts?.attendanceVsScore ? 2 : 1) ? 'Sleep Impact' :
+                    {formatLabel(charts.gradeDistribution && idx === 0 ? 'Grade Distribution' :
+                      charts.attendanceVsScore && idx === 1 ? 'Attendance vs Final Score' :
+                      charts.sleepImpact && (charts.gradeDistribution || charts.attendanceVsScore ? 2 : 1) ? 'Sleep Impact' :
                       'Part-Time Job Impact')}
                   </h3>
                   {chart.chartType === 'scatter' && (
@@ -508,7 +516,7 @@ export default function TeacherDashboard() {
             )}
           </div>
         </div>
-      )}
+      )})}
 
       {/* Students Tab */}
       {activeTab === 'students' && (

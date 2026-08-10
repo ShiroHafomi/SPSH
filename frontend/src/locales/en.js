@@ -230,6 +230,11 @@ const en = {
     avgGPA: 'Average GPA',
     passRate: 'Pass Rate',
     atRiskCount: 'At-Risk Count',
+    // KPI subtext
+    kpiStudents: 'students',
+    kpiOutOfFour: '/ 4.0',
+    kpiGradeABC: 'Grades A–C',
+    kpiNeedsAttention: 'needs attention',
     // Charts
     gradeDistribution: 'Grade Distribution',
     attendanceVsScore: 'Attendance vs Final Score',

@@ -136,7 +136,7 @@ export default function AdminDashboard() {
 
   if (!analytics) return null;
 
-  const { kpis, charts } = analytics;
+  const { kpis = {}, charts = {} } = analytics;
 
   // Grade Distribution Donut Chart - backend returns [{grade: 'A', count: 5}, ...]
   const gradeDist = charts.gradeDistribution || [];
