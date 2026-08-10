@@ -1,10 +1,109 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, homeForRole } from '../hooks/useAuth';
 import { useFlash } from '../components/FlashProvider';
 import { useLanguage } from '../hooks/useLanguage';
 import { api } from '../api';
 import { renderIcon } from '../components/IconMap';
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, PointElement, ArcElement, Title, Tooltip, Legend, Filler } from 'chart.js';
+import { Bar, Scatter } from 'react-chartjs-2';
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, ArcElement, Title, Tooltip, Legend, Filler);
+
+/**
+ * Professional color palette - WCAG AA compliant, colorblind-friendly
+ * Shared with Dashboard.jsx for consistency
+ */
+const CHART_THEME = {
+  light: {
+    background: '#ffffff',
+    surface: '#f8fafc',
+    text: '#0f172a',
+    textMuted: '#64748b',
+    border: '#e2e8f0',
+    grid: 'rgba(100, 116, 139, 0.08)',
+    primary: { bg: 'rgba(99, 102, 241, 0.12)', border: 'rgb(99, 102, 241)', hover: 'rgba(99, 102, 241, 0.2)', solid: 'rgb(99, 102, 241)' },
+    success: { bg: 'rgba(16, 185, 129, 0.12)', border: 'rgb(16, 185, 129)', hover: 'rgba(16, 185, 129, 0.2)', solid: 'rgb(16, 185, 129)' },
+    warning: { bg: 'rgba(245, 158, 11, 0.12)', border: 'rgb(245, 158, 11)', hover: 'rgba(245, 158, 11, 0.2)', solid: 'rgb(245, 158, 11)' },
+    danger: { bg: 'rgba(239, 68, 68, 0.12)', border: 'rgb(239, 68, 68)', hover: 'rgba(239, 68, 68, 0.2)', solid: 'rgb(239, 68, 68)' },
+    info: { bg: 'rgba(6, 182, 212, 0.12)', border: 'rgb(6, 182, 212)', hover: 'rgba(6, 182, 212, 0.2)', solid: 'rgb(6, 182, 212)' },
+  },
+  dark: {
+    background: '#0f172a',
+    surface: '#1e293b',
+    text: '#f1f5f9',
+    textMuted: '#94a3b8',
+    border: '#334155',
+    grid: 'rgba(148, 163, 184, 0.12)',
+    primary: { bg: 'rgba(99, 102, 241, 0.18)', border: 'rgb(129, 140, 248)', hover: 'rgba(99, 102, 241, 0.28)', solid: 'rgb(129, 140, 248)' },
+    success: { bg: 'rgba(16, 185, 129, 0.18)', border: 'rgb(52, 211, 153)', hover: 'rgba(16, 185, 129, 0.28)', solid: 'rgb(52, 211, 153)' },
+    warning: { bg: 'rgba(245, 158, 11, 0.18)', border: 'rgb(251, 191, 36)', hover: 'rgba(245, 158, 11, 0.28)', solid: 'rgb(251, 191, 36)' },
+    danger: { bg: 'rgba(239, 68, 68, 0.18)', border: 'rgb(248, 113, 113)', hover: 'rgba(239, 68, 68, 0.28)', solid: 'rgb(248, 113, 113)' },
+    info: { bg: 'rgba(6, 182, 212, 0.18)', border: 'rgb(56, 189, 248)', hover: 'rgba(6, 182, 212, 0.28)', solid: 'rgb(56, 189, 248)' },
+  },
+};
+
+const MULTI_SERIES_COLORS = [
+  { bg: 'rgba(99, 102, 241, 0.18)', border: 'rgb(99, 102, 241)', solid: 'rgb(99, 102, 241)' },
+  { bg: 'rgba(16, 185, 129, 0.18)', border: 'rgb(16, 185, 129)', solid: 'rgb(16, 185, 129)' },
+  { bg: 'rgba(244, 114, 182, 0.18)', border: 'rgb(244, 114, 182)', solid: 'rgb(244, 114, 182)' },
+  { bg: 'rgba(245, 158, 11, 0.18)', border: 'rgb(245, 158, 11)', solid: 'rgb(245, 158, 11)' },
+  { bg: 'rgba(6, 182, 212, 0.18)', border: 'rgb(6, 182, 212)', solid: 'rgb(6, 182, 212)' },
+  { bg: 'rgba(168, 85, 247, 0.18)', border: 'rgb(168, 85, 247)', solid: 'rgb(168, 85, 247)' },
+];
+
+const GRADE_COLORS = {
+  A: { bg: 'rgba(16, 185, 129, 0.85)', border: 'rgb(16, 185, 129)', solid: 'rgb(16, 185, 129)' },
+  B: { bg: 'rgba(56, 189, 248, 0.85)', border: 'rgb(56, 189, 248)', solid: 'rgb(56, 189, 248)' },
+  C: { bg: 'rgba(245, 158, 11, 0.85)', border: 'rgb(245, 158, 11)', solid: 'rgb(245, 158, 11)' },
+  D: { bg: 'rgba(249, 115, 22, 0.85)', border: 'rgb(249, 115, 22)', solid: 'rgb(249, 115, 22)' },
+  F: { bg: 'rgba(239, 68, 68, 0.85)', border: 'rgb(239, 68, 68)', solid: 'rgb(239, 68, 68)' },
+};
+
+const formatLabel = (str) => {
+  if (!str) return '';
+  return str
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/^./, c => c.toUpperCase())
+    .replace(/\b(\w)/g, c => c.toUpperCase());
+};
+
+const getChartOptions = (isDark) => {
+  const theme = isDark ? CHART_THEME.dark : CHART_THEME.light;
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: true, position: 'top', align: 'end', labels: { usePointStyle: true, pointStyle: 'circle', padding: 20, font: { size: 12, family: "'Fira Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", weight: 500 }, color: theme.textMuted } },
+      tooltip: { backgroundColor: isDark ? 'rgba(15, 23, 42, 0.96)' : 'rgba(255, 255, 255, 0.96)', titleColor: theme.text, bodyColor: theme.textMuted, borderColor: theme.border, borderWidth: 1, cornerRadius: 10, displayColors: true, padding: 14, titleFont: { size: 13, weight: '600', family: "'Fira Sans', sans-serif" }, bodyFont: { size: 12, family: "'Fira Sans', sans-serif" }, callbacks: { label: (ctx) => { const label = ctx.dataset.label || ''; const value = ctx.parsed.y !== undefined ? ctx.parsed.y : ctx.parsed; return `${label}: ${typeof value === 'number' ? value.toLocaleString() : value}`; } } },
+    },
+    scales: {
+      x: { grid: { display: false, drawBorder: false, color: theme.grid }, ticks: { font: { size: 11, family: "'Fira Sans', sans-serif" }, color: theme.textMuted, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 }, title: { display: true, font: { size: 12, weight: '600', family: "'Fira Sans', sans-serif" }, color: theme.textMuted, padding: { top: 12 } } },
+      y: { beginAtZero: true, grid: { color: theme.grid, drawBorder: false }, ticks: { font: { size: 11, family: "'Fira Code', 'Monaco', 'Consolas', monospace" }, color: theme.textMuted, callback: (value) => value % 1 === 0 ? value : '', padding: 12 }, title: { display: true, font: { size: 12, weight: '600', family: "'Fira Sans', sans-serif" }, color: theme.textMuted, padding: { bottom: 12 } } },
+    },
+    animation: { duration: 750, easing: 'easeOutQuart' },
+    layout: { padding: { top: 8, right: 16, bottom: 8, left: 8 } },
+  };
+};
+
+const getHorizontalBarOptions = (isDark) => {
+  const base = getChartOptions(isDark);
+  return {
+    ...base,
+    indexAxis: 'y',
+    scales: {
+      x: { ...base.scales.x, beginAtZero: true, title: { ...base.scales.x.title, text: 'Average Score' } },
+      y: { ...base.scales.y, title: { display: true, font: { size: 12, weight: '600', family: "'Fira Sans', sans-serif" }, color: (isDark ? CHART_THEME.dark : CHART_THEME.light).textMuted, padding: { bottom: 12 } } },
+    },
+  };
+};
+
+const getScatterOptions = (isDark, xLabel, yLabel) => {
+  const base = getChartOptions(isDark);
+  return { ...base, plugins: { ...base.plugins, legend: { display: false } }, scales: { ...base.scales, x: { ...base.scales.x, title: { ...base.scales.x.title, text: formatLabel(xLabel) }, beginAtZero: true }, y: { ...base.scales.y, title: { ...base.scales.y.title, text: formatLabel(yLabel) }, beginAtZero: true } } };
+};
 
 export default function TeacherDashboard() {
   const { user, homeForRole } = useAuth();
@@ -17,20 +116,21 @@ export default function TeacherDashboard() {
   const [atRiskStudents, setAtRiskStudents] = useState([]);
   const [activeTab, setActiveTab] = useState('analytics');
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0, size: 20 });
-  const [filters, setFilters] = useState({
-    q: '',
-    grade: 'all',
-    gender: 'all',
-    part_time_job: 'all',
-    parental_education: 'all',
-    at_risk: 'all',
-  });
+  const [filters, setFilters] = useState({ q: '', grade: 'all', gender: 'all', part_time_job: 'all', parental_education: 'all', at_risk: 'all' });
   const [filterOptions, setFilterOptions] = useState({});
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [showCounselModal, setShowCounselModal] = useState(false);
   const [counselPrompt, setCounselPrompt] = useState('');
-
   const [counselLoading, setCounselLoading] = useState(false);
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    const darkMode = document.documentElement.classList.contains('dark');
+    setIsDark(darkMode);
+    const observer = new MutationObserver(() => setIsDark(document.documentElement.classList.contains('dark')));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     fetchAnalytics();
@@ -47,22 +147,22 @@ export default function TeacherDashboard() {
       console.error('Failed to fetch analytics:', err);
       addFlash(t('teacher.analyticsLoadFailed'), 'error');
       if (err.status === 403) navigate(homeForRole(user?.role));
+    } finally {
+      setLoading(false);
     }
   };
 
   const fetchStudents = async () => {
     try {
-      const params = new URLSearchParams({
-        page: pagination.page,
-        size: pagination.size,
-        ...filters,
-      });
+      const params = new URLSearchParams({ page: pagination.page, size: pagination.size, ...filters });
       const res = await api.get(`/teacher/students?${params}`);
       setStudents(res.rows);
       setPagination(prev => ({ ...prev, total: res.total, totalPages: res.totalPages, page: res.page }));
     } catch (err) {
       console.error('Failed to fetch students:', err);
       addFlash(t('teacher.studentsLoadFailed'), 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -72,6 +172,8 @@ export default function TeacherDashboard() {
       setAtRiskStudents(res.students || []);
     } catch (err) {
       console.error('Failed to fetch at-risk students:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -133,6 +235,92 @@ export default function TeacherDashboard() {
     };
     return colors[grade] || 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
   };
+
+  // Transform analytics charts to Chart.js format
+  const charts = useMemo(() => {
+    if (!analytics?.charts) return [];
+    return [
+      // Grade Distribution - Bar Chart
+      analytics.charts.gradeDistribution && {
+        chartType: 'bar',
+        data: {
+          labels: analytics.charts.gradeDistribution.map(g => `Grade ${g.grade}`),
+          datasets: [{
+            label: t('teacher.gradeDistribution'),
+            data: analytics.charts.gradeDistribution.map(g => g.count),
+            backgroundColor: analytics.charts.gradeDistribution.map(g => GRADE_COLORS[g.grade]?.bg || MULTI_SERIES_COLORS[0].bg),
+            borderColor: analytics.charts.gradeDistribution.map(g => GRADE_COLORS[g.grade]?.border || MULTI_SERIES_COLORS[0].border),
+            borderWidth: 2,
+            borderRadius: 8,
+            borderSkipped: false,
+            maxBarThickness: 52,
+            hoverBackgroundColor: analytics.charts.gradeDistribution.map(g => GRADE_COLORS[g.grade]?.solid || MULTI_SERIES_COLORS[0].solid),
+            hoverBorderColor: analytics.charts.gradeDistribution.map(g => GRADE_COLORS[g.grade]?.border || MULTI_SERIES_COLORS[0].border),
+          }],
+        },
+        options: getChartOptions(isDark),
+      },
+      // Attendance vs Score - Scatter Plot
+      analytics.charts.attendanceVsScore && {
+        chartType: 'scatter',
+        data: {
+          datasets: [{
+            label: `${t('common.attendance')} vs ${t('common.finalScore')}`,
+            data: analytics.charts.attendanceVsScore.map(d => ({ x: d.x, y: d.y })),
+            backgroundColor: MULTI_SERIES_COLORS[0].solid + 'B3',
+            borderColor: MULTI_SERIES_COLORS[0].solid,
+            borderWidth: 2,
+            pointRadius: 7,
+            pointHoverRadius: 9,
+            pointBorderWidth: 2,
+            pointBorderColor: isDark ? '#0f172a' : '#ffffff',
+            pointStyle: 'circle',
+          }],
+        },
+        options: getScatterOptions(isDark, t('common.attendance'), t('common.finalScore')),
+      },
+      // Sleep Impact - Horizontal Bar Chart
+      analytics.charts.sleepImpact && {
+        chartType: 'bar',
+        data: {
+          labels: analytics.charts.sleepImpact.map(s => s.sleepBucket),
+          datasets: [{
+            label: t('teacher.sleepImpact'),
+            data: analytics.charts.sleepImpact.map(s => s.avgScore),
+            backgroundColor: MULTI_SERIES_COLORS[1].bg,
+            borderColor: MULTI_SERIES_COLORS[1].border,
+            borderWidth: 2,
+            borderRadius: 8,
+            borderSkipped: false,
+            maxBarThickness: 40,
+            hoverBackgroundColor: MULTI_SERIES_COLORS[1].solid,
+            hoverBorderColor: MULTI_SERIES_COLORS[1].border,
+          }],
+        },
+        options: getHorizontalBarOptions(isDark),
+      },
+      // Part-Time Job Impact - Horizontal Bar Chart
+      analytics.charts.partTimeJobImpact && {
+        chartType: 'bar',
+        data: {
+          labels: analytics.charts.partTimeJobImpact.map(j => j.category),
+          datasets: [{
+            label: t('teacher.partTimeJobImpact'),
+            data: analytics.charts.partTimeJobImpact.map(j => j.avgScore),
+            backgroundColor: MULTI_SERIES_COLORS[3].bg,
+            borderColor: MULTI_SERIES_COLORS[3].border,
+            borderWidth: 2,
+            borderRadius: 8,
+            borderSkipped: false,
+            maxBarThickness: 40,
+            hoverBackgroundColor: MULTI_SERIES_COLORS[3].solid,
+            hoverBorderColor: MULTI_SERIES_COLORS[3].border,
+          }],
+        },
+        options: getHorizontalBarOptions(isDark),
+      },
+    ].filter(Boolean);
+  }, [analytics, isDark, t]);
 
   // Helper components
   const Card = ({ children, className = '', ...props }) => (
@@ -286,99 +474,38 @@ export default function TeacherDashboard() {
 
           {/* Charts */}
           <div className="grid gap-6 lg:grid-cols-2">
-            {/* Grade Distribution */}
-            <Card className="p-6">
-              <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-4">
-                {t('teacher.gradeDistribution')}
-              </h3>
-              <div className="h-64 flex items-end justify-around gap-2">
-                {analytics.charts.gradeDistribution?.map((g, idx) => (
-                  <div key={idx} className="flex flex-col items-center flex-1">
-                    <div
-                      className="w-full transition-all duration-500 rounded-t"
-                      style={{
-                        height: `${(g.count / Math.max(...analytics.charts.gradeDistribution.map(x => x.count), 1)) * 100}%`,
-                        backgroundColor: gradeColor(g.grade).split(' ')[0].replace('bg-', ''),
-                      }}
-                    />
-                    <span className="text-sm font-medium mt-2 text-primary-950 dark:text-gray-100">{g.grade}</span>
-                    <span className="text-xs text-primary-400 dark:text-gray-500">{g.count}</span>
-                  </div>
-                ))}
-              </div>
-            </Card>
-
-            {/* Attendance vs Score */}
-            <Card className="p-6">
-              <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-4">
-                {t('teacher.attendanceVsScore')}
-              </h3>
-              <div className="h-64 relative">
-                <svg viewBox="0 0 400 300" className="w-full h-full">
-                  {analytics.charts.attendanceVsScore?.map((point, idx) => (
-                    <circle
-                      key={idx}
-                      cx={40 + (point.x / 100) * 320}
-                      cy={260 - (point.y / 100) * 220}
-                      r="4"
-                      fill="url(#primaryGradient)"
-                    />
-                  ))}
-                  <defs>
-                    <linearGradient id="primaryGradient" x1="0%" y1="100%" x2="100%" y2="0%">
-                      <stop offset="0%" stopColor="#3b82f6" />
-                      <stop offset="100%" stopColor="#8b5cf6" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-              </div>
-            </Card>
-
-            {/* Sleep Impact */}
-            <Card className="p-6">
-              <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-4">
-                {t('teacher.sleepImpact')}
-              </h3>
-              <div className="space-y-3">
-                {analytics.charts.sleepImpact?.map((s, idx) => (
-                  <div key={idx} className="flex items-center gap-3">
-                    <span className="w-16 text-sm font-medium text-primary-600 dark:text-gray-400">{s.sleepBucket}</span>
-                    <div className="flex-1 h-8 bg-primary-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-primary-500 transition-all duration-500 flex items-center justify-end pr-2"
-                        style={{ width: `${Math.min(s.avgScore / 100, 1) * 100}%` }}
-                      >
-                        <span className="text-xs text-white font-medium">{s.avgScore?.toFixed(1)}</span>
-                      </div>
-                    </div>
-                    <span className="w-12 text-sm text-primary-500 dark:text-gray-400 text-right">{s.count}</span>
-                  </div>
-                ))}
-              </div>
-            </Card>
-
-            {/* Part-Time Job Impact */}
-            <Card className="p-6">
-              <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-4">
-                {t('teacher.partTimeJobImpact')}
-              </h3>
-              <div className="space-y-3">
-                {analytics.charts.partTimeJobImpact?.map((j, idx) => (
-                  <div key={idx} className="flex items-center gap-3">
-                    <span className="w-20 text-sm font-medium text-primary-600 dark:text-gray-400">{j.category}</span>
-                    <div className="flex-1 h-8 bg-primary-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-warning-500 transition-all duration-500 flex items-center justify-end pr-2"
-                        style={{ width: `${Math.min(j.avgScore / 100, 1) * 100}%` }}
-                      >
-                        <span className="text-xs text-white font-medium">{j.avgScore?.toFixed(1)}</span>
-                      </div>
-                    </div>
-                    <span className="w-12 text-sm text-primary-500 dark:text-gray-400 text-right">{j.count}</span>
-                  </div>
-                ))}
-              </div>
-            </Card>
+            {charts.map((chart, idx) => (
+              <Card key={idx} className="p-6">
+                <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+                  <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100">
+                    {formatLabel(analytics.charts?.gradeDistribution && idx === 0 ? 'Grade Distribution' :
+                      analytics.charts?.attendanceVsScore && idx === 1 ? 'Attendance vs Final Score' :
+                      analytics.charts?.sleepImpact && (analytics.charts?.gradeDistribution || analytics.charts?.attendanceVsScore ? 2 : 1) ? 'Sleep Impact' :
+                      'Part-Time Job Impact')}
+                  </h3>
+                  {chart.chartType === 'scatter' && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 text-xs font-medium">
+                      <span className="truncate max-w-[100px]">{formatLabel(chart.data.datasets[0]?.data?.[0]?.x !== undefined ? 'Attendance' : 'X')}</span>
+                      <svg className="w-3 h-3 flex-shrink-0 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+                      <span className="truncate max-w-[100px]">{formatLabel(chart.data.datasets[0]?.data?.[0]?.y !== undefined ? 'Final Score' : 'Y')}</span>
+                    </span>
+                  )}
+                </div>
+                <div className="chart-container" style={{ height: '360px', position: 'relative' }}>
+                  {chart.chartType === 'bar' && <Bar data={chart.data} options={chart.options} />}
+                  {chart.chartType === 'scatter' && <Scatter data={chart.data} options={chart.options} />}
+                </div>
+              </Card>
+            ))}
+            {!charts.length && (
+              <Card className="p-12 text-center lg:col-span-2">
+                <svg className="w-16 h-16 mx-auto text-primary-200 dark:text-gray-700 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" width="64" height="64"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                <p className="text-primary-400 dark:text-gray-500 font-medium text-lg">{t('dashboard.noChartData') || 'No chart data available'}</p>
+                <p className="text-sm text-primary-300 dark:text-gray-600 mt-2 max-w-xs mx-auto">
+                  {t('dashboard.noChartDataDesc') || 'Import a dataset with numeric columns to see visualizations.'}
+                </p>
+              </Card>
+            )}
           </div>
         </div>
       )}

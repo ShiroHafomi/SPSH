@@ -510,12 +510,15 @@ def _optuna_clf_objective(trial, X, y, cv, model_type: str):
                 "random_strength", 1e-2, 10.0, log=True
             ),
         }
+        # NOTE: CatBoost has no `class_weights` param that accepts "Balanced"
+        # (that's an scikit-learn convention). CatBoost's correct param is
+        # `auto_class_weights`, which accepts "Balanced" / "SqrtBalanced".
         model = cb.CatBoostClassifier(
             **params,
             random_state=42,
             verbose=False,
             thread_count=-1,
-            class_weights="Balanced",
+            auto_class_weights="Balanced",
         )
     else:
         raise ValueError(f"Unknown Optuna classification model: {model_type}")
@@ -603,8 +606,13 @@ def tune_with_optuna(
                 **study.best_params, random_state=42, verbose=False, thread_count=-1
             )
         else:
+            # Keep class balancing consistent with the Optuna objective above.
             best_model = cb.CatBoostClassifier(
-                **study.best_params, random_state=42, verbose=False, thread_count=-1
+                **study.best_params,
+                random_state=42,
+                verbose=False,
+                thread_count=-1,
+                auto_class_weights="Balanced",
             )
     else:
         raise ValueError(f"Unknown model_type: {model_type}")
