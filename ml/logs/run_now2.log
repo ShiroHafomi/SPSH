@@ -1,0 +1,333 @@
+[START] Mon, Aug 10, 2026 12:52:39 PM
+
+============================================================
+STUDENT PERFORMANCE MODEL TRAINING
+============================================================
+Log file: D:\Student Performance & Study Habits\ml\logs\train_20260810_125251.log
+Project root: D:\Student Performance & Study Habits
+Data path: D:\Student Performance & Study Habits\ml\data\students.csv
+Models dir: D:\Student Performance & Study Habits\ml\models
+Output dir: D:\Student Performance & Study Habits\ml\output
+Loading data from D:\Student Performance & Study Habits\ml\data\students.csv
+Data loaded in 0.012s: shape=(100, 12), columns=['gender', 'age', 'study_hours_per_day', 'attendance_percent', 'sleep_hours', 'previous_gpa', 'parental_education', 'internet_access', 'extracurricular', 'part_time_job', 'final_score', 'grade']
+Numeric features: ['age', 'study_hours_per_day', 'attendance_percent', 'sleep_hours', 'previous_gpa']
+Categorical features: ['gender', 'parental_education']
+Binary features: ['internet_access', 'extracurricular', 'part_time_job']
+Created interaction features: ['study_attendance_interaction', 'study_gpa_interaction', 'sleep_attendance_interaction', 'attendance_gpa_interaction']
+Target regression range: [38, 99], mean=75.70
+Target classification distribution: {np.int64(0): np.int64(20), np.int64(1): np.int64(12), np.int64(2): np.int64(16), np.int64(3): np.int64(10), np.int64(4): np.int64(42)}
+Transformed feature shape: (100, 61) (with interactions + poly)
+CV strategy: RepeatedKFold(n_splits=5, n_repeats=3) = 15 folds
+
+============================================================
+REGRESSION: Predicting Final_Score
+============================================================
+
+--- Model: RidgeCV ---
+Evaluating RidgeCV (regression)...
+  CV completed in 2.94s
+  R²:     0.9928 (±0.0035) [train: 0.9969]
+  MAE:    1.1197 (±0.2308)
+  RMSE:   1.4696 (±0.3351)
+  MSE:    2.2721
+
+--- Model: RandomForest ---
+Tuning hyperparameters (GridSearchCV) for RandomForest...
+  Tuning completed in 40.81s
+  Best params: {'max_depth': None, 'min_samples_leaf': 1, 'min_samples_split': 3, 'n_estimators': 200}
+  Best CV R²: 0.9934
+Evaluating RandomForest (regression)...
+  CV completed in 0.58s
+  R²:     0.9934 (±0.0061) [train: 0.9993]
+  MAE:    0.9114 (±0.2337)
+  RMSE:   1.2872 (±0.4270)
+  MSE:    1.8392
+
+--- Model: GradientBoosting ---
+Tuning hyperparameters (GridSearchCV) for GradientBoosting...
+  Tuning completed in 13.57s
+  Best params: {'learning_rate': 0.05, 'max_depth': 3, 'min_samples_split': 8, 'n_estimators': 200, 'subsample': 0.8}
+  Best CV R²: 0.9959
+Evaluating GradientBoosting (regression)...
+  CV completed in 0.22s
+  R²:     0.9959 (±0.0043) [train: 1.0000]
+  MAE:    0.4619 (±0.2206)
+  RMSE:   0.8945 (±0.5151)
+  MSE:    1.0654
+
+--- Model: XGBoost ---
+Optuna Bayesian tuning for xgboost (regression) — 75 trials...
+  Optuna tuning completed in 10.63s
+  Best params: {'n_estimators': 250, 'max_depth': 3, 'learning_rate': 0.037374211608310746, 'subsample': 0.9420789172251632, 'colsample_bytree': 0.6492843296263926, 'min_child_weight': 4, 'reg_alpha': 0.02558839029806816, 'reg_lambda': 0.03295384706893414}
+  Best CV score: 0.9943
+  Trials: 75 completed, 0 pruned
+Evaluating XGBoost (regression)...
+  CV completed in 0.16s
+  R²:     0.9943 (±0.0069) [train: 0.9999]
+  MAE:    0.6393 (±0.3044)
+  RMSE:   1.0867 (±0.5874)
+  MSE:    1.5260
+
+--- Model: CatBoost ---
+Optuna Bayesian tuning for catboost (regression) — 75 trials...
+  Optuna tuning completed in 184.45s
+  Best params: {'iterations': 250, 'depth': 4, 'learning_rate': 0.09279265255569656, 'l2_leaf_reg': 0.1097945957149979, 'random_strength': 0.2283106003309253}
+  Best CV score: 0.9969
+  Trials: 75 completed, 0 pruned
+Evaluating CatBoost (regression)...
+  CV completed in 1.28s
+  R²:     0.9969 (±0.0041) [train: 1.0000]
+  MAE:    0.3387 (±0.2709)
+  RMSE:   0.7538 (±0.5315)
+  MSE:    0.8507
+
+Building ensembles from top 3: ['CatBoost', 'GradientBoosting', 'XGBoost']
+Evaluating Ensemble_Voting (regression)...
+  CV completed in 1.68s
+  R²:     0.9962 (±0.0044) [train: 1.0000]
+  MAE:    0.4706 (±0.2566)
+  RMSE:   0.8699 (±0.5204)
+  MSE:    1.0275
+Evaluating Ensemble_Stacking (regression)...
+  CV completed in 6.96s
+  R²:     0.9962 (±0.0040) [train: 0.9997]
+  MAE:    0.5739 (±0.2506)
+  RMSE:   0.9005 (±0.4853)
+  MSE:    1.0464
+
+--- Regression Summary ---
+  CatBoost                R²=0.9969 (±0.0041)  MAE=0.3387  RMSE=0.7538
+  Ensemble_Stacking       R²=0.9962 (±0.0040)  MAE=0.5739  RMSE=0.9005
+  Ensemble_Voting         R²=0.9962 (±0.0044)  MAE=0.4706  RMSE=0.8699
+  GradientBoosting        R²=0.9959 (±0.0043)  MAE=0.4619  RMSE=0.8945
+  XGBoost                 R²=0.9943 (±0.0069)  MAE=0.6393  RMSE=1.0867
+  RandomForest            R²=0.9934 (±0.0061)  MAE=0.9114  RMSE=1.2872
+  RidgeCV                 R²=0.9928 (±0.0035)  MAE=1.1197  RMSE=1.4696
+
+> Best regression: CatBoost (R² = 0.9969)
+Regression training took 263.90s
+
+============================================================
+CLASSIFICATION: Predicting Grade
+============================================================
+
+--- Model: LogisticRegressionCV ---
+Evaluating LogisticRegressionCV (classification)...
+  CV completed in 0.41s
+  Accuracy: 0.9000 (±0.0931) [train: 0.9717]
+  F1 (w):   0.8950 (±0.1048)
+  F1 (macro): 0.8553 (±0.1203)
+  Precision: 0.9217
+  Recall:    0.9000
+
+--- Model: RandomForest ---
+Tuning hyperparameters (GridSearchCV) for RandomForest...
+  Tuning completed in 96.63s
+  Best params: {'class_weight': 'balanced', 'max_depth': 6, 'min_samples_leaf': 1, 'min_samples_split': 3, 'n_estimators': 200}
+  Best CV F1: 0.9609
+Evaluating RandomForest (classification)...
+  CV completed in 0.57s
+  Accuracy: 0.9600 (±0.0712) [train: 1.0000]
+  F1 (w):   0.9609 (±0.0696)
+  F1 (macro): 0.9609 (±0.0666)
+  Precision: 0.9752
+  Recall:    0.9600
+
+--- Model: GradientBoosting ---
+Tuning hyperparameters (GridSearchCV) for GradientBoosting...
+  Tuning completed in 74.72s
+  Best params: {'learning_rate': 0.1, 'max_depth': 3, 'min_samples_split': 5, 'n_estimators': 150, 'subsample': 0.8}
+  Best CV F1: 0.9561
+Evaluating GradientBoosting (classification)...
+  CV completed in 1.03s
+  Accuracy: 0.9600 (±0.0611) [train: 1.0000]
+  F1 (w):   0.9561 (±0.0724)
+  F1 (macro): 0.9519 (±0.0794)
+  Precision: 0.9654
+  Recall:    0.9600
+
+--- Model: XGBoost ---
+Optuna Bayesian tuning for xgboost (classification) — 75 trials...
+  Optuna tuning completed in 7.84s
+  Best params: {'n_estimators': 150, 'max_depth': 8, 'learning_rate': 0.1205712628744377, 'subsample': 0.8394633936788146, 'colsample_bytree': 0.6624074561769746, 'min_child_weight': 2, 'reg_alpha': 2.9152036385288193e-08, 'reg_lambda': 0.08499808989182997}
+  Best CV score: 0.9800
+  Trials: 75 completed, 0 pruned
+Evaluating XGBoost (classification)...
+  CV completed in 0.18s
+  Accuracy: 0.9533 (±0.0806) [train: 1.0000]
+  F1 (w):   0.9508 (±0.0876)
+  F1 (macro): 0.9489 (±0.0890)
+  Precision: 0.9610
+  Recall:    0.9533
+
+--- Model: CatBoost ---
+Optuna Bayesian tuning for catboost (classification) — 75 trials...
+[W 2026-08-10 13:00:17,931] Trial 0 failed with parameters: {'iterations': 150, 'depth': 8, 'learning_rate': 0.12028665880905137, 'l2_leaf_reg': 0.6251373574521749, 'random_strength': 0.02938027938703535} because of the following error: CatBoostError('catboost/private/libs/options/json_helper.h:41: Can\'t parse parameter "class_weights" with value: "Balanced"').
+joblib.externals.loky.process_executor._RemoteTraceback: 
+"""
+Traceback (most recent call last):
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\joblib\externals\loky\process_executor.py", line 490, in _process_worker
+    r = call_item()
+        ^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\joblib\externals\loky\process_executor.py", line 291, in __call__
+    return self.fn(*self.args, **self.kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\joblib\parallel.py", line 607, in __call__
+    return [func(*args, **kwargs) for func, args, kwargs in self.items]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\joblib\parallel.py", line 607, in <listcomp>
+    return [func(*args, **kwargs) for func, args, kwargs in self.items]
+            ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\sklearn\utils\parallel.py", line 184, in __call__
+    return self.function(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\sklearn\model_selection\_validation.py", line 856, in _fit_and_score
+    estimator.fit(X_train, y_train, **fit_params)
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\catboost\core.py", line 5547, in fit
+    self._fit(X, y, cat_features, text_features, embedding_features, None, graph, sample_weight, None, None, None, None, baseline, use_best_model,
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\catboost\core.py", line 2701, in _fit
+    train_params = self._prepare_train_params(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\catboost\core.py", line 2627, in _prepare_train_params
+    _check_train_params(params)
+  File "_catboost.pyx", line 7029, in _catboost._check_train_params
+  File "_catboost.pyx", line 7051, in _catboost._check_train_params
+_catboost.CatBoostError: catboost/private/libs/options/json_helper.h:41: Can't parse parameter "class_weights" with value: "Balanced"
+"""
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\optuna\study\_optimize.py", line 206, in _run_trial
+    value_or_values = func(trial)
+                      ^^^^^^^^^^^
+  File "D:\Student Performance & Study Habits\ml\train.py", line 576, in <lambda>
+    objective = lambda trial: _optuna_clf_objective(trial, X, y, cv_clf, model_type)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Student Performance & Study Habits\ml\train.py", line 524, in _optuna_clf_objective
+    scores = cross_val_score(
+             ^^^^^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\sklearn\utils\_param_validation.py", line 218, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\sklearn\model_selection\_validation.py", line 650, in cross_val_score
+    cv_results = cross_validate(
+                 ^^^^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\sklearn\utils\_param_validation.py", line 218, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\sklearn\model_selection\_validation.py", line 372, in cross_validate
+    results = parallel(
+              ^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\sklearn\utils\parallel.py", line 91, in __call__
+    return super().__call__(iterable_with_config_and_warning_filters)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\joblib\parallel.py", line 2072, in __call__
+    return output if self.return_generator else list(output)
+                                                ^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\joblib\parallel.py", line 1682, in _get_outputs
+    yield from self._retrieve()
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\joblib\parallel.py", line 1784, in _retrieve
+    self._raise_error_fast()
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\joblib\parallel.py", line 1859, in _raise_error_fast
+    error_job.get_result(self.timeout)
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\joblib\parallel.py", line 758, in get_result
+    return self._return_or_raise()
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\joblib\parallel.py", line 773, in _return_or_raise
+    raise self._result
+_catboost.CatBoostError: catboost/private/libs/options/json_helper.h:41: Can't parse parameter "class_weights" with value: "Balanced"
+[W 2026-08-10 13:00:17,961] Trial 0 failed with value None.
+joblib.externals.loky.process_executor._RemoteTraceback: 
+"""
+Traceback (most recent call last):
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\joblib\externals\loky\process_executor.py", line 490, in _process_worker
+    r = call_item()
+        ^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\joblib\externals\loky\process_executor.py", line 291, in __call__
+    return self.fn(*self.args, **self.kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\joblib\parallel.py", line 607, in __call__
+    return [func(*args, **kwargs) for func, args, kwargs in self.items]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\joblib\parallel.py", line 607, in <listcomp>
+    return [func(*args, **kwargs) for func, args, kwargs in self.items]
+            ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\sklearn\utils\parallel.py", line 184, in __call__
+    return self.function(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\sklearn\model_selection\_validation.py", line 856, in _fit_and_score
+    estimator.fit(X_train, y_train, **fit_params)
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\catboost\core.py", line 5547, in fit
+    self._fit(X, y, cat_features, text_features, embedding_features, None, graph, sample_weight, None, None, None, None, baseline, use_best_model,
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\catboost\core.py", line 2701, in _fit
+    train_params = self._prepare_train_params(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\catboost\core.py", line 2627, in _prepare_train_params
+    _check_train_params(params)
+  File "_catboost.pyx", line 7029, in _catboost._check_train_params
+  File "_catboost.pyx", line 7051, in _catboost._check_train_params
+_catboost.CatBoostError: catboost/private/libs/options/json_helper.h:41: Can't parse parameter "class_weights" with value: "Balanced"
+"""
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\Student Performance & Study Habits\ml\train.py", line 1603, in <module>
+    main()
+  File "D:\Student Performance & Study Habits\ml\train.py", line 1430, in main
+    train_classification_models(X_transformed, y_clf, cv)
+  File "D:\Student Performance & Study Habits\ml\train.py", line 1044, in train_classification_models
+    tuned_model, best_params, best_cv_score = tune_with_optuna(
+                                              ^^^^^^^^^^^^^^^^^
+  File "D:\Student Performance & Study Habits\ml\train.py", line 578, in tune_with_optuna
+    study.optimize(objective, n_trials=n_trials, n_jobs=1, show_progress_bar=False)
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\optuna\study\study.py", line 516, in optimize
+    _optimize(
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\optuna\study\_optimize.py", line 68, in _optimize
+    _optimize_sequential(
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\optuna\study\_optimize.py", line 165, in _optimize_sequential
+    frozen_trial_id = _run_trial(study, func, catch)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\optuna\study\_optimize.py", line 263, in _run_trial
+    raise func_err
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\optuna\study\_optimize.py", line 206, in _run_trial
+    value_or_values = func(trial)
+                      ^^^^^^^^^^^
+  File "D:\Student Performance & Study Habits\ml\train.py", line 576, in <lambda>
+    objective = lambda trial: _optuna_clf_objective(trial, X, y, cv_clf, model_type)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Student Performance & Study Habits\ml\train.py", line 524, in _optuna_clf_objective
+    scores = cross_val_score(
+             ^^^^^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\sklearn\utils\_param_validation.py", line 218, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\sklearn\model_selection\_validation.py", line 650, in cross_val_score
+    cv_results = cross_validate(
+                 ^^^^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\sklearn\utils\_param_validation.py", line 218, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\sklearn\model_selection\_validation.py", line 372, in cross_validate
+    results = parallel(
+              ^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\sklearn\utils\parallel.py", line 91, in __call__
+    return super().__call__(iterable_with_config_and_warning_filters)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\joblib\parallel.py", line 2072, in __call__
+    return output if self.return_generator else list(output)
+                                                ^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\joblib\parallel.py", line 1682, in _get_outputs
+    yield from self._retrieve()
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\joblib\parallel.py", line 1784, in _retrieve
+    self._raise_error_fast()
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\joblib\parallel.py", line 1859, in _raise_error_fast
+    error_job.get_result(self.timeout)
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\joblib\parallel.py", line 758, in get_result
+    return self._return_or_raise()
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shiro\AppData\Local\Programs\Python\Python311\Lib\site-packages\joblib\parallel.py", line 773, in _return_or_raise
+    raise self._result
+_catboost.CatBoostError: catboost/private/libs/options/json_helper.h:41: Can't parse parameter "class_weights" with value: "Balanced"
+[END rc=1] Mon, Aug 10, 2026  1:00:18 PM

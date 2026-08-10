@@ -1,0 +1,124 @@
+[START] Mon, Aug 10, 2026 11:12:41 AM
+
+============================================================
+STUDENT PERFORMANCE MODEL TRAINING
+============================================================
+Log file: D:\Student Performance & Study Habits\ml\logs\train_20260810_111245.log
+Project root: D:\Student Performance & Study Habits
+Data path: D:\Student Performance & Study Habits\ml\data\students.csv
+Models dir: D:\Student Performance & Study Habits\ml\models
+Output dir: D:\Student Performance & Study Habits\ml\output
+Loading data from D:\Student Performance & Study Habits\ml\data\students.csv
+Data loaded in 0.003s: shape=(100, 12), columns=['gender', 'age', 'study_hours_per_day', 'attendance_percent', 'sleep_hours', 'previous_gpa', 'parental_education', 'internet_access', 'extracurricular', 'part_time_job', 'final_score', 'grade']
+Numeric features: ['age', 'study_hours_per_day', 'attendance_percent', 'sleep_hours', 'previous_gpa']
+Categorical features: ['gender', 'parental_education']
+Binary features: ['internet_access', 'extracurricular', 'part_time_job']
+Created interaction features: ['study_attendance_interaction', 'study_gpa_interaction', 'sleep_attendance_interaction', 'attendance_gpa_interaction']
+Target regression range: [38, 99], mean=75.70
+Target classification distribution: {np.int64(0): np.int64(20), np.int64(1): np.int64(12), np.int64(2): np.int64(16), np.int64(3): np.int64(10), np.int64(4): np.int64(42)}
+Transformed feature shape: (100, 61) (with interactions + poly)
+CV strategy: RepeatedKFold(n_splits=5, n_repeats=3) = 15 folds
+
+============================================================
+REGRESSION: Predicting Final_Score
+============================================================
+
+--- Model: RidgeCV ---
+Evaluating RidgeCV (regression)...
+  CV completed in 2.61s
+  R²:     0.9928 (±0.0035) [train: 0.9969]
+  MAE:    1.1197 (±0.2308)
+  RMSE:   1.4696 (±0.3351)
+  MSE:    2.2721
+
+--- Model: RandomForest ---
+Tuning hyperparameters (GridSearchCV) for RandomForest...
+  Tuning completed in 42.28s
+  Best params: {'max_depth': None, 'min_samples_leaf': 1, 'min_samples_split': 3, 'n_estimators': 200}
+  Best CV R²: 0.9934
+Evaluating RandomForest (regression)...
+  CV completed in 0.56s
+  R²:     0.9934 (±0.0061) [train: 0.9993]
+  MAE:    0.9114 (±0.2337)
+  RMSE:   1.2872 (±0.4270)
+  MSE:    1.8392
+
+--- Model: GradientBoosting ---
+Tuning hyperparameters (GridSearchCV) for GradientBoosting...
+  Tuning completed in 13.71s
+  Best params: {'learning_rate': 0.05, 'max_depth': 3, 'min_samples_split': 8, 'n_estimators': 200, 'subsample': 0.8}
+  Best CV R²: 0.9959
+Evaluating GradientBoosting (regression)...
+  CV completed in 0.25s
+  R²:     0.9959 (±0.0043) [train: 1.0000]
+  MAE:    0.4619 (±0.2206)
+  RMSE:   0.8945 (±0.5151)
+  MSE:    1.0654
+
+--- Model: XGBoost ---
+Optuna Bayesian tuning for xgboost (regression) — 75 trials...
+  Optuna tuning completed in 11.25s
+  Best params: {'n_estimators': 250, 'max_depth': 3, 'learning_rate': 0.037374211608310746, 'subsample': 0.9420789172251632, 'colsample_bytree': 0.6492843296263926, 'min_child_weight': 4, 'reg_alpha': 0.02558839029806816, 'reg_lambda': 0.03295384706893414}
+  Best CV score: 0.9943
+  Trials: 75 completed, 0 pruned
+Evaluating XGBoost (regression)...
+  CV completed in 0.17s
+  R²:     0.9943 (±0.0069) [train: 0.9999]
+  MAE:    0.6393 (±0.3044)
+  RMSE:   1.0867 (±0.5874)
+  MSE:    1.5260
+
+--- Model: CatBoost ---
+Optuna Bayesian tuning for catboost (regression) — 75 trials...
+  Optuna tuning completed in 188.20s
+  Best params: {'iterations': 250, 'depth': 4, 'learning_rate': 0.09279265255569656, 'l2_leaf_reg': 0.1097945957149979, 'random_strength': 0.2283106003309253}
+  Best CV score: 0.9969
+  Trials: 75 completed, 0 pruned
+Evaluating CatBoost (regression)...
+  CV completed in 1.23s
+  R²:     0.9969 (±0.0041) [train: 1.0000]
+  MAE:    0.3387 (±0.2709)
+  RMSE:   0.7538 (±0.5315)
+  MSE:    0.8507
+
+Building ensembles from top 3: ['CatBoost', 'GradientBoosting', 'XGBoost']
+Evaluating Ensemble_Voting (regression)...
+  CV completed in 1.57s
+  R²:     0.9962 (±0.0044) [train: 1.0000]
+  MAE:    0.4706 (±0.2566)
+  RMSE:   0.8699 (±0.5204)
+  MSE:    1.0275
+Evaluating Ensemble_Stacking (regression)...
+  CV completed in 6.86s
+  R²:     0.9962 (±0.0040) [train: 0.9997]
+  MAE:    0.5739 (±0.2506)
+  RMSE:   0.9005 (±0.4853)
+  MSE:    1.0464
+
+--- Regression Summary ---
+  CatBoost                R²=0.9969 (±0.0041)  MAE=0.3387  RMSE=0.7538
+  Ensemble_Stacking       R²=0.9962 (±0.0040)  MAE=0.5739  RMSE=0.9005
+  Ensemble_Voting         R²=0.9962 (±0.0044)  MAE=0.4706  RMSE=0.8699
+  GradientBoosting        R²=0.9959 (±0.0043)  MAE=0.4619  RMSE=0.8945
+  XGBoost                 R²=0.9943 (±0.0069)  MAE=0.6393  RMSE=1.0867
+  RandomForest            R²=0.9934 (±0.0061)  MAE=0.9114  RMSE=1.2872
+  RidgeCV                 R²=0.9928 (±0.0035)  MAE=1.1197  RMSE=1.4696
+
+> Best regression: CatBoost (R² = 0.9969)
+Regression training took 269.35s
+
+============================================================
+CLASSIFICATION: Predicting Grade
+============================================================
+
+--- Model: LogisticRegressionCV ---
+Evaluating LogisticRegressionCV (classification)...
+  CV completed in 0.39s
+  Accuracy: 0.9000 (±0.0931) [train: 0.9717]
+  F1 (w):   0.8950 (±0.1048)
+  F1 (macro): 0.8553 (±0.1203)
+  Precision: 0.9217
+  Recall:    0.9000
+
+--- Model: RandomForest ---
+Tuning hyperparameters (GridSearchCV) for RandomForest...
