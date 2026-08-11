@@ -76,7 +76,7 @@ export function Navbar() {
           </div>
 
           <div className="flex items-center gap-2.5">
-            <span className="hidden sm:inline-flex items-center gap-1.5 text-sm text-primary-600 dark:text-γ-400">
+            <span className="hidden sm:inline-flex items-center gap-1.5 text-sm text-primary-600 dark:text-gray-400">
               <span className={`w-2 h-2 rounded-full ${user.role === 'admin' ? 'bg-danger-500' : user.role === 'teacher' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
               {user.name}
               <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full ${roleBadgeColors[user.role] || 'bg-gray-100 text-gray-700'}`}>

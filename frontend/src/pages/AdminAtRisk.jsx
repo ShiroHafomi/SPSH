@@ -256,15 +256,15 @@ export default function AdminAtRisk() {
       <div className="space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="rounded-2xl p-6 border bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl animate-pulse">
-              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-4" />
-              <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/2" />
+            <div key={i} className="card-clay p-6">
+              <div className="skeleton h-4 w-3/4 mb-4" />
+              <div className="skeleton h-8 w-1/2" />
             </div>
           ))}
         </div>
-        <div className="rounded-2xl p-6 border bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl animate-pulse h-64">
-          <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" />
-          <div className="h-full bg-gray-200 dark:bg-gray-700 rounded" />
+        <div className="card-clay p-6">
+          <div className="skeleton h-6 w-1/3 mb-4" />
+          <div className="skeleton" style={{ height: '232px' }} />
         </div>
       </div>
     );
@@ -348,7 +348,7 @@ export default function AdminAtRisk() {
 
       {/* Filter Sidebar */}
       {showFilters && (
-        <div className="rounded-2xl p-4 border bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl shadow-clay-sm animate-slide-down">
+        <div className="card-clay p-4 animate-slide-down">
           <div className="flex flex-col sm:flex-row gap-4 mb-4">
             <SelectFilter label="Grade" value={filters.grade} options={GRADE_OPTIONS} onChange={(v) => handleFilterChange('grade', v)} />
             <SelectFilter label={t('admin.riskLevel')} value={filters.risk_level} options={RISK_LEVELS} onChange={(v) => handleFilterChange('risk_level', v)} />
@@ -364,7 +364,7 @@ export default function AdminAtRisk() {
 
       {/* Threshold Controls Sidebar */}
       {showThresholds && (
-        <div className="rounded-2xl p-4 border bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl shadow-clay-sm animate-slide-down">
+        <div className="card-clay p-4 animate-slide-down">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-primary-950 dark:text-gray-100">Risk Thresholds</h3>
             <button onClick={clearThresholds} className="text-xs text-primary-600 dark:text-primary-400 hover:underline">
@@ -431,7 +431,7 @@ export default function AdminAtRisk() {
       )}
 
       {/* At-Risk Students Table */}
-      <div className="rounded-2xl border bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl overflow-hidden shadow-clay-sm">
+      <div className="card-clay overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-primary-50 dark:bg-gray-900/50 border-b border-primary-100 dark:border-gray-800">

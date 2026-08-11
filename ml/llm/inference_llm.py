@@ -168,7 +168,7 @@ def main():
                 profile[field] = val
 
         if not profile:
-            print("❌ No profile provided. Use --profile, --stdin, or CLI args.")
+            print(" No profile provided. Use --profile, --stdin, or CLI args.")
             print("   Example: py inference_llm.py --profile student_example.json")
             sys.exit(1)
 

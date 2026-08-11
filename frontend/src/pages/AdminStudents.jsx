@@ -135,7 +135,8 @@ export default function AdminStudents() {
       });
 
       const data = await api.get(`/admin/students?${params.toString()}`);
-      setStudents(data.students || []);
+      // Backend apiAdminListStudents returns { rows, total, ... }; tolerate either key.
+      setStudents(data.rows || data.students || []);
       setTotal(data.total || 0);
       if (data.filterOptions) {
         setFilterOptions(data.filterOptions);
@@ -312,9 +313,9 @@ export default function AdminStudents() {
   if (loading) {
     return (
       <div className="space-y-4">
-        <div className="h-12 bg-gray-200 dark:bg-gray-700 rounded-xl animate-pulse" />
+        <div className="h-12 skeleton" />
         {[...Array(5)].map((_, i) => (
-          <div key={i} className="h-16 bg-gray-200 dark:bg-gray-700 rounded-xl animate-pulse" />
+          <div key={i} className="h-16 skeleton" />
         ))}
       </div>
     );
@@ -386,7 +387,7 @@ export default function AdminStudents() {
 
       {/* Filter Sidebar */}
       {showFilters && (
-        <div className="rounded-2xl p-4 border bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl shadow-clay-sm animate-slide-down">
+        <div className="card-clay p-4 animate-slide-down">
           <div className="flex flex-col sm:flex-row gap-4 mb-4">
             <SelectFilter label="Grade" value={filters.grade} options={filterOptions.grades?.length ? filterOptions.grades : GRADE_OPTIONS} onChange={(v) => handleFilterChange('grade', v)} />
             <SelectFilter label="Gender" value={filters.gender} options={filterOptions.genders?.length ? filterOptions.genders : GENDER_OPTIONS} onChange={(v) => handleFilterChange('gender', v)} />
@@ -404,7 +405,7 @@ export default function AdminStudents() {
       )}
 
       {/* Student Table */}
-      <div className="rounded-2xl border bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl overflow-hidden shadow-clay-sm">
+      <div className="card-clay overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-primary-50 dark:bg-gray-900/50 border-b border-primary-100 dark:border-gray-800">

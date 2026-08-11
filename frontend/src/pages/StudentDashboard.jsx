@@ -5,6 +5,7 @@ import { useFlash } from '../components/FlashProvider';
 import { useLanguage } from '../hooks/useLanguage';
 import { api } from '../api';
 import { renderIcon } from '../components/IconMap';
+import { GRADE_COLORS } from '../utils/chartTheme';
 
 export default function StudentDashboard() {
   const { user } = useAuth();
@@ -259,16 +260,14 @@ export default function StudentDashboard() {
               </p>
               <div className="mt-3 h-2 bg-primary-100 dark:bg-gray-800 rounded-full overflow-hidden">
                 <div
-                  className="h-full rounded-full transition-all duration-300"
-                  style={{
-                    width: `${profile.attendance_percent}%`,
-                    backgroundColor:
-                      profile.attendance_percent >= 75
-                        ? 'rgb(16, 185, 129)'
-                        : profile.attendance_percent >= 60
-                        ? 'rgb(245, 158, 11)'
-                        : 'rgb(239, 68, 68)',
-                  }}
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    profile.attendance_percent >= 75
+                      ? 'bg-success-500'
+                      : profile.attendance_percent >= 60
+                      ? 'bg-warning-500'
+                      : 'bg-danger-500'
+                  }`}
+                  style={{ width: `${profile.attendance_percent}%` }}
                 />
               </div>
               <p className="text-sm text-primary-400 dark:text-gray-500 mt-1">
@@ -419,16 +418,7 @@ export default function StudentDashboard() {
                                   className="h-full rounded-full transition-all duration-500"
                                   style={{
                                     width: `${prob * 100}%`,
-                                    backgroundColor:
-                                      grade === 'A'
-                                        ? 'rgb(16, 185, 129)'
-                                      : grade === 'B'
-                                        ? 'rgb(56, 189, 248)'
-                                      : grade === 'C'
-                                        ? 'rgb(245, 158, 11)'
-                                      : grade === 'D'
-                                        ? 'rgb(251, 146, 60)'
-                                        : 'rgb(239, 68, 68)',
+                                    backgroundColor: (GRADE_COLORS[grade] || {}).solid || 'rgb(148,163,184)',
                                   }}
                                 />
                               </div>

@@ -18,7 +18,7 @@ import {
 
 function FeatureCard({ title, description, icon: Icon, actionLabel, onAction, loading, children, className = '' }) {
   return (
-    <div className={`rounded-2xl p-6 border bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl shadow-clay-sm hover:shadow-clay-md transition-shadow ${className}`}>
+    <div className={`card-clay p-6 hover:shadow-clay-md ${className}`}>
       <div className="flex items-start gap-4">
         <div className="w-12 h-12 rounded-xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center flex-shrink-0">
           <Icon className="w-6 h-6 text-violet-600 dark:text-violet-400" />
@@ -45,7 +45,7 @@ function FeatureCard({ title, description, icon: Icon, actionLabel, onAction, lo
 
 function ResultCard({ title, content, loading, onCopy, copied, t }) {
   return (
-    <div className="rounded-2xl p-6 border bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl shadow-clay-sm">
+    <div className="card-clay p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100">{title}</h3>
         <button
@@ -306,7 +306,7 @@ export default function AdminAITools() {
       </div>
 
       {/* Student Lookup Helper */}
-      <div className="rounded-2xl p-6 border bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl shadow-clay-sm">
+      <div className="card-clay p-6">
         <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-4 flex items-center gap-2">
           <Eye className="w-5 h-5" />
           {t('admin.quickLookup')}
@@ -372,7 +372,7 @@ export default function AdminAITools() {
       </div>
 
       {/* Usage Guidelines */}
-      <details className="rounded-2xl border bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl shadow-clay-sm group">
+      <details className="card-clay group">
         <summary className="p-6 cursor-pointer list-none flex items-center gap-3">
           <Zap className="w-5 h-5 text-violet-600 dark:text-violet-400" />
           <span className="font-semibold text-primary-950 dark:text-gray-100">{t('admin.aiGuidelines')}</span>

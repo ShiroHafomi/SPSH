@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api, ApiError } from '../api';
 import { useFlash } from '../components/FlashProvider';
+import { useLanguage } from '../hooks/useLanguage';
 import { SkeletonCard } from '../components/Skeleton';
 import { renderIcon } from '../components/IconMap';
 
@@ -17,20 +18,26 @@ const DEFAULT_PROFILE = {
   part_time_job: 'No',
 };
 
+// Grade badge / bar-fill tokens — design-system backed, dark-mode aware.
+// Mirrors the .grade-a…grade-f semantic hues used across the app.
 const GRADE_COLORS = {
-  A: 'bg-green-500 text-white',
-  B: 'bg-blue-500 text-white',
-  C: 'bg-yellow-500 text-white',
+  A: 'bg-success-500 text-white',
+  B: 'bg-sky-500 text-white',
+  C: 'bg-warning-500 text-white',
   D: 'bg-orange-500 text-white',
-  F: 'bg-red-500 text-white',
+  F: 'bg-danger-500 text-white',
 };
 
 const SEVERITY_COLORS = {
-  success: 'border-green-500 bg-green-50 dark:bg-green-900/30',
-  warning: 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/30',
-  danger: 'border-red-500 bg-red-50 dark:bg-red-900/30',
-  info: 'border-blue-500 bg-blue-50 dark:bg-blue-900/30',
+  success: 'border-success-500 bg-success-50 dark:bg-success-950/30',
+  warning: 'border-warning-500 bg-warning-50 dark:bg-warning-950/30',
+  danger: 'border-danger-500 bg-danger-50 dark:bg-danger-950/30',
+  info: 'border-primary-500 bg-primary-50 dark:bg-primary-950/30',
 };
+
+export default function Predictor() {
+  const { addFlash } = useFlash();
+  const { t } = useLanguage();
 
 export default function Predictor() {
   const { addFlash } = useFlash();
@@ -83,10 +90,10 @@ export default function Predictor() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-primary-950 dark:text-gray-100">
-            AI Academic Counselor
+            {t('predictor.title')}
           </h2>
           <p className="text-sm text-primary-400 dark:text-gray-500 mt-1">
-            Adjust your study profile below and see how it affects your predicted performance.
+            {t('predictor.subtitle')}
           </p>
         </div>
         <label className="flex items-center gap-2 cursor-pointer select-none">

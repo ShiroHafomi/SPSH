@@ -40,18 +40,7 @@ export default function Dashboard() {
   const [chartData, setChartData] = useState(null);
   const [kpis, setKpis] = useState([]);
   const [atRisk, setAtRisk] = useState(null);
-  const [isDark, setIsDark] = useState(false);
-
-  // Listen for dark mode changes
-  useEffect(() => {
-    const darkMode = document.documentElement.classList.contains('dark');
-    setIsDark(darkMode);
-    const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains('dark'));
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
+  const { isDark } = useTheme();
 
   useEffect(() => {
     let mounted = true;

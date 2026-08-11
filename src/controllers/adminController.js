@@ -283,8 +283,8 @@ async function apiAdminAnalytics(req, res) {
       FROM users
     `);
 
-    // Get student stats
-    const studentStats = await studentService.getAdminAnalytics();
+    // Student analytics: kpis + charts + filterOptions (shape the frontend reads)
+    const studentAnalytics = await studentService.getAdminAnalytics();
 
     // Get recent login activity
     const [recentLogins] = await pool.query(`
@@ -295,9 +295,14 @@ async function apiAdminAnalytics(req, res) {
       ORDER BY date DESC
     `);
 
+    // Spread studentAnalytics so kpis/charts/filterOptions live at the top level
+    // (matches AdminDashboard.jsx: `const { kpis, charts } = analytics`).
+    // userStats/recentLogins kept alongside for any other consumers; `studentStats`
+    // retained as an alias so the old response shape stays a (non-breaking) superset.
     res.json({
+      ...studentAnalytics,
+      studentStats: studentAnalytics,
       userStats: userStatsRows[0] || {},
-      studentStats,
       recentLogins,
     });
   } catch (err) {

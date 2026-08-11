@@ -2,10 +2,9 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './hooks/useAuth';
 import { ThemeProvider } from './hooks/useTheme';
 import { LanguageProvider } from './hooks/useLanguage';
-import { Navbar } from './components/Navbar';
-import { FlashProvider, useFlash } from './components/FlashProvider';
-import { FlashContainer } from './components/FlashMessage';
+import { FlashProvider } from './components/FlashProvider';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { MainLayout } from './components/MainLayout';
 import { AdminLayout } from './components/AdminLayout';
 import { TeacherLayout } from './components/TeacherLayout';
 import { StudentLayout } from './components/StudentLayout';
@@ -23,103 +22,86 @@ import AdminStudents from './pages/AdminStudents';
 import AdminAtRisk from './pages/AdminAtRisk';
 import AdminAITools from './pages/AdminAITools';
 
-function FlashArea() {
-  const { messages, removeFlash } = useFlash();
-  return <FlashContainer messages={messages} onRemove={(i) => removeFlash(messages[i].id)} />;
-}
-
+/**
+ * Routing map
+ *
+ * Each role (admin/teacher/student) renders under its own layout (sidebar +
+ * header) and must NOT also receive the shared floating <Navbar/> — that was
+ * the original double-navigation bug. The shared (non-role) routes render
+ * under <MainLayout/>, which owns the floating Navbar + padded content column.
+ * Login is public and full-screen (no navbar).
+ */
 function App() {
   return (
     <AuthProvider>
       <ThemeProvider>
         <LanguageProvider>
           <FlashProvider>
-            <div className="min-h-screen bg-primary-50 dark:bg-gray-950 text-primary-950 dark:text-gray-100 transition-colors">
-              <Navbar />
-              <main id="app-content" className="pt-24 pb-8">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                  <FlashArea />
-                  <Routes>
-                    {/* Public routes */}
-                    <Route path="/login" element={<Login />} />
-                    {/* <Route path="/register" element={<Register />} /> */} {/* Disabled - Admin only creates users */}
+            <Routes>
+              {/* Public routes (full-screen) */}
+              <Route path="/login" element={<Login />} />
+              {/* <Route path="/register" element={<Register />} /> */} {/* Disabled - Admin only creates users */}
 
-                    {/* Admin routes - Admin only */}
-                    <Route element={
-                      <ProtectedRoute roles={['admin']}>
-                        <AdminLayout />
-                      </ProtectedRoute>
-                    }>
-                      <Route path="/admin" element={<AdminDashboard />} />
-                      <Route path="/admin/students" element={<AdminStudents />} />
-                      <Route path="/admin/at-risk" element={<AdminAtRisk />} />
-                      <Route path="/admin/ai-tools" element={<AdminAITools />} />
-                      <Route path="/admin/users" element={<AdminUsers />} />
-                    </Route>
+              {/* Admin routes - Admin only (own sidebar + header) */}
+              <Route element={
+                <ProtectedRoute roles={['admin']}>
+                  <AdminLayout />
+                </ProtectedRoute>
+              }>
+                <Route path="/admin" element={<AdminDashboard />} />
+                <Route path="/admin/students" element={<AdminStudents />} />
+                <Route path="/admin/at-risk" element={<AdminAtRisk />} />
+                <Route path="/admin/ai-tools" element={<AdminAITools />} />
+                <Route path="/admin/users" element={<AdminUsers />} />
+              </Route>
 
-                    {/* Teacher routes - Teacher or Admin */}
-                    <Route element={
-                      <ProtectedRoute roles={['teacher', 'admin']}>
-                        <TeacherLayout />
-                      </ProtectedRoute>
-                    }>
-                      <Route path="/teacher" element={<TeacherDashboard />} />
-                      <Route path="/teacher/students" element={<Students />} />
-                      <Route path="/teacher/students/new" element={<StudentForm />} />
-                      <Route path="/teacher/students/:id/edit" element={<StudentForm />} />
-                      <Route path="/teacher/at-risk" element={<AdminAtRisk />} />
-                    </Route>
+              {/* Teacher routes - Teacher or Admin (own sidebar + header) */}
+              <Route element={
+                <ProtectedRoute roles={['teacher', 'admin']}>
+                  <TeacherLayout />
+                </ProtectedRoute>
+              }>
+                <Route path="/teacher" element={<TeacherDashboard />} />
+                <Route path="/teacher/students" element={<Students />} />
+                <Route path="/teacher/students/new" element={<StudentForm />} />
+                <Route path="/teacher/students/:id/edit" element={<StudentForm />} />
+                <Route path="/teacher/at-risk" element={<AdminAtRisk />} />
+              </Route>
 
-                    {/* Student routes - Student only */}
-                    <Route element={
-                      <ProtectedRoute roles={['student']}>
-                        <StudentLayout />
-                      </ProtectedRoute>
-                    }>
-                      <Route path="/student" element={<StudentDashboard />} />
-                    </Route>
+              {/* Student routes - Student only (own sidebar + header) */}
+              <Route element={
+                <ProtectedRoute roles={['student']}>
+                  <StudentLayout />
+                </ProtectedRoute>
+              }>
+                <Route path="/student" element={<StudentDashboard />} />
+              </Route>
 
-                    {/* Legacy/Shared routes - Any authenticated user */}
-                    <Route element={
-                      <ProtectedRoute>
-                        <Dashboard />
-                      </ProtectedRoute>
-                    }>
-                      <Route path="/dashboard" element={<Dashboard />} />
-                    </Route>
+              {/* Shared routes - any authenticated user (floating Navbar via MainLayout) */}
+              <Route element={
+                <ProtectedRoute>
+                  <MainLayout />
+                </ProtectedRoute>
+              }>
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/predictor" element={<Predictor />} />
+              </Route>
 
-                    <Route element={
-                      <ProtectedRoute roles={['teacher', 'admin']}>
-                        <Students />
-                      </ProtectedRoute>
-                    }>
-                      <Route path="/students" element={<Students />} />
-                    </Route>
+              {/* Shared, teacher/admin-only routes (still float under MainLayout) */}
+              <Route element={
+                <ProtectedRoute roles={['teacher', 'admin']}>
+                  <MainLayout />
+                </ProtectedRoute>
+              }>
+                <Route path="/students" element={<Students />} />
+                <Route path="/students/new" element={<StudentForm />} />
+                <Route path="/students/:id/edit" element={<StudentForm />} />
+              </Route>
 
-                    <Route element={
-                      <ProtectedRoute roles={['teacher', 'admin']}>
-                        <StudentForm />
-                      </ProtectedRoute>
-                    }>
-                      <Route path="/students/new" element={<StudentForm />} />
-                      <Route path="/students/:id/edit" element={<StudentForm />} />
-                    </Route>
-
-                    <Route element={
-                      <ProtectedRoute>
-                        <Predictor />
-                      </ProtectedRoute>
-                    }>
-                      <Route path="/predictor" element={<Predictor />} />
-                    </Route>
-
-                    {/* Default redirects based on role */}
-                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                    <Route path="*" element={<Navigate to="/dashboard" replace />} />
-                  </Routes>
-                </div>
-              </main>
-            </div>
+              {/* Default redirects based on role */}
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
           </FlashProvider>
         </LanguageProvider>
       </ThemeProvider>
