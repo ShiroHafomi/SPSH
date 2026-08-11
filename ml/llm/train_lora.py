@@ -10,9 +10,9 @@ Hardware requirements:
     - Or: --device cpu (slow, but works without GPU)
 
 Usage:
-    python train_lora.py                          # Default: Llama-3.2-3B, QLoRA 4-bit
+    python train_lora.py                          # Default: Llama-3.2-3B, QLoRA 4-bit (train.jsonl + val.jsonl)
     python train_lora.py --model meta-llama/Llama-3.2-3B-Instruct
-    python train_lora.py --r 8 --lora_alpha 16    # Smaller adapter
+    python train_lora.py --rank 8 --lora_alpha 16    # Smaller adapter
     python train_lora.py --device cpu              # CPU-only (very slow)
 """
 
@@ -39,21 +39,27 @@ def get_training_config(args):
     from peft import LoraConfig, get_peft_model, TaskType, prepare_model_for_kbit_training
 
     # ── Quantization (QLoRA) ──────────────────────────────────────────────
+    use_cuda = args.device == "cuda" and torch.cuda.is_available()
+    use_bf16 = use_cuda and getattr(torch.cuda, "is_bf16_supported", lambda: False)()
+
     if args.device == "cpu":
         bnb_config = None
         torch_dtype = torch.float32
-        print("⚠️  Running on CPU — no quantization (expect very slow training)")
+        print("  Running on CPU — no quantization (expect very slow training)")
     else:
+        compute_dtype = torch.bfloat16 if use_bf16 else torch.float16
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_compute_dtype=compute_dtype,
             bnb_4bit_use_double_quant=True,
         )
-        torch_dtype = torch.bfloat16
+        torch_dtype = compute_dtype
 
     # ── Tokenizer ─────────────────────────────────────────────────────────
-    tokenizer = AutoTokenizer.from_pretrained(args.model)
+    tokenizer = AutoTokenizer.from_pretrained(
+        args.model, trust_remote_code=args.trust_remote_code
+    )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -77,11 +83,21 @@ def get_training_config(args):
         model = prepare_model_for_kbit_training(model)
 
     # ── LoRA Config ───────────────────────────────────────────────────────
+    target_modules = [module.strip() for module in args.target_modules.split(",") if module.strip()]
+    available_module_names = {
+        name.rsplit(".", 1)[-1]
+        for name, _ in model.named_modules()
+    }
+    missing_modules = [module for module in target_modules if module not in available_module_names]
+    if missing_modules:
+        print(f" Target module(s) not found in model: {', '.join(missing_modules)}")
+        sys.exit(1)
+
     lora_config = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
         r=args.rank,
         lora_alpha=args.lora_alpha,
-        target_modules=args.target_modules.split(","),
+        target_modules=target_modules,
         lora_dropout=args.lora_dropout,
         bias="none",
     )
@@ -99,10 +115,11 @@ def get_training_config(args):
         lr_scheduler_type="cosine",
         warmup_ratio=args.warmup_ratio,
         weight_decay=args.weight_decay,
-        fp16=False,
-        bf16=(args.device != "cpu"),
+        fp16=use_cuda and not use_bf16,
+        bf16=use_bf16,
         logging_steps=args.logging_steps,
-        eval_strategy="steps",
+        evaluation_strategy="steps",
+        save_strategy="steps",
         eval_steps=args.eval_steps,
         save_steps=args.save_steps,
         load_best_model_at_end=True,
@@ -161,18 +178,39 @@ def main():
 
     args = parser.parse_args()
 
+    if args.device == "cuda" and not torch_is_available():
+        print(" CUDA was requested, but no CUDA-capable PyTorch device is available.")
+        sys.exit(1)
+
     # ── Validate data ─────────────────────────────────────────────────────
     if not os.path.isfile(args.train_file):
-        print(f"❌ Training file not found: {args.train_file}")
+        print(f" Training file not found: {args.train_file}")
         print("   Run `python prepare_data.py` first to generate the dataset.")
+        sys.exit(1)
+
+    if not os.path.isfile(args.val_file):
+        print(f" Validation file not found: {args.val_file}")
+        print("   Run `python prepare_data.py` first to generate the train/val split.")
+        sys.exit(1)
+
+    if os.path.abspath(args.train_file) == os.path.abspath(args.val_file):
+        print(" Training and validation files must be different.")
         sys.exit(1)
 
     with open(args.train_file, encoding="utf-8") as f:
         train_count = sum(1 for _ in f)
-    print(f"📂 Training examples: {train_count}")
+    with open(args.val_file, encoding="utf-8") as f:
+        val_count = sum(1 for _ in f)
+
+    if train_count == 0 or val_count == 0:
+        print(" Training and validation files must each contain at least one example.")
+        sys.exit(1)
+
+    print(f" Training examples: {train_count}")
+    print(f" Validation examples: {val_count}")
 
     # ── Validate target_modules against model ────────────────────────────
-    print(f"\n🤖 Loading model: {args.model}")
+    print(f"\n Loading model: {args.model}")
     print(f"   LoRA: rank={args.rank}, alpha={args.lora_alpha}, dropout={args.lora_dropout}")
     print(f"   Device: {args.device}")
     print(f"   Epochs: {args.epochs}, batch_size={args.batch_size}, grad_accum={args.gradient_accumulation}")
@@ -185,7 +223,7 @@ def main():
 
     dataset = load_dataset("json", data_files={
         "train": args.train_file,
-        "eval": args.val_file if os.path.isfile(args.val_file) else args.train_file,
+        "eval": args.val_file,
     })
 
     def format_prompt(example):
@@ -211,7 +249,7 @@ def main():
         max_seq_length=args.max_seq_len,
     )
 
-    print("\n🚀 Starting training...")
+    print("\n Starting training...")
     trainer.train()
 
     # ── Save adapter ─────────────────────────────────────────────────
@@ -232,7 +270,7 @@ def main():
     with open(os.path.join(ADAPTER_DIR, "training_config.json"), "w") as f:
         json.dump(config, f, indent=2)
 
-    print(f"\n✅ Adapter saved to: {ADAPTER_DIR}")
+    print(f"\n Adapter saved to: {ADAPTER_DIR}")
     print(f"   Next step: python inference_llm.py --profile student.json")
 
 

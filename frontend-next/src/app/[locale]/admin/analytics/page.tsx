@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BarChart2, Users, GraduationCap, TrendingUp, AlertTriangle, Shield, Activity, Download, Bot } from 'lucide-react';
+import { BarChart2, Users, GraduationCap, TrendingUp, AlertTriangle, Shield, Activity, Download, Bot, Brain, Cpu, Database, Calendar, Clock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -56,12 +56,55 @@ interface User {
   created_at: string;
 }
 
+interface MlHealthFileStats {
+  sizeBytes?: number;
+  sizeKB?: number;
+  modifiedAt?: string;
+  error?: string;
+}
+
+interface MlHealth {
+  status: 'healthy' | 'warning' | 'error' | 'unknown';
+  issues: string[];
+  lastTrainingAt: string | null;
+  modelAgeDays: number | null;
+  dataInfo: {
+    n_samples: number;
+    n_features: number;
+    target_reg_range: [number, number];
+    target_clf_distribution: Record<string, number>;
+    feature_names: string[];
+  } | null;
+  regression: {
+    bestModel: string;
+    cvR2: number | null;
+    cvRMSE: number | null;
+    trainR2: number | null;
+    overfitGap: number;
+  } | null;
+  classification: {
+    bestModel: string;
+    cvAccuracy: number | null;
+    cvF1Weighted: number | null;
+    trainAccuracy: number | null;
+    overfitGap: number;
+    gradeMap: Record<string, number> | null;
+  } | null;
+  cvStrategy: string | null;
+  trainingDurationSec: number | null;
+  fileStats: Record<string, MlHealthFileStats>;
+  totalModelSizeMB: number;
+}
+
 export default function AdminAnalyticsPage() {
   const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null);
+  const [mlHealth, setMlHealth] = useState<MlHealth | null>(null);
+  const [mlHealthLoading, setMlHealthLoading] = useState(false);
+  const [mlHealthError, setMlHealthError] = useState('');
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'audit'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'audit' | 'ml-health'>('overview');
   const [error, setError] = useState('');
 
   // Filters
@@ -77,6 +120,7 @@ export default function AdminAnalyticsPage() {
   useEffect(() => {
     if (activeTab === 'audit') fetchAuditLogs();
     if (activeTab === 'users') fetchUsers();
+    if (activeTab === 'ml-health') fetchMlHealth();
   }, [activeTab, auditPage, auditActionFilter, userSearch, userRoleFilter]);
 
   const fetchAnalytics = async () => {
@@ -111,6 +155,24 @@ export default function AdminAnalyticsPage() {
       setAuditLogs(data.logs);
     } catch (err) {
       console.error('Failed to fetch audit logs:', err);
+    }
+  };
+
+  const fetchMlHealth = async () => {
+    setMlHealthLoading(true);
+    setMlHealthError('');
+    try {
+      const token = Cookies.get('access_token');
+      const res = await fetch('http://localhost:3001/api/admin/ml-health', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Failed to fetch ML health');
+      const data = await res.json();
+      setMlHealth(data);
+    } catch (err) {
+      setMlHealthError(err instanceof Error ? err.message : 'Failed to load ML health');
+    } finally {
+      setMlHealthLoading(false);
     }
   };
 
@@ -214,8 +276,8 @@ export default function AdminAnalyticsPage() {
             <p className="text-muted-foreground mt-1">System-wide overview and management</p>
           </div>
 
-          <Tabs value={activeTab} onValueChange={(value: string) => setActiveTab(value as 'overview' | 'users' | 'audit')} className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+          <Tabs value={activeTab} onValueChange={(value: string) => setActiveTab(value as 'overview' | 'users' | 'audit' | 'ml-health')} className="w-full">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="overview">
                 <BarChart2 className="mr-2 h-4 w-4" />
                 Overview
@@ -227,6 +289,10 @@ export default function AdminAnalyticsPage() {
               <TabsTrigger value="audit">
                 <Activity className="mr-2 h-4 w-4" />
                 Audit Logs
+              </TabsTrigger>
+              <TabsTrigger value="ml-health">
+                <Brain className="mr-2 h-4 w-4" />
+                ML Health
               </TabsTrigger>
             </TabsList>
 
@@ -551,6 +617,290 @@ export default function AdminAnalyticsPage() {
                   Next
                 </Button>
               </div>
+            </TabsContent>
+
+            {/* ML Health Tab */}
+            <TabsContent value="ml-health" className="space-y-6">
+              {mlHealthLoading ? (
+                <div className="animate-pulse space-y-6">
+                  <div className="h-8 w-48 bg-muted rounded" />
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    {[1, 2, 3, 4].map(i => (
+                      <div key={i} className="h-24 bg-card border rounded-lg" />
+                    ))}
+                  </div>
+                  <div className="h-32 bg-card border rounded-lg" />
+                </div>
+              ) : mlHealthError ? (
+                <Card>
+                  <CardContent className="pt-8 text-center">
+                    <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">Failed to load ML health</h3>
+                    <p className="text-muted-foreground mb-4">{mlHealthError}</p>
+                    <Button variant="outline" onClick={fetchMlHealth}>
+                      Retry
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : mlHealth ? (
+                <>
+                  {/* Status Overview */}
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                    <div>
+                      <h2 className="text-2xl font-bold">ML Model Health</h2>
+                      <p className="text-muted-foreground">Monitor model performance, freshness, and training status</p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <Badge
+                        variant={
+                          mlHealth.status === 'healthy' ? 'success' :
+                          mlHealth.status === 'warning' ? 'warning' :
+                          mlHealth.status === 'error' ? 'destructive' : 'secondary'
+                        }
+                        className="text-base px-4 py-2"
+                      >
+                        {mlHealth.status === 'healthy' && '✓ Healthy'}
+                        {mlHealth.status === 'warning' && '⚠ Warning'}
+                        {mlHealth.status === 'error' && '✗ Error'}
+                        {mlHealth.status === 'unknown' && '? Unknown'}
+                      </Badge>
+                      <Button variant="outline" onClick={fetchMlHealth}>
+                        Refresh
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Issues */}
+                  {mlHealth.issues.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <AlertTriangle className="h-5 w-5 text-destructive" />
+                          Issues & Recommendations
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ul className="space-y-2">
+                          {mlHealth.issues.map((issue, idx) => (
+                            <li key={idx} className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <AlertTriangle className="h-4 w-4" />
+                              {issue}
+                            </li>
+                          ))}
+                        </ul>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Key Metrics */}
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Last Training</CardTitle>
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">{mlHealth.lastTrainingAt ? new Date(mlHealth.lastTrainingAt).toLocaleDateString() : 'N/A'}</div>
+                        <p className="text-xs text-muted-foreground">
+                          {mlHealth.modelAgeDays !== null ? `${mlHealth.modelAgeDays} days ago` : 'Unknown'}
+                        </p>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Training Samples</CardTitle>
+                        <Database className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">{mlHealth.dataInfo?.n_samples || 'N/A'}</div>
+                        <p className="text-xs text-muted-foreground">Training records</p>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Model Size</CardTitle>
+                        <Cpu className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">{mlHealth.totalModelSizeMB || 0} MB</div>
+                        <p className="text-xs text-muted-foreground">Total artifacts</p>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Training Duration</CardTitle>
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">
+                          {mlHealth.trainingDurationSec ? `${Math.round(mlHealth.trainingDurationSec / 60)} min` : 'N/A'}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Last training run</p>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">CV Strategy</CardTitle>
+                        <Bot className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-sm font-bold">{mlHealth.cvStrategy || 'N/A'}</div>
+                        <p className="text-xs text-muted-foreground">Cross-validation method</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Regression Metrics */}
+                  {mlHealth.regression && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <TrendingUp className="h-5 w-5 text-primary" />
+                          Regression Model ({mlHealth.regression.bestModel})
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid gap-4 md:grid-cols-4">
+                          <div>
+                            <p className="text-xs text-muted-foreground">CV R²</p>
+                            <p className="text-2xl font-bold text-primary">
+                              {mlHealth.regression.cvR2 ? mlHealth.regression.cvR2.toFixed(4) : 'N/A'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">CV RMSE</p>
+                            <p className="text-2xl font-bold">
+                              {mlHealth.regression.cvRMSE ? mlHealth.regression.cvRMSE.toFixed(2) : 'N/A'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Train R²</p>
+                            <p className="text-2xl font-bold">
+                              {mlHealth.regression.trainR2 ? mlHealth.regression.trainR2.toFixed(4) : 'N/A'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Overfit Gap</p>
+                            <p className={`text-2xl font-bold ${mlHealth.regression.overfitGap > 0.05 ? 'text-destructive' : 'text-green-600'}`}>
+                              {(mlHealth.regression.overfitGap * 100).toFixed(2)}%
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Classification Metrics */}
+                  {mlHealth.classification && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Brain className="h-5 w-5 text-blue-600" />
+                          Classification Model ({mlHealth.classification.bestModel})
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid gap-4 md:grid-cols-5">
+                          <div>
+                            <p className="text-xs text-muted-foreground">CV Accuracy</p>
+                            <p className="text-2xl font-bold text-blue-600">
+                              {mlHealth.classification.cvAccuracy ? (mlHealth.classification.cvAccuracy * 100).toFixed(1) + '%' : 'N/A'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">CV F1 (Weighted)</p>
+                            <p className="text-2xl font-bold">
+                              {mlHealth.classification.cvF1Weighted ? (mlHealth.classification.cvF1Weighted * 100).toFixed(1) + '%' : 'N/A'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Train Accuracy</p>
+                            <p className="text-2xl font-bold">
+                              {mlHealth.classification.trainAccuracy ? (mlHealth.classification.trainAccuracy * 100).toFixed(1) + '%' : 'N/A'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Overfit Gap</p>
+                            <p className={`text-2xl font-bold ${mlHealth.classification.overfitGap > 0.15 ? 'text-destructive' : 'text-green-600'}`}>
+                              {(mlHealth.classification.overfitGap * 100).toFixed(1)}%
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Grade Map</p>
+                            <div className="flex flex-wrap gap-1">
+                              {mlHealth.classification.gradeMap && Object.entries(mlHealth.classification.gradeMap).map(([grade, idx]) => (
+                                <Badge key={grade} variant={getGradeVariant(grade)} className="text-xs">
+                                  {grade}={idx}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Model Files */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Database className="h-5 w-5 text-muted-foreground" />
+                        Model Artifacts
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>File</TableHead>
+                            <TableHead className="text-right">Size</TableHead>
+                            <TableHead>Modified</TableHead>
+                            <TableHead>Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {Object.entries(mlHealth.fileStats || {}).map(([fileName, stats]) => (
+                            <TableRow key={fileName}>
+                              <TableCell className="font-mono text-sm">{fileName}</TableCell>
+                              <TableCell className="text-right">
+                                {stats.error ? (
+                                  <span className="text-destructive">Missing</span>
+                                ) : (
+                                  `${stats.sizeKB ?? 0} KB`
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {stats.error ? '-' : (stats.modifiedAt ? new Date(stats.modifiedAt).toLocaleString() : '-')}
+                              </TableCell>
+                              <TableCell>
+                                {stats.error ? (
+                                  <Badge variant="destructive">Missing</Badge>
+                                ) : (
+                                  <Badge variant="success">OK</Badge>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                </>
+              ) : (
+                <Card>
+                  <CardContent className="pt-8 text-center">
+                    <Brain className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">No ML health data</h3>
+                    <Button variant="outline" onClick={fetchMlHealth}>
+                      Load ML Health
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
           </Tabs>
         </div>

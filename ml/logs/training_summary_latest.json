@@ -1,19 +1,19 @@
 {
-  "timestamp": "2026-08-05T09:33:27.346440",
-  "log_file": "D:\\Student Performance & Study Habits\\ml\\logs\\train_20260805_093230.log",
+  "timestamp": "2026-08-11T13:36:59.575733",
+  "log_file": "D:\\Student Performance & Study Habits\\ml\\logs\\train_20260811_132650.log",
   "best_regression": {
-    "model": "RidgeCV",
-    "r2_mean": 0.9836488672921402,
-    "r2_std": 0.008533894727658411,
-    "mae_mean": 1.7735796000325332,
-    "rmse_mean": 2.116554132060803
+    "model": "CatBoost",
+    "r2_mean": 0.9968603014164323,
+    "r2_std": 0.0040859517590284816,
+    "mae_mean": 0.3386816491059666,
+    "rmse_mean": 0.7537885876674506
   },
   "best_classification": {
-    "model": "GradientBoosting",
-    "accuracy_mean": 0.8333333333333335,
-    "accuracy_std": 0.07888106377466156,
-    "f1_weighted_mean": 0.8214814814814815,
-    "f1_macro_mean": 0.6987407407407408
+    "model": "RandomForest",
+    "accuracy_mean": 0.9933333333333334,
+    "accuracy_std": 0.024944382578492942,
+    "f1_weighted_mean": 0.9933333333333334,
+    "f1_macro_mean": 0.9911111111111112
   },
-  "total_duration_sec": 56.811230182647705
+  "total_duration_sec": 608.9204127788544
 }

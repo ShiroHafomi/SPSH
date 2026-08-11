@@ -42,6 +42,7 @@ const {
   apiAdminGenerateIntervention,
   apiAdminSummarizeHabits,
   apiAdminAtRisk,
+  apiAdminMlHealth,
 } = require('../controllers/adminController');
 
 // Teacher
@@ -89,6 +90,7 @@ adminRouter.use(requireAuth, requireRole('admin'));
 
 // Analytics
 adminRouter.get('/analytics', apiAdminAnalytics);
+adminRouter.get('/ml-health', apiAdminMlHealth);
 
 // Audit logs
 adminRouter.get('/audit-logs', apiGetAuditLogs);

@@ -24,6 +24,7 @@ import seaborn as sns
 from sklearn.model_selection import (
     cross_val_score,
     RepeatedKFold,
+    RepeatedStratifiedKFold,
     train_test_split,
     GridSearchCV,
     cross_validate,
@@ -1422,20 +1423,28 @@ def main():
     )
 
     # Cross-validation strategy
-    cv = RepeatedKFold(n_splits=5, n_repeats=3, random_state=42)
-    logger.info("CV strategy: RepeatedKFold(n_splits=5, n_repeats=3) = %d folds", 5 * 3)
+    reg_cv = RepeatedKFold(n_splits=5, n_repeats=3, random_state=42)
+    clf_cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=3, random_state=42)
+    logger.info(
+        "Regression CV strategy: RepeatedKFold(n_splits=5, n_repeats=3) = %d folds",
+        5 * 3,
+    )
+    logger.info(
+        "Classification CV strategy: RepeatedStratifiedKFold(n_splits=5, n_repeats=3) = %d folds",
+        5 * 3,
+    )
 
     # Train regression models
     reg_start = time.time()
     (best_reg_name, best_reg_model), reg_results, reg_tuning = train_regression_models(
-        X_transformed, y_reg, cv
+        X_transformed, y_reg, reg_cv
     )
     logger.info("Regression training took %.2fs", time.time() - reg_start)
 
     # Train classification models
     clf_start = time.time()
     (best_clf_name, best_clf_model), clf_results, clf_tuning = (
-        train_classification_models(X_transformed, y_clf, cv)
+        train_classification_models(X_transformed, y_clf, clf_cv)
     )
     logger.info("Classification training took %.2fs", time.time() - clf_start)
 
@@ -1474,7 +1483,10 @@ def main():
             },
             "feature_names": final_feature_names,
         },
-        "cv_strategy": "RepeatedKFold(n_splits=5, n_repeats=3)",
+        "cv_strategy": (
+            "regression: RepeatedKFold(n_splits=5, n_repeats=3); "
+            "classification: RepeatedStratifiedKFold(n_splits=5, n_repeats=3)"
+        ),
         "regression": {
             "best_model": best_reg_name,
             "cv_results": reg_results,

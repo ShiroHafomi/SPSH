@@ -1,17 +1,17 @@
 {
   "/_not-found/page": "app/_not-found/page.js",
   "/page": "app/page.js",
-  "/[locale]/admin/analytics/page": "app/[locale]/admin/analytics/page.js",
-  "/[locale]/admin/at-risk/page": "app/[locale]/admin/at-risk/page.js",
   "/[locale]/admin/students/page": "app/[locale]/admin/students/page.js",
-  "/[locale]/student/profile/page": "app/[locale]/student/profile/page.js",
-  "/[locale]/student/advisor/page": "app/[locale]/student/advisor/page.js",
-  "/[locale]/teacher/ai-counsel/page": "app/[locale]/teacher/ai-counsel/page.js",
+  "/[locale]/admin/analytics/page": "app/[locale]/admin/analytics/page.js",
   "/[locale]/admin/users/page": "app/[locale]/admin/users/page.js",
-  "/[locale]/teacher/analytics/page": "app/[locale]/teacher/analytics/page.js",
+  "/[locale]/student/advisor/page": "app/[locale]/student/advisor/page.js",
+  "/[locale]/admin/at-risk/page": "app/[locale]/admin/at-risk/page.js",
+  "/[locale]/teacher/ai-counsel/page": "app/[locale]/teacher/ai-counsel/page.js",
+  "/[locale]/student/profile/page": "app/[locale]/student/profile/page.js",
   "/[locale]/student/simulator/page": "app/[locale]/student/simulator/page.js",
-  "/[locale]/teacher/students/page": "app/[locale]/teacher/students/page.js",
   "/[locale]/teacher/at-risk/page": "app/[locale]/teacher/at-risk/page.js",
-  "/[locale]/(auth)/login/page": "app/[locale]/(auth)/login/page.js",
-  "/[locale]/dashboard/page": "app/[locale]/dashboard/page.js"
+  "/[locale]/teacher/students/page": "app/[locale]/teacher/students/page.js",
+  "/[locale]/teacher/analytics/page": "app/[locale]/teacher/analytics/page.js",
+  "/[locale]/dashboard/page": "app/[locale]/dashboard/page.js",
+  "/[locale]/(auth)/login/page": "app/[locale]/(auth)/login/page.js"
 }

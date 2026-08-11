@@ -6,6 +6,12 @@ const authService = require('../services/authService');
 const studentService = require('../services/studentService');
 const { logAuditEvent } = require('../services/authService');
 const { pool } = require('../config/db');
+const fs = require('fs').promises;
+const path = require('path');
+
+// Path to ML models and metrics
+const ML_MODELS_DIR = path.join(__dirname, '..', '..', 'ml', 'models');
+const METRICS_FILE = path.join(ML_MODELS_DIR, 'metrics.json');
 
 /**
  * GET /api/admin/users
@@ -495,6 +501,150 @@ async function apiAdminSummarizeHabits(req, res) {
   }
 }
 
+/**
+ * GET /api/admin/ml-health — Get ML model health metrics and training info
+ */
+async function apiAdminMlHealth(req, res) {
+  try {
+    // Read metrics.json
+    let metrics = null;
+    let metricsError = null;
+    try {
+      const metricsContent = await fs.readFile(METRICS_FILE, 'utf-8');
+      metrics = JSON.parse(metricsContent);
+    } catch (err) {
+      metricsError = err.message;
+    }
+
+    // Get model file stats
+    const modelFiles = ['regressor.joblib', 'classifier.joblib', 'preprocessor.joblib', 'metrics.json'];
+    const fileStats = {};
+    let totalSize = 0;
+    let newestTimestamp = null;
+    let oldestTimestamp = null;
+
+    for (const file of modelFiles) {
+      const filePath = path.join(ML_MODELS_DIR, file);
+      try {
+        const stats = await fs.stat(filePath);
+        fileStats[file] = {
+          sizeBytes: stats.size,
+          sizeKB: Math.round(stats.size / 1024),
+          modifiedAt: stats.mtime.toISOString(),
+        };
+        totalSize += stats.size;
+        if (!newestTimestamp || stats.mtime > newestTimestamp) newestTimestamp = stats.mtime;
+        if (!oldestTimestamp || stats.mtime < oldestTimestamp) oldestTimestamp = stats.mtime;
+      } catch (err) {
+        fileStats[file] = { error: 'Not found' };
+      }
+    }
+
+    // Calculate model age in days
+    const modelAgeDays = newestTimestamp ? Math.floor((Date.now() - newestTimestamp.getTime()) / (1000 * 60 * 60 * 24)) : null;
+
+    // Determine overall health status
+    let healthStatus = 'unknown';
+    let healthIssues = [];
+
+    if (metricsError) {
+      healthStatus = 'error';
+      healthIssues.push('Metrics file not found or corrupted');
+    } else if (!metrics) {
+      healthStatus = 'warning';
+      healthIssues.push('No metrics data available');
+    } else {
+      // Check data freshness
+      if (modelAgeDays !== null && modelAgeDays > 30) {
+        healthStatus = healthStatus === 'unknown' ? 'warning' : healthStatus;
+        healthIssues.push(`Models are ${modelAgeDays} days old (retraining recommended)`);
+      } else if (modelAgeDays !== null && modelAgeDays > 7) {
+        healthStatus = healthStatus === 'unknown' ? 'healthy' : healthStatus;
+        healthIssues.push(`Models are ${modelAgeDays} days old`);
+      } else {
+        healthStatus = healthStatus === 'unknown' ? 'healthy' : healthStatus;
+      }
+
+      // Check regression performance
+      if (metrics.regression?.best_model && metrics.regression.cv_results) {
+        const bestReg = metrics.regression.cv_results[metrics.regression.best_model];
+        if (bestReg && bestReg.r2_mean < 0.95) {
+          healthStatus = 'warning';
+          healthIssues.push(`Regression R² (${bestReg.r2_mean.toFixed(3)}) below 0.95`);
+        }
+      }
+
+      // Check classification performance
+      if (metrics.classification?.best_model && metrics.classification.cv_results) {
+        const bestClf = metrics.classification.cv_results[metrics.classification.best_model];
+        if (bestClf && bestClf.accuracy_mean < 0.85) {
+          healthStatus = 'warning';
+          healthIssues.push(`Classification accuracy (${bestClf.accuracy_mean.toFixed(3)}) below 0.85`);
+        }
+        // Check overfitting
+        if (bestClf && bestClf.accuracy_train_mean && bestClf.accuracy_mean) {
+          const overfitGap = bestClf.accuracy_train_mean - bestClf.accuracy_mean;
+          if (overfitGap > 0.15) {
+            healthStatus = healthStatus === 'healthy' ? 'warning' : healthStatus;
+            healthIssues.push(`Classification overfitting detected (gap: ${(overfitGap * 100).toFixed(1)}%)`);
+          }
+        }
+      }
+
+      // Check training data size
+      if (metrics.data_info?.n_samples < 100) {
+        healthStatus = healthStatus === 'healthy' ? 'warning' : healthStatus;
+        healthIssues.push(`Training data small (${metrics.data_info.n_samples} samples)`);
+      }
+    }
+
+    // Check if models exist
+    const hasRegressor = !fileStats['regressor.joblib']?.error;
+    const hasClassifier = !fileStats['classifier.joblib']?.error;
+    const hasPreprocessor = !fileStats['preprocessor.joblib']?.error;
+
+    if (!hasRegressor || !hasClassifier || !hasPreprocessor) {
+      healthStatus = 'error';
+      healthIssues.push('Model files missing');
+    }
+
+    // Last training timestamp
+    const lastTrainingAt = metrics?.timestamp || (newestTimestamp ? newestTimestamp.toISOString() : null);
+
+    res.json({
+      status: healthStatus, // 'healthy' | 'warning' | 'error' | 'unknown'
+      issues: healthIssues,
+      lastTrainingAt,
+      modelAgeDays,
+      dataInfo: metrics?.data_info || null,
+      regression: metrics?.regression ? {
+        bestModel: metrics.regression.best_model,
+        cvR2: metrics.regression.cv_results?.[metrics.regression.best_model]?.r2_mean || null,
+        cvRMSE: metrics.regression.cv_results?.[metrics.regression.best_model]?.rmse_mean || null,
+        trainR2: metrics.regression.cv_results?.[metrics.regression.best_model]?.r2_train_mean || null,
+        overfitGap: (metrics.regression.cv_results?.[metrics.regression.best_model]?.r2_train_mean || 0) -
+                    (metrics.regression.cv_results?.[metrics.regression.best_model]?.r2_mean || 0),
+      } : null,
+      classification: metrics?.classification ? {
+        bestModel: metrics.classification.best_model,
+        cvAccuracy: metrics.classification.cv_results?.[metrics.classification.best_model]?.accuracy_mean || null,
+        cvF1Weighted: metrics.classification.cv_results?.[metrics.classification.best_model]?.f1_weighted_mean || null,
+        trainAccuracy: metrics.classification.cv_results?.[metrics.classification.best_model]?.accuracy_train_mean || null,
+        overfitGap: (metrics.classification.cv_results?.[metrics.classification.best_model]?.accuracy_train_mean || 0) -
+                    (metrics.classification.cv_results?.[metrics.classification.best_model]?.accuracy_mean || 0),
+        gradeMap: metrics.classification.grade_map || null,
+      } : null,
+      cvStrategy: metrics?.cv_strategy || null,
+      trainingDurationSec: metrics?.training_duration_sec || null,
+      fileStats,
+      totalModelSizeMB: Math.round(totalSize / 1024 / 1024 * 100) / 100,
+    });
+  } catch (err) {
+    console.error('[apiAdminMlHealth]', err);
+    res.status(500).json({ error: 'Failed to load ML health metrics.' });
+  }
+}
+
 module.exports = {
   apiListUsers,
   apiCreateUser,
@@ -508,4 +658,5 @@ module.exports = {
   apiAdminBulkAiEvaluate,
   apiAdminGenerateIntervention,
   apiAdminSummarizeHabits,
+  apiAdminMlHealth,
 };

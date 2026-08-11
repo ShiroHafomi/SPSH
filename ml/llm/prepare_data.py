@@ -5,7 +5,7 @@ prepare_data.py — Generate instruction-tuning dataset for LLM fine-tuning.
 Connects to MySQL, fetches student data, generates feedback from the rule-based
 templates, and produces a JSONL file for fine-tuning with TRL/SFTTrainer.
 
-Output: ml/llm/data/train.jsonl (Alpaca format)
+Outputs: ml/llm/data/train.jsonl + val.jsonl (Alpaca format)
 """
 
 import argparse
@@ -45,6 +45,7 @@ def fetch_students():
 
 def generate_prompt(row, prediction):
     """Generate a natural-language instruction–response pair."""
+    prediction = prediction or {}
     profile_parts = [
         f"Gender: {row.get('gender', 'unknown')}",
         f"Age: {row.get('age', 'unknown')}",
@@ -67,13 +68,22 @@ def generate_prompt(row, prediction):
     response = f"Predicted Final Score: {prediction.get('final_score', 'N/A')}\n"
     response += f"Predicted Grade: {prediction.get('grade', 'N/A')}\n\n"
 
-    feedback_recs = prediction.get("feedback", {}).get("recommendations", [])
+    feedback_recs = (prediction.get("feedback") or {}).get("recommendations", [])
     if feedback_recs:
         response += "Recommendations:\n"
         for rec in feedback_recs:
             response += f"- {rec['icon']} {rec['title']}: {rec['text']}\n"
 
     return {"instruction": instruction, "output": response}
+
+
+def _coerce_float(value, default):
+    try:
+        if value is None or pd.isna(value):
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def generate_dataset(df, output_path):
@@ -88,60 +98,112 @@ def generate_dataset(df, output_path):
 
     import json
 
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     records = []
 
     for _, row in df.iterrows():
-        profile = row.to_dict()
-
-        # Generate a simple feedback entry (placeholder for real inference)
-        study_h = float(row.get("study_hours_per_day", 4))
-        gpa = float(row.get("previous_gpa", 3.0))
+        # Generate a heuristic prediction payload (placeholder for real inference)
+        study_h = _coerce_float(row.get("study_hours_per_day"), 4.0)
+        gpa = _coerce_float(row.get("previous_gpa"), 3.0)
 
         if study_h < 2:
             feedback = "Your study hours are critically low. Aim for 4+ hours daily for 10+ point improvement."
         elif study_h < 4:
             feedback = "Increase study hours to 4-5 per day for better retention. Try Pomodoro technique."
+        elif gpa < 2.0:
+            feedback = "Your overall performance is in the F range. Start with tutoring, weekly planning, and attendance recovery."
         elif gpa < 2.5:
             feedback = "Focus on core subjects — strong fundamentals raise all grades."
         else:
             feedback = "Your study habits are solid. Challenge yourself with advanced material."
 
-        record = {
-            "instruction": (
-                f"Analyze this student profile:\n"
-                f"- Gender: {row.get('gender', 'N/A')}\n"
-                f"- Age: {row.get('age', 'N/A')}\n"
-                f"- Study hours: {row.get('study_hours_per_day', 'N/A')}/day\n"
-                f"- Attendance: {row.get('attendance_percent', 'N/A')}%\n"
-                f"- Sleep: {row.get('sleep_hours', 'N/A')}h\n"
-                f"- GPA: {row.get('previous_gpa', 'N/A')}\n"
-                f"- Parental Edu: {row.get('parental_education', 'N/A')}\n\n"
-                f"Provide study recommendations and a predicted grade."
-            ),
-            "output": (
-                f"Predicted Grade: {'A' if gpa >= 3.5 else 'B' if gpa >= 3.0 else 'C' if gpa >= 2.0 else 'D'}\n\n"
-                f"Recommendations:\n- {feedback}"
-            ),
+        attendance = _coerce_float(row.get("attendance_percent"), 80.0)
+        sleep = _coerce_float(row.get("sleep_hours"), 7.0)
+
+        final_score = int(
+            round(
+                max(
+                    0.0,
+                    min(
+                        100.0,
+                        (gpa * 16.0)
+                        + (study_h * 4.0)
+                        + (attendance * 0.2)
+                        + (sleep * 1.5)
+                        - 12.0,
+                    ),
+                )
+            )
+        )
+        grade = (
+            "A"
+            if final_score >= 85
+            else "B"
+            if final_score >= 75
+            else "C"
+            if final_score >= 65
+            else "D"
+            if final_score >= 50
+            else "F"
+        )
+
+        recommendations = [
+            {"icon": "📘", "title": "Study Plan", "text": feedback},
+        ]
+        if attendance < 85:
+            recommendations.append(
+                {
+                    "icon": "🕒",
+                    "title": "Attendance",
+                    "text": "Raise attendance above 90% to improve consistency and recall.",
+                }
+            )
+        if sleep < 7:
+            recommendations.append(
+                {
+                    "icon": "😴",
+                    "title": "Sleep",
+                    "text": "Aim for 7-8 hours of sleep to improve focus and retention.",
+                }
+            )
+        if gpa < 2.5:
+            recommendations.append(
+                {
+                    "icon": "🧠",
+                    "title": "Tutoring",
+                    "text": "Review core concepts weekly and ask for tutoring on difficult topics.",
+                }
+            )
+
+        prediction = {
+            "final_score": final_score,
+            "grade": grade,
+            "feedback": {"recommendations": recommendations},
         }
+        record = generate_prompt(row, prediction)
         records.append(record)
 
     with open(output_path, "w", encoding="utf-8") as f:
         for record in records:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
-    print(f" Wrote {len(records)} training examples to {output_path}")
+    print(f" Wrote {len(records)} examples to {output_path}")
     return output_path
 
 
 def main():
     parser = argparse.ArgumentParser(description="Prepare LLM fine-tuning dataset")
     parser.add_argument(
-        "--output", default="data/train.jsonl", help="Path to output JSONL"
+        "--output",
+        default=str(Path(__file__).resolve().parent / "data" / "train.jsonl"),
+        help="Path to training JSONL (validation is saved alongside it as val.jsonl)",
     )
     parser.add_argument(
-        "--val-split", type=float, default=0.1,
-        help="Fraction for validation (saved as val.jsonl)"
+        "--val-split",
+        type=float,
+        default=0.1,
+        help="Fraction of rows reserved for validation",
     )
     args = parser.parse_args()
 
@@ -149,23 +211,37 @@ def main():
     df = fetch_students()
     print(f"   {len(df)} students loaded")
 
-    base_dir = os.path.join(os.path.dirname(__file__), "data")
+    if not 0 < args.val_split < 1:
+        print(" --val-split must be between 0 and 1")
+        sys.exit(1)
+
+    train_path = Path(args.output).expanduser()
+    if not train_path.is_absolute():
+        train_path = (Path(__file__).resolve().parent / train_path).resolve()
+
+    base_dir = train_path.parent
+    val_path = base_dir / "val.jsonl"
     os.makedirs(base_dir, exist_ok=True)
 
-    train_path = os.path.join(base_dir, "train.jsonl")
-    val_path = os.path.join(base_dir, "val.jsonl")
+    if len(df) < 2:
+        print("❌ Need at least 2 student rows to create a validation split.")
+        sys.exit(1)
 
-    generate_dataset(df, train_path)
+    shuffled = df.sample(frac=1, random_state=42).reset_index(drop=True)
+    val_size = int(round(len(shuffled) * args.val_split))
+    val_size = max(1, min(val_size, len(shuffled) - 1))
 
-    # Simple dataset-level statistics
-    with open(train_path, encoding="utf-8") as f:
-        lines = f.readlines()
+    train_df = shuffled.iloc[:-val_size].reset_index(drop=True)
+    val_df = shuffled.iloc[-val_size:].reset_index(drop=True)
+
+    generate_dataset(train_df, train_path)
+    generate_dataset(val_df, val_path)
 
     print(f"\n Dataset statistics:")
-    print(f"   Total examples: {len(lines)}")
-
-    tok_estimate = sum(len(line.split()) for line in lines)
-    print(f"   Estimated tokens: ~{tok_estimate:,} (characters) ")
+    print(f"   Train examples: {len(train_df)}")
+    print(f"   Validation examples: {len(val_df)}")
+    print(f"   Train file: {train_path}")
+    print(f"   Val file:   {val_path}")
     print(f"\n🔜 Next step: python train_lora.py")
 
 
