@@ -38,9 +38,6 @@ const SEVERITY_COLORS = {
 export default function Predictor() {
   const { addFlash } = useFlash();
   const { t } = useLanguage();
-
-export default function Predictor() {
-  const { addFlash } = useFlash();
   const [profile, setProfile] = useState(DEFAULT_PROFILE);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
