@@ -40,7 +40,7 @@ const PARENTAL_EDU_OPTIONS = ['High School', 'Bachelor', 'Masters', 'PhD', 'None
 function RiskBadge({ riskLevel }) {
   const { t } = useLanguage();
   const styles = {
-    high: 'bg-error-100 dark:bg-error-900/30 text-error-700 dark:text-error-300',
+    high: 'bg-danger-100 dark:bg-danger-900/30 text-danger-700 dark:text-danger-300',
     medium: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300',
     low: 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-300',
     unknown: 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300',
@@ -63,7 +63,7 @@ function GradeBadge({ grade }) {
     B: 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300',
     C: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300',
     D: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300',
-    F: 'bg-error-100 dark:bg-error-900/30 text-error-700 dark:text-error-300',
+    F: 'bg-danger-100 dark:bg-danger-900/30 text-danger-700 dark:text-danger-300',
   };
   return (
     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${styles[grade] || styles.C}`}>
@@ -199,16 +199,17 @@ export default function AdminStudents() {
   };
 
   const handleSelectOne = (id) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-    setSelectAllPage(students.every(s => next.has(s.id)));
+    // Compute next synchronously so both state updates share it. The previous
+    // version referenced a block-scoped `next` from inside the setSelectedIds
+    // updater, which threw ReferenceError on every single-row checkbox click.
+    const next = new Set(selectedIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    setSelectedIds(next);
+    setSelectAllPage(students.length > 0 && students.every(s => next.has(s.id)));
   };
 
   const handleBulkExport = async () => {
@@ -219,7 +220,7 @@ export default function AdminStudents() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ student_ids: ids, filters: ids ? null : filters }),
+        body: JSON.stringify({ ids, filters: ids ? null : filters }),
       });
       if (!response.ok) throw new Error('Export failed');
       const blob = await response.blob();
@@ -249,7 +250,7 @@ export default function AdminStudents() {
     }
     try {
       setActionLoading('ai');
-      const data = await api.post('/admin/students/bulk-ai-evaluate', { student_ids: ids });
+      const data = await api.post('/admin/students/bulk-ai-evaluate', { ids });
       addFlash({ type: 'success', message: t('admin.aiEvalCompleted', { count: data.processed }) });
       fetchStudents();
     } catch (err) {
@@ -505,7 +506,7 @@ export default function AdminStudents() {
                         </button>
                         <button
                           onClick={() => handleDelete(student.id)}
-                          className="p-2 text-error-600 dark:text-error-400 hover:bg-error-100 dark:hover:bg-error-900/30 rounded-xl transition-colors"
+                          className="p-2 text-danger-600 dark:text-danger-400 hover:bg-danger-100 dark:hover:bg-danger-900/30 rounded-xl transition-colors"
                           title={t('common.delete')}
                         >
                           <Trash2 className="w-4 h-4" />

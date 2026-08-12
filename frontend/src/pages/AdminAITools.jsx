@@ -137,7 +137,7 @@ export default function AdminAITools() {
     setBulkResult('');
     setBulkCopied(false);
     try {
-      const data = await api.post('/admin/students/bulk-ai-evaluate', { student_ids: ids });
+      const data = await api.post('/admin/students/bulk-ai-evaluate', { ids });
       setBulkResult(JSON.stringify(data, null, 2));
       addFlash({ type: 'success', message: t('admin.aiEvalCompleted', { count: data.processed }) });
     } catch (err) {
@@ -347,7 +347,7 @@ export default function AdminAITools() {
               <div>
                 <p className="text-primary-500 dark:text-primary-400">{t('admin.riskLevel')}</p>
                 <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                  studentDetails.risk_level === 'high' ? 'bg-error-100 dark:bg-error-900/30 text-error-700 dark:text-error-300' :
+                  studentDetails.risk_level === 'high' ? 'bg-danger-100 dark:bg-danger-900/30 text-danger-700 dark:text-danger-300' :
                   studentDetails.risk_level === 'medium' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' :
                   'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-300'
                 }`}>

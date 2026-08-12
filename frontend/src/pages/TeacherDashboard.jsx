@@ -215,7 +215,7 @@ export default function TeacherDashboard() {
   const gradeColor = (grade) => {
     const colors = {
       A: 'bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-400',
-      B: 'bg-info-100 text-info-700 dark:bg-info-900/30 dark:text-info-400',
+      B: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
       C: 'bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-400',
       D: 'bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-400',
       F: 'bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-400',
@@ -588,7 +588,7 @@ export default function TeacherDashboard() {
                                   factor.field === 'attendance' ? 'border-danger-500 text-danger-600' :
                                   factor.field === 'study_hours' ? 'border-warning-500 text-warning-600' :
                                   factor.field === 'gpa' ? 'border-danger-500 text-danger-600' :
-                                  'border-info-500 text-info-600'
+                                  'border-sky-500 text-sky-600'
                                 }>
                                   {`${t(labelKey)}: ${factor.value} < ${factor.threshold}`}
                                 </Badge>

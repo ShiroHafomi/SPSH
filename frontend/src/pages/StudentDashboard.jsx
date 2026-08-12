@@ -110,7 +110,7 @@ export default function StudentDashboard() {
   const riskColors = {
     danger: 'bg-danger-500/10 border-danger-500/20 text-danger-700 dark:text-danger-300',
     warning: 'bg-warning-500/10 border-warning-500/20 text-warning-700 dark:text-warning-300',
-    info: 'bg-info-500/10 border-info-500/20 text-info-700 dark:text-info-300',
+    info: 'bg-sky-500/10 border-sky-500/20 text-sky-700 dark:text-sky-300',
   };
 
   const riskIcons = {
@@ -123,7 +123,7 @@ export default function StudentDashboard() {
   const gradeColor = (grade) => {
     const colors = {
       A: 'bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-400',
-      B: 'bg-info-100 text-info-700 dark:bg-info-900/30 dark:text-info-400',
+      B: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
       C: 'bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-400',
       D: 'bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-400',
       F: 'bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-400',
@@ -443,7 +443,7 @@ export default function StudentDashboard() {
                             positive: 'bg-success-50 dark:bg-success-900/20 text-success-700 dark:text-success-300',
                             warning: 'bg-warning-50 dark:bg-warning-900/20 text-warning-700 dark:text-warning-300',
                             danger: 'bg-danger-50 dark:bg-danger-900/20 text-danger-700 dark:text-danger-300',
-                            info: 'bg-info-50 dark:bg-info-900/20 text-info-700 dark:text-info-300',
+                            info: 'bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300',
                           };
                           const iconMap = {
                             TrendingUp: renderIcon('TrendingUp', { className: "w-5 h-5" }),

@@ -27,7 +27,7 @@ const RISK_LEVELS = ['High', 'Medium', 'Low'];
 function RiskBadge({ riskLevel }) {
   const { t } = useLanguage();
   const styles = {
-    high: 'bg-error-100 dark:bg-error-900/30 text-error-700 dark:text-error-300 border-error-200 dark:border-error-800',
+    high: 'bg-danger-100 dark:bg-danger-900/30 text-danger-700 dark:text-danger-300 border-danger-200 dark:border-danger-800',
     medium: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800',
     low: 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-300 border-success-200 dark:border-success-800',
   };
@@ -214,7 +214,7 @@ export default function AdminAtRisk() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ student_ids: students.map(s => s.id), filters: { ...filters, at_risk: 'true' } }),
+        body: JSON.stringify({ ids: students.map(s => s.id), filters: { ...filters, at_risk: 'true' } }),
       });
       if (!response.ok) throw new Error('Export failed');
       const blob = await response.blob();
@@ -276,7 +276,7 @@ export default function AdminAtRisk() {
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-primary-950 dark:text-gray-100 flex items-center gap-2">
-            <AlertTriangle className="w-6 h-6 text-error-500" />
+            <AlertTriangle className="w-6 h-6 text-danger-500" />
             {t('admin.atRiskEarlyWarning')}
           </h1>
           <p className="text-primary-500 dark:text-gray-400 mt-1">{t('admin.atRiskDesc')}</p>
@@ -314,15 +314,15 @@ export default function AdminAtRisk() {
 
       {/* Risk Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="rounded-2xl p-4 border bg-error-50 dark:bg-error-900/20 border-error-200 dark:border-error-800">
+        <div className="rounded-2xl p-4 border bg-danger-50 dark:bg-danger-900/20 border-danger-200 dark:border-danger-800">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-error-700 dark:text-error-300">{t('admin.highRisk')}</p>
-              <p className="text-3xl font-bold text-error-600 dark:text-error-400">{riskCounts.high}</p>
+              <p className="text-sm font-medium text-danger-700 dark:text-danger-300">{t('admin.highRisk')}</p>
+              <p className="text-3xl font-bold text-danger-600 dark:text-danger-400">{riskCounts.high}</p>
             </div>
-            <AlertCircle className="w-8 h-8 text-error-400" />
+            <AlertCircle className="w-8 h-8 text-danger-400" />
           </div>
-          <p className="text-xs text-error-500 dark:text-error-400 mt-1">{t('admin.immediateIntervention')}</p>
+          <p className="text-xs text-danger-500 dark:text-danger-400 mt-1">{t('admin.immediateIntervention')}</p>
         </div>
         <div className="rounded-2xl p-4 border bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800">
           <div className="flex items-center justify-between">
@@ -480,7 +480,7 @@ export default function AdminAtRisk() {
                         student.grade === 'B' ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300' :
                         student.grade === 'C' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' :
                         student.grade === 'D' ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300' :
-                        'bg-error-100 dark:bg-error-900/30 text-error-700 dark:text-error-300'
+                        'bg-danger-100 dark:bg-danger-900/30 text-danger-700 dark:text-danger-300'
                       }`}>
                         {student.grade}
                       </span>

@@ -133,7 +133,7 @@ export default function AdminDashboard() {
   if (error) {
     return (
       <div className="text-center py-12">
-        <AlertTriangle className="w-12 h-12 text-error-500 mx-auto mb-4" />
+        <AlertTriangle className="w-12 h-12 text-danger-500 mx-auto mb-4" />
         <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-2">{t('admin.failedToLoad')}</h3>
         <p className="text-primary-500 dark:text-gray-400 mb-4">{error}</p>
         <button onClick={fetchAnalytics} className="btn-primary">
