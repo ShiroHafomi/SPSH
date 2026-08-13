@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api, ApiError } from '../api';
 import { useFlash } from '../components/FlashProvider';
 import { useLanguage } from '../hooks/useLanguage';
@@ -116,6 +116,7 @@ export default function AdminStudents() {
   });
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [selectAllPage, setSelectAllPage] = useState(false);
+  const selectAllRef = useRef(null);
   const [showFilters, setShowFilters] = useState(false);
   const [actionLoading, setActionLoading] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState(null);
@@ -281,6 +282,15 @@ export default function AdminStudents() {
     }
   };
 
+  // Imperatively sync the "indeterminate" state of the select-all checkbox.
+  // React does NOT support `indeterminate` as a declarative prop on <input type="checkbox">;
+  // it must be set via a ref. This effect runs whenever selectedIds or selectAllPage changes.
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = selectedIds.size > 0 && !selectAllPage;
+    }
+  }, [selectedIds, selectAllPage]);
+
   const handleDelete = async (studentId) => {
     setConfirmDialog({
       title: t('students.deleteStudent'),
@@ -413,9 +423,9 @@ export default function AdminStudents() {
               <tr>
                 <th className="px-4 py-3 text-left">
                   <input
+                    ref={selectAllRef}
                     type="checkbox"
                     checked={selectAllPage && students.length > 0}
-                    indeterminate={selectedIds.size > 0 && !selectAllPage}
                     onChange={handleSelectAll}
                     className="w-4 h-4 rounded border-primary-200 dark:border-gray-700 text-primary-600 focus:ring-primary-500 cursor-pointer"
                   />
