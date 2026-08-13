@@ -9,23 +9,14 @@ class ApiError extends Error {
   }
 }
 
-async function handleResponse(response) {
-  if (response.status === 401) {
-    // Use React Router navigation instead of hard redirect
-    if (navigateRef) {
-      navigateRef('/login', { replace: true });
-    } else {
-      // Fallback if navigate not set yet (shouldn't happen in normal flow)
-      window.location.href = '/login';
-    }
-    throw new ApiError('Unauthorized. Please log in first.', 401);
-  }
-
+async function handleResponse(response, { redirectOnUnauthorized = true } = {}) {
   const contentType = response.headers.get('content-type');
   const isJson = contentType && contentType.includes('application/json');
 
   if (!response.ok) {
-    let message = 'Something went wrong. Please try again.';
+    let message = response.status === 401
+      ? 'Unauthorized. Please log in first.'
+      : 'Something went wrong. Please try again.';
     let errors = [];
 
     if (isJson) {
@@ -35,6 +26,15 @@ async function handleResponse(response) {
         errors = data.errors || (data.error ? [data.error] : []);
       } catch {
         // Ignore JSON parse errors
+      }
+    }
+
+    if (response.status === 401 && redirectOnUnauthorized) {
+      // Use React Router navigation instead of a full-page reload.
+      if (navigateRef) {
+        navigateRef('/login', { replace: true });
+      } else {
+        window.location.href = '/login';
       }
     }
 
@@ -62,23 +62,23 @@ export function setNavigate(navigate) {
 }
 
 export const api = {
-  async get(path) {
+  async get(path, options) {
     const response = await fetch(`${API_BASE}${path}`, {
       method: 'GET',
       headers: getAuthHeaders(),
       credentials: 'include',
     });
-    return handleResponse(response);
+    return handleResponse(response, options);
   },
 
-  async post(path, body) {
+  async post(path, body, options) {
     const response = await fetch(`${API_BASE}${path}`, {
       method: 'POST',
       headers: getAuthHeaders(),
       credentials: 'include',
       body: JSON.stringify(body),
     });
-    return handleResponse(response);
+    return handleResponse(response, options);
   },
 
   async delete(path) {

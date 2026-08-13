@@ -22,7 +22,9 @@ export function AuthProvider({ children }) {
 
   const refreshUser = useCallback(async () => {
     try {
-      const data = await api.get('/auth/me');
+      // A missing session is normal during initial public-page boot. ProtectedRoute
+      // owns navigation, so avoid a redundant redirect from the API wrapper.
+      const data = await api.get('/auth/me', { redirectOnUnauthorized: false });
       setUser(data.user);
     } catch {
       setUser(null);
@@ -36,7 +38,14 @@ export function AuthProvider({ children }) {
   }, [refreshUser]);
 
   const login = async (email, password) => {
-    const data = await api.post('/auth/login', { email, password });
+    // A 401 here means the submitted credentials were rejected; keep the user on
+    // the login page and surface the backend's exact message instead of running
+    // the global protected-route redirect.
+    const data = await api.post(
+      '/auth/login',
+      { email, password },
+      { redirectOnUnauthorized: false }
+    );
     setUser(data.user);
     return data.user;
   };

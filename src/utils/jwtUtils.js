@@ -66,8 +66,12 @@ function setAuthCookies(res, accessToken, refreshToken) {
  * Clear auth cookies.
  */
 function clearAuthCookies(res) {
-  res.clearCookie('access_token', COOKIE_OPTIONS);
-  res.clearCookie('refresh_token', COOKIE_OPTIONS);
+  const accessClearOptions = { ...ACCESS_COOKIE_OPTIONS };
+  const refreshClearOptions = { ...COOKIE_OPTIONS };
+  delete accessClearOptions.maxAge;
+  delete refreshClearOptions.maxAge;
+  res.clearCookie('access_token', accessClearOptions);
+  res.clearCookie('refresh_token', refreshClearOptions);
 }
 
 /**

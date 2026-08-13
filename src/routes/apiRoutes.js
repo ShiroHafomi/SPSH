@@ -3,7 +3,7 @@
  * Mounted at /api in app.js.
  */
 const express = require('express');
-const { requireAuth, requireRole, requireStudentAccess } = require('../middleware/auth');
+const { requireAuth, requireRole, sessionAuth } = require('../middleware/auth');
 const { loginLimiter, registerLimiter, rateLimitMiddleware } = require('../utils/rateLimiter');
 
 // Auth
@@ -71,7 +71,7 @@ router.post('/auth/refresh', apiRefresh);
 router.post('/auth/register', rateLimitMiddleware(registerLimiter), apiRegister);
 
 // ─── Auth (requires auth) ────────────────────────────────────────────────────
-router.get('/auth/me', requireAuth, apiMe);
+router.get('/auth/me', sessionAuth, apiMe);
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
 router.get('/dashboard/stats', requireAuth, apiDashboardStats);

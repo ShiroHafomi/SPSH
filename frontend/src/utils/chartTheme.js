@@ -74,6 +74,20 @@ export const GRADE_COLORS = {
 };
 
 /**
+ * Grade badge classes share the same semantic order as GRADE_COLORS while
+ * delegating light/dark contrast to the component styles in index.css.
+ */
+export const GRADE_BADGE_CLASSES = {
+  A: 'grade-a',
+  B: 'grade-b',
+  C: 'grade-c',
+  D: 'grade-d',
+  F: 'grade-f',
+};
+
+export const getGradeBadgeClass = (grade) => GRADE_BADGE_CLASSES[grade] || 'badge-gray';
+
+/**
  * Get theme-aware base Chart.js options (vertical bar / line).
  * @param {boolean} isDark
  */

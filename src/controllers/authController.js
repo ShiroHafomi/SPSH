@@ -157,7 +157,7 @@ async function apiRefresh(req, res) {
  */
 async function apiMe(req, res) {
   if (!req.user) {
-    return res.status(401).json({ error: 'Not authenticated.' });
+    return res.json({ user: null });
   }
 
   res.json({

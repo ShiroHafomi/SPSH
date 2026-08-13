@@ -4,10 +4,28 @@
  * Refresh tokens: 7 days (stored in HttpOnly cookie)
  */
 require('dotenv').config();
-const crypto = require('crypto');
 
-const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(64).toString('hex');
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || crypto.randomBytes(64).toString('hex');
+const isProduction = process.env.NODE_ENV === 'production';
+
+function getSecret(name, developmentFallback) {
+  const value = process.env[name];
+  if (value) return value;
+  if (isProduction) {
+    throw new Error(`${name} is required when NODE_ENV=production`);
+  }
+  return developmentFallback;
+}
+
+// Stable development fallbacks keep local sessions valid across server restarts.
+// Production must provide independent high-entropy secrets through the environment.
+const JWT_SECRET = getSecret(
+  'JWT_SECRET',
+  'student-performance-development-access-secret-change-me'
+);
+const JWT_REFRESH_SECRET = getSecret(
+  'JWT_REFRESH_SECRET',
+  'student-performance-development-refresh-secret-change-me'
+);
 
 const ACCESS_TOKEN_EXPIRY = '15m';     // 15 minutes
 const REFRESH_TOKEN_EXPIRY = '7d';      // 7 days

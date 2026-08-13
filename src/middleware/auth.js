@@ -2,8 +2,35 @@
  * Authentication Middleware - JWT-based with fallback to session.
  * Provides requireAuth, requireRole, and optionalAuth middleware.
  */
-const { verifyAccessToken, extractToken, extractRefreshToken, generateAccessToken, verifyRefreshToken } = require('../utils/jwtUtils');
-const { findById, isUserActive } = require('../services/authService');
+const {
+  verifyAccessToken,
+  extractToken,
+  extractRefreshToken,
+  generateAccessToken,
+  verifyRefreshToken,
+  clearAuthCookies,
+} = require('../utils/jwtUtils');
+const { findById } = require('../services/authService');
+
+function toRequestUser(user) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    studentId: user.student_id,
+    department: user.department,
+  };
+}
+
+function setAccessTokenCookie(res, accessToken) {
+  res.cookie('access_token', accessToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 15 * 60 * 1000,
+  });
+}
 
 /**
  * Middleware to require valid authentication.
@@ -14,6 +41,11 @@ async function requireAuth(req, res, next) {
   const token = extractToken(req);
 
   if (!token) {
+    // Access cookies expire before refresh cookies. Recover the session when the
+    // browser still has a valid refresh token instead of forcing a new login.
+    if (extractRefreshToken(req)) {
+      return handleTokenRefresh(req, res, next);
+    }
     return res.status(401).json({ error: 'Authentication required', code: 'UNAUTHENTICATED' });
   }
 
@@ -31,14 +63,7 @@ async function requireAuth(req, res, next) {
     }
 
     // Attach user to request
-    req.user = {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      studentId: user.student_id,
-      department: user.department,
-    };
+    req.user = toRequestUser(user);
 
     next();
   } catch (err) {
@@ -72,22 +97,10 @@ async function handleTokenRefresh(req, res, next) {
     const newAccessToken = generateAccessToken(user);
 
     // Set new access token cookie
-    res.cookie('access_token', newAccessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 15 * 60 * 1000,
-    });
+    setAccessTokenCookie(res, newAccessToken);
 
     // Attach user and continue
-    req.user = {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      studentId: user.student_id,
-      department: user.department,
-    };
+    req.user = toRequestUser(user);
 
     next();
   } catch (err) {
@@ -120,6 +133,50 @@ function requireRole(...allowedRoles) {
 
     next();
   };
+}
+
+/**
+ * Session probe authentication — anonymous requests continue, but existing
+ * access/refresh cookies are validated and may hydrate/refresh req.user.
+ * Used by GET /auth/me so a logged-out page boot is a normal 200 response.
+ */
+async function sessionAuth(req, res, next) {
+  const accessToken = extractToken(req);
+  const refreshToken = extractRefreshToken(req);
+
+  if (!accessToken && !refreshToken) {
+    return next();
+  }
+
+  if (accessToken) {
+    try {
+      const decoded = verifyAccessToken(accessToken);
+      const user = await findById(decoded.id);
+      if (user?.is_active) {
+        req.user = toRequestUser(user);
+        return next();
+      }
+    } catch {
+      // Try the refresh cookie below. Invalid/stale cookies become anonymous.
+    }
+  }
+
+  if (refreshToken) {
+    try {
+      const decoded = verifyRefreshToken(refreshToken);
+      const user = await findById(decoded.id);
+      if (user?.is_active) {
+        setAccessTokenCookie(res, generateAccessToken(user));
+        req.user = toRequestUser(user);
+        return next();
+      }
+    } catch {
+      // Stale session probes are anonymous, not failed API requests.
+    }
+  }
+
+  clearAuthCookies(res);
+  return next();
 }
 
 /**
@@ -211,6 +268,7 @@ function requireStudentAccess(req, res, next) {
 module.exports = {
   requireAuth,
   requireRole,
+  sessionAuth,
   optionalAuth,
   requireStudentAccess,
   requireAdmin,

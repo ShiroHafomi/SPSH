@@ -5,7 +5,7 @@ import { useFlash } from '../components/FlashProvider';
 import { useLanguage } from '../hooks/useLanguage';
 import { api } from '../api';
 import { renderIcon } from '../components/IconMap';
-import { GRADE_COLORS } from '../utils/chartTheme';
+import { GRADE_COLORS, getGradeBadgeClass } from '../utils/chartTheme';
 
 export default function StudentDashboard() {
   const { user } = useAuth();
@@ -108,9 +108,9 @@ export default function StudentDashboard() {
   }
 
   const riskColors = {
-    danger: 'bg-danger-500/10 border-danger-500/20 text-danger-700 dark:text-danger-300',
-    warning: 'bg-warning-500/10 border-warning-500/20 text-warning-700 dark:text-warning-300',
-    info: 'bg-sky-500/10 border-sky-500/20 text-sky-700 dark:text-sky-300',
+    danger: 'border-danger-500 bg-danger-50 text-danger-700 dark:bg-danger-950/30 dark:text-danger-300',
+    warning: 'border-warning-500 bg-warning-50 text-warning-700 dark:bg-warning-950/30 dark:text-warning-300',
+    info: 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-950/30 dark:text-primary-300',
   };
 
   const riskIcons = {
@@ -118,17 +118,6 @@ export default function StudentDashboard() {
     BookOpen: renderIcon('BookOpen', { className: "w-5 h-5" }),
     Moon: renderIcon('Moon', { className: "w-5 h-5" }),
     Briefcase: renderIcon('Briefcase', { className: "w-5 h-5" }),
-  };
-
-  const gradeColor = (grade) => {
-    const colors = {
-      A: 'bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-400',
-      B: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
-      C: 'bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-400',
-      D: 'bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-400',
-      F: 'bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-400',
-    };
-    return colors[grade] || 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
   };
 
   const getScoreColor = (score) => {
@@ -150,7 +139,7 @@ export default function StudentDashboard() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <span className={`badge ${gradeColor(profile.grade)} px-4 py-2 text-lg`}>
+          <span className={`${getGradeBadgeClass(profile.grade)} px-4 py-2 text-lg`}>
             {t('student.currentGrade', { grade: profile.grade })}
           </span>
         </div>
@@ -162,7 +151,7 @@ export default function StudentDashboard() {
           {riskAlerts.map((alert, idx) => (
             <div
               key={idx}
-              className={`flex items-start gap-4 p-4 rounded-2xl border ${riskColors[alert.type]}`}
+              className={`card-clay flex items-start gap-4 p-4 border-l-4 ${riskColors[alert.type] || riskColors.info}`}
             >
               <div className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-current/20">
                 {riskIcons[alert.icon] || riskIcons.AlertTriangle}
@@ -228,7 +217,7 @@ export default function StudentDashboard() {
                 <h3 className="text-sm font-medium text-primary-500 dark:text-gray-400">
                   {t('student.grade')}
                 </h3>
-                <span className={`badge ${gradeColor(profile.grade)} text-lg px-4 py-2`}>
+                <span className={`${getGradeBadgeClass(profile.grade)} text-lg px-4 py-2`}>
                   {profile.grade}
                 </span>
               </div>
@@ -393,7 +382,7 @@ export default function StudentDashboard() {
                       <p className="text-sm text-primary-500 dark:text-gray-400">
                         {t('student.predictedGrade')}
                       </p>
-                      <span className={`badge ${gradeColor(simulated.grade)} text-2xl px-6 py-3`}>
+                      <span className={`${getGradeBadgeClass(simulated.grade)} text-2xl px-6 py-3`}>
                         {simulated.grade}
                       </span>
                     </div>
@@ -410,7 +399,7 @@ export default function StudentDashboard() {
                           .sort(([a], [b]) => a.localeCompare(b))
                           .map(([grade, prob]) => (
                             <div key={grade} className="flex items-center gap-3">
-                              <span className={`badge ${gradeColor(grade)} w-10 text-center text-sm`}>
+                              <span className={`${getGradeBadgeClass(grade)} w-10 justify-center text-sm`}>
                                 {grade}
                               </span>
                               <div className="flex-1 h-3 bg-primary-100 dark:bg-gray-800 rounded-full overflow-hidden">

@@ -314,7 +314,7 @@ export default function AdminAtRisk() {
 
       {/* Risk Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="rounded-2xl p-4 border bg-danger-50 dark:bg-danger-900/20 border-danger-200 dark:border-danger-800">
+        <div className="card-clay p-4 border-l-4 border-l-danger-500">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-danger-700 dark:text-danger-300">{t('admin.highRisk')}</p>
@@ -324,7 +324,7 @@ export default function AdminAtRisk() {
           </div>
           <p className="text-xs text-danger-500 dark:text-danger-400 mt-1">{t('admin.immediateIntervention')}</p>
         </div>
-        <div className="rounded-2xl p-4 border bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800">
+        <div className="card-clay p-4 border-l-4 border-l-warning-500">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-amber-700 dark:text-amber-300">{t('admin.mediumRisk')}</p>
@@ -334,7 +334,7 @@ export default function AdminAtRisk() {
           </div>
           <p className="text-xs text-amber-500 dark:text-amber-400 mt-1">{t('admin.monitorClosely')}</p>
         </div>
-        <div className="rounded-2xl p-4 border bg-success-50 dark:bg-success-900/20 border-success-200 dark:border-success-800">
+        <div className="card-clay p-4 border-l-4 border-l-success-500">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-success-700 dark:text-success-300">{t('admin.lowRisk')}</p>

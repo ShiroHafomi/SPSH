@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { api, ApiError } from '../api';
+import { api } from '../api';
 import { useFlash } from '../components/FlashProvider';
 import { useLanguage } from '../hooks/useLanguage';
 import { SkeletonCard } from '../components/Skeleton';
 import { renderIcon } from '../components/IconMap';
+import { GRADE_COLORS, getGradeBadgeClass } from '../utils/chartTheme';
 
 const DEFAULT_PROFILE = {
   gender: 'Female',
@@ -16,16 +17,6 @@ const DEFAULT_PROFILE = {
   internet_access: 'Yes',
   extracurricular: 'Yes',
   part_time_job: 'No',
-};
-
-// Grade badge / bar-fill tokens — design-system backed, dark-mode aware.
-// Mirrors the .grade-a…grade-f semantic hues used across the app.
-const GRADE_COLORS = {
-  A: 'bg-success-500 text-white',
-  B: 'bg-sky-500 text-white',
-  C: 'bg-warning-500 text-white',
-  D: 'bg-orange-500 text-white',
-  F: 'bg-danger-500 text-white',
 };
 
 const SEVERITY_COLORS = {
@@ -100,7 +91,7 @@ export default function Predictor() {
             onChange={(e) => setAutoPredict(e.target.checked)}
             className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
           />
-          <span className="text-sm text-primary-600 dark:text-primary-300 dark:text-gray-600">Auto-predict</span>
+          <span className="text-sm text-primary-600 dark:text-primary-300">Auto-predict</span>
         </label>
       </div>
 
@@ -296,15 +287,15 @@ export default function Predictor() {
                 {/* Grade & Score */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="p-6 rounded-2xl bg-primary-50/60 dark:bg-gray-800 text-center">
-                    <p className="text-xs font-semibold text-primary-400 dark:text-primary-300 dark:text-gray-600 uppercase tracking-wider mb-1">Predicted Final Score</p>
+                    <p className="text-xs font-semibold text-primary-400 dark:text-primary-300 uppercase tracking-wider mb-1">Predicted Final Score</p>
                     <p className="text-4xl font-bold text-primary-950 dark:text-gray-100">
                       {score != null ? score.toFixed(1) : '—'}
                     </p>
                     <p className="text-xs text-primary-400 dark:text-gray-500 mt-1">out of 100</p>
                   </div>
                   <div className="p-6 rounded-2xl bg-primary-50/60 dark:bg-gray-800 text-center">
-                    <p className="text-xs font-semibold text-primary-400 dark:text-primary-300 dark:text-gray-600 uppercase tracking-wider mb-1">Predicted Grade</p>
-                    <span className={`inline-block mt-1 px-6 py-2 rounded-full text-3xl font-bold ${GRADE_COLORS[grade] || 'bg-gray-400 text-white'}`}>
+                    <p className="text-xs font-semibold text-primary-400 dark:text-primary-300 uppercase tracking-wider mb-1">Predicted Grade</p>
+                    <span className={`mt-1 px-6 py-2 text-3xl ${getGradeBadgeClass(grade)}`}>
                       {grade}
                     </span>
                     {result.grade_confidence != null && (
@@ -322,16 +313,20 @@ export default function Predictor() {
                     <div className="space-y-2">
                       {Object.entries(result.grade_probabilities).map(([g, prob]) => (
                         <div key={g} className="flex items-center gap-3">
-                          <span className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${GRADE_COLORS[g] || 'bg-gray-400 text-white'} flex-shrink-0`}>
+                          <span className={`w-8 h-8 justify-center flex-shrink-0 ${getGradeBadgeClass(g)}`}>
                             {g}
                           </span>
                           <div className="flex-1 bg-primary-100 dark:bg-gray-700 rounded-full h-5 overflow-hidden">
                             <div
-                              className={`h-full rounded-full transition-all duration-500 ${GRADE_COLORS[g] || ''}`}
-                              style={{ width: `${(prob * 100).toFixed(0)}%`, minWidth: prob > 0 ? '1.25rem' : 0 }}
+                              className="h-full rounded-full transition-all duration-500"
+                              style={{
+                                width: `${(prob * 100).toFixed(0)}%`,
+                                minWidth: prob > 0 ? '1.25rem' : 0,
+                                backgroundColor: GRADE_COLORS[g]?.solid || 'rgb(148, 163, 184)',
+                              }}
                             />
                           </div>
-                          <span className="text-sm font-medium text-primary-600 dark:text-primary-300 dark:text-gray-600 w-12 text-right">
+                          <span className="text-sm font-medium text-primary-600 dark:text-primary-300 w-12 text-right">
                             {(prob * 100).toFixed(0)}%
                           </span>
                         </div>
@@ -355,7 +350,7 @@ export default function Predictor() {
                           <span className="flex-shrink-0">{renderIcon(rec.icon, { className: 'w-6 h-6' })}</span>
                           <div>
                             <p className="font-semibold text-primary-950 dark:text-gray-100 text-sm">{rec.title}</p>
-                            <p className="text-sm text-primary-600 dark:text-primary-300 dark:text-gray-600 mt-0.5">{rec.text}</p>
+                            <p className="text-sm text-primary-600 dark:text-primary-300 mt-0.5">{rec.text}</p>
                           </div>
                         </div>
                       ))}
