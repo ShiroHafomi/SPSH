@@ -5,6 +5,8 @@ const jwt = require('jsonwebtoken');
 const {
   JWT_SECRET,
   JWT_REFRESH_SECRET,
+  JWT_ISSUER,
+  JWT_AUDIENCE,
   ACCESS_TOKEN_EXPIRY,
   REFRESH_TOKEN_EXPIRY,
   COOKIE_OPTIONS,
@@ -21,30 +23,59 @@ function generateAccessToken(user) {
     name: user.name,
     role: user.role,
     studentId: user.student_id || user.studentId,
+    token_use: 'access',
   };
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRY });
+  return jwt.sign(payload, JWT_SECRET, {
+    algorithm: 'HS256',
+    expiresIn: ACCESS_TOKEN_EXPIRY,
+    issuer: JWT_ISSUER,
+    audience: JWT_AUDIENCE,
+    subject: String(user.id),
+  });
 }
 
 /**
  * Generate refresh token with minimal payload.
  */
-function generateRefreshToken(userId) {
-  const payload = { id: userId };
-  return jwt.sign(payload, JWT_REFRESH_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRY });
+function generateRefreshToken(userId, sessionId) {
+  if (!sessionId) throw new Error('Refresh session ID is required');
+  const payload = { id: userId, token_use: 'refresh' };
+  return jwt.sign(payload, JWT_REFRESH_SECRET, {
+    algorithm: 'HS256',
+    expiresIn: REFRESH_TOKEN_EXPIRY,
+    issuer: JWT_ISSUER,
+    audience: JWT_AUDIENCE,
+    subject: String(userId),
+    jwtid: sessionId,
+  });
 }
 
 /**
  * Verify access token.
  */
 function verifyAccessToken(token) {
-  return jwt.verify(token, JWT_SECRET);
+  const decoded = jwt.verify(token, JWT_SECRET, {
+    algorithms: ['HS256'],
+    issuer: JWT_ISSUER,
+    audience: JWT_AUDIENCE,
+  });
+  if (decoded.token_use !== 'access') throw new jwt.JsonWebTokenError('Invalid token use');
+  return decoded;
 }
 
 /**
  * Verify refresh token.
  */
 function verifyRefreshToken(token) {
-  return jwt.verify(token, JWT_REFRESH_SECRET);
+  const decoded = jwt.verify(token, JWT_REFRESH_SECRET, {
+    algorithms: ['HS256'],
+    issuer: JWT_ISSUER,
+    audience: JWT_AUDIENCE,
+  });
+  if (decoded.token_use !== 'refresh' || !decoded.jti) {
+    throw new jwt.JsonWebTokenError('Invalid token use');
+  }
+  return decoded;
 }
 
 /**

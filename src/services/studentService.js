@@ -6,6 +6,8 @@
 const { pool } = require('../config/db');
 const { validateSortColumn, validateSortDir, clampPagination, getSearchableColumns } = require('../utils/columns');
 const { getChartConfig } = require('../utils/chartConfig');
+const mlService = require('./mlService');
+const { generateInterventionNote: aiGenerateInterventionNote } = require('./aiCounselService');
 
 const TABLE = process.env.DB_TABLE || 'students';
 
@@ -757,140 +759,29 @@ async function getStudentsForBulk({ ids = [], filters = {}, page = 1, size = 100
 
 /**
  * Generate AI intervention note for a specific student.
+ * Uses centralized ML service and AI counsel service.
  * @param {number} studentId
- * @returns {Promise<Object>} { interventionNote: string }
+ * @returns {Promise<Object>} { interventionNote: string, prediction, riskAssessment }
  */
 async function generateInterventionNote(studentId) {
   const student = await findById(studentId);
   if (!student) throw new Error('Student not found');
 
-  const { loadSchemaMap, getSchemaMap, getDisplayColumns, getSemanticOrFirstNumeric } = require('../utils/schemaMap');
-  loadSchemaMap();
-  const map = getSchemaMap();
-  const displayCols = getDisplayColumns();
-
-  // Helper to find column by semantic tag
-  const findCol = (semanticTags) => {
-    if (!Array.isArray(semanticTags)) semanticTags = [semanticTags];
-    for (const tag of semanticTags) {
-      for (const col of displayCols) {
-        if (col.semanticTag === tag || col.name === tag) return col.name;
-      }
+  // Get prediction from centralized ML service
+  let prediction;
+  try {
+    prediction = await mlService.predictForStudent(studentId);
+  } catch (err) {
+    if (err.message === 'ML capacity exceeded') {
+      throw new Error('ML capacity exceeded');
     }
-    return null;
-  };
-
-  const colGrade = findCol(['grade', 'final_grade']) || 'grade';
-  const colFinalScore = findCol(['final_score', 'score']) || 'final_score';
-  const colGpa = findCol(['previous_gpa', 'gpa']) || 'previous_gpa';
-  const colAttendance = findCol(['attendance_percent', 'attendance']) || 'attendance_percent';
-  const colSleep = findCol(['sleep_hours', 'sleep']) || 'sleep_hours';
-  const colStudyHours = findCol(['study_hours_per_day', 'study_hours']) || 'study_hours_per_day';
-  const colPartTimeJob = findCol(['part_time_job', 'job']) || 'part_time_job';
-  const colGender = findCol(['gender']) || 'gender';
-  const colParentalEdu = findCol(['parental_education', 'parental']) || 'parental_education';
-
-  // Build profile for AI feedback
-  const profile = {
-    gender: student[colGender] || 'Female',
-    age: student.age || 20,
-    study_hours_per_day: student[colStudyHours] || 4,
-    attendance_percent: student[colAttendance] || 85,
-    sleep_hours: student[colSleep] || 7,
-    previous_gpa: student[colGpa] || 3.0,
-    parental_education: student[colParentalEdu] || 'Bachelors',
-    internet_access: student.internet_access || 'Yes',
-    extracurricular: student.extracurricular || 'Yes',
-    part_time_job: student[colPartTimeJob] || 'No',
-  };
-
-  // Get prediction from ML
-  const { spawn } = require('child_process');
-  const path = require('path');
-
-  const pythonInput = { ...profile };
-  for (const key of ['internet_access', 'extracurricular', 'part_time_job']) {
-    if (typeof pythonInput[key] === 'string') {
-      pythonInput[key] = pythonInput[key].toLowerCase() === 'yes' ? 1 : 0;
-    }
+    throw err;
   }
 
-  return new Promise((resolve, reject) => {
-    const scriptPath = path.join(__dirname, '..', '..', 'ml', 'inference.py');
-    const proc = spawn('py', [scriptPath, '--json', '-'], {
-      maxBuffer: 1024 * 1024,
-    });
+  // Generate intervention note using AI counsel service (with pre-fetched prediction)
+  const result = await aiGenerateInterventionNote(studentId, null, prediction);
 
-    let stdout = '';
-    let stderr = '';
-
-    proc.stdout.on('data', (data) => { stdout += data; });
-    proc.stderr.on('data', (data) => { stderr += data; });
-
-    proc.on('close', (code) => {
-      if (code !== 0) {
-        console.error('[generateInterventionNote] Python error:', stderr);
-        return reject(new Error('Prediction failed'));
-      }
-
-      try {
-        const prediction = JSON.parse(stdout.trim());
-        const { generateFeedback } = require('../utils/feedbackTemplates');
-        const feedback = generateFeedback(profile, prediction);
-
-        // Build personalized intervention note
-        const grade = prediction.grade || 'C';
-        const score = prediction.final_score || 0;
-        const conflictingRecs = feedback.recommendations
-          .filter(r => r.severity === 'danger' || r.severity === 'warning')
-          .map(r => r.text)
-          .join(' ');
-
-        const positiveRecs = feedback.recommendations
-          .filter(r => r.severity === 'success')
-          .map(r => r.text)
-          .join(' ');
-
-        let interventionNote = `Academic Intervention Note for Student #${studentId}\n\n`;
-        interventionNote += `Predicted Grade: ${grade} (${score}/100)\n`;
-        interventionNote += `Current Attendance: ${profile.attendance_percent}%\n`;
-        interventionNote += `Study Hours/Day: ${profile.study_hours_per_day}\n`;
-        interventionNote += `Sleep Hours: ${profile.sleep_hours}\n`;
-        interventionNote += `Previous GPA: ${profile.previous_gpa}\n`;
-        interventionNote += `Part-Time Job: ${profile.part_time_job}\n\n`;
-
-        if (conflictingRecs) {
-          interventionNote += `Areas of Concern:\n${conflictingRecs}\n\n`;
-        }
-
-        if (positiveRecs) {
-          interventionNote += `Strengths:\n${positiveRecs}\n\n`;
-        }
-
-        interventionNote += `Recommended Actions:\n`;
-        interventionNote += `1. Schedule weekly check-ins with academic advisor\n`;
-        interventionNote += `2. Enroll in study skills workshop\n`;
-        interventionNote += `3. Set up structured study schedule (minimum 3 hrs/day)\n`;
-        interventionNote += `4. Monitor sleep hygiene (target 7-8 hrs/night)\n`;
-        interventionNote += `5. ${grade === 'F' || grade === 'D' ? 'Consider reducing work hours or requesting academic accommodations' : 'Maintain current positive habits and seek advanced challenges'}\n\n`;
-        interventionNote += `-- Generated by AI Academic Counselor`;
-
-        resolve({ interventionNote });
-      } catch (parseErr) {
-        console.error('[generateInterventionNote] Parse error:', parseErr);
-        console.error('[generateInterventionNote] stdout:', stdout);
-        reject(new Error('Failed to parse prediction result'));
-      }
-    });
-
-    proc.on('error', (error) => {
-      console.error('[generateInterventionNote] Process error:', error);
-      reject(new Error('Prediction failed'));
-    });
-
-    proc.stdin.write(JSON.stringify(pythonInput));
-    proc.stdin.end();
-  });
+  return result;
 }
 
 /**

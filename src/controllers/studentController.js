@@ -1,9 +1,9 @@
 /**
  * Student Controller — Personal profile, risk alerts, what-if simulator, AI advisor.
- * All endpoints require student role (or admin/teacher with studentId).
+ * All endpoints require the student role and resolve the linked record from req.user.
  */
 const studentService = require('../services/studentService');
-const { runWhatIfSimulation } = require('../services/mlService');
+const mlService = require('../services/mlService');
 const { generateStudentAdvice } = require('../services/aiCounselService');
 const { logAuditEvent } = require('../services/authService');
 
@@ -20,7 +20,7 @@ async function apiStudentProfile(req, res) {
       return res.status(400).json({ error: 'No student record linked to this account.' });
     }
 
-    const student = await studentService.findByStudentId(studentId);
+    const student = await studentService.findById(studentId);
 
     if (!student) {
       return res.status(404).json({ error: 'Student record not found.' });
@@ -55,7 +55,7 @@ async function apiStudentSimulate(req, res) {
       return res.status(400).json({ error: 'No student record linked to this account.' });
     }
 
-    const student = await studentService.findByStudentId(studentId);
+    const student = await studentService.findById(studentId);
     if (!student) {
       return res.status(404).json({ error: 'Student record not found.' });
     }
@@ -88,42 +88,34 @@ async function apiStudentSimulate(req, res) {
       return res.status(400).json({ error: errors[0], errors });
     }
 
-    // Build input for prediction
-    const currentFeatures = {
-      gender: student.gender,
-      age: student.age,
-      study_hours_per_day: study_hours_per_day !== undefined ? parseFloat(study_hours_per_day) : student.study_hours_per_day,
-      attendance_percent: attendance_percent !== undefined ? parseInt(attendance_percent, 10) : student.attendance_percent,
-      sleep_hours: sleep_hours !== undefined ? parseFloat(sleep_hours) : student.sleep_hours,
-      previous_gpa: student.previous_gpa,
-      parental_education: student.parental_education,
-      internet_access: student.internet_access,
-      extracurricular: student.extracurricular,
-      part_time_job: student.part_time_job,
-    };
+    // Build modifications for simulation
+    const modifications = {};
+    if (study_hours_per_day !== undefined) modifications.study_hours_per_day = parseFloat(study_hours_per_day);
+    if (sleep_hours !== undefined) modifications.sleep_hours = parseFloat(sleep_hours);
+    if (attendance_percent !== undefined) modifications.attendance_percent = parseInt(attendance_percent, 10);
 
-    // Run prediction with current values (baseline)
-    const currentPrediction = await runWhatIfSimulation(student, {});
-
-    // Run prediction with modified values
-    const modifiedPrediction = await runWhatIfSimulation(student, {
-      study_hours_per_day: currentFeatures.study_hours_per_day,
-      sleep_hours: currentFeatures.sleep_hours,
-      attendance_percent: currentFeatures.attendance_percent,
-    });
+    // Run simulation (current + modified in one call)
+    let simulation;
+    try {
+      simulation = await mlService.simulate(studentId, modifications);
+    } catch (err) {
+      if (err.message === 'ML capacity exceeded') {
+        return res.status(503).json({ error: 'Simulation service temporarily unavailable, please retry' });
+      }
+      if (err.message && err.message.includes('Student not found')) {
+        return res.status(404).json({ error: 'Student record not found.' });
+      }
+      throw err;
+    }
 
     // Generate recommendations based on the difference
-    const recommendations = generateRecommendations(student, currentPrediction, modifiedPrediction);
+    const recommendations = generateRecommendations(student, simulation.current, simulation.simulated);
 
     res.json({
-      current: currentPrediction,
-      simulated: modifiedPrediction,
+      current: simulation.current,
+      simulated: simulation.simulated,
       recommendations,
-      inputs: {
-        study_hours_per_day: currentFeatures.study_hours_per_day,
-        sleep_hours: currentFeatures.sleep_hours,
-        attendance_percent: currentFeatures.attendance_percent,
-      },
+      inputs: modifications,
     });
   } catch (err) {
     console.error('[apiStudentSimulate]', err);
@@ -143,13 +135,21 @@ async function apiStudentAdvisor(req, res) {
       return res.status(400).json({ error: 'No student record linked to this account.' });
     }
 
-    const student = await studentService.findByStudentId(studentId);
+    const student = await studentService.findById(studentId);
     if (!student) {
       return res.status(404).json({ error: 'Student record not found.' });
     }
 
-    // Get current prediction (returns { current, simulated })
-    const { current } = await runWhatIfSimulation(student, {});
+    // Get current prediction
+    let current;
+    try {
+      current = await mlService.predictForStudent(studentId);
+    } catch (err) {
+      if (err.message === 'ML capacity exceeded') {
+        return res.status(503).json({ error: 'Advisor service temporarily unavailable, please retry' });
+      }
+      throw err;
+    }
 
     // Generate personalized advice using current prediction
     const advice = await generateStudentAdvice(student, current);

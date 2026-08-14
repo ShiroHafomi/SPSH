@@ -4,14 +4,56 @@
  */
 const authService = require('../services/authService');
 const studentService = require('../services/studentService');
+const mlService = require('../services/mlService');
 const { logAuditEvent } = require('../services/authService');
 const { pool } = require('../config/db');
 const fs = require('fs').promises;
 const path = require('path');
+const { encodeCsvRow } = require('../utils/csv');
+const {
+  boundedString,
+  normalizeBulkFilters,
+  normalizePositiveIds,
+  parsePositiveSafeInteger,
+} = require('../utils/inputValidation');
 
 // Path to ML models and metrics
 const ML_MODELS_DIR = path.join(__dirname, '..', '..', 'ml', 'models');
 const METRICS_FILE = path.join(ML_MODELS_DIR, 'metrics.json');
+const USER_ROLES = new Set(['admin', 'teacher', 'student']);
+
+function validatePassword(password, errors) {
+  if (typeof password !== 'string' || password.length < 8) {
+    errors.push('Password must be at least 8 characters.');
+    return;
+  }
+  if (Buffer.byteLength(password, 'utf8') > 72) {
+    errors.push('Password cannot exceed 72 UTF-8 bytes.');
+    return;
+  }
+  if (!/[A-Z]/.test(password)) errors.push('Password must contain uppercase letter.');
+  if (!/[a-z]/.test(password)) errors.push('Password must contain lowercase letter.');
+  if (!/[0-9]/.test(password)) errors.push('Password must contain a digit.');
+}
+
+function normalizeBulkRequest(body, maxIds) {
+  if (body !== undefined && body !== null && (typeof body !== 'object' || Array.isArray(body))) {
+    throw new TypeError('Request body must be an object.');
+  }
+  const payload = body || {};
+  return {
+    ids: normalizePositiveIds(payload.ids, { max: maxIds }),
+    filters: normalizeBulkFilters(payload.filters),
+  };
+}
+
+function validationError(res, error) {
+  if (error instanceof TypeError || error instanceof RangeError) {
+    res.status(400).json({ error: error.message });
+    return true;
+  }
+  return false;
+}
 
 /**
  * GET /api/admin/users
@@ -19,10 +61,13 @@ const METRICS_FILE = path.join(ML_MODELS_DIR, 'metrics.json');
  */
 async function apiListUsers(req, res) {
   try {
-    const page = parseInt(req.query.page, 10) || 1;
-    const size = parseInt(req.query.size, 10) || 20;
+    const page = Math.max(1, parsePositiveSafeInteger(req.query.page) || 1);
+    const size = Math.min(100, parsePositiveSafeInteger(req.query.size) || 20);
     const role = req.query.role || 'all';
-    const search = req.query.q || '';
+    if (role !== 'all' && !USER_ROLES.has(role)) {
+      return res.status(400).json({ error: 'Invalid role filter.' });
+    }
+    const search = boundedString(req.query.q, { field: 'q', max: 200 });
 
     const offset = (page - 1) * size;
     const conditions = ['role != ?']; // Exclude system accounts if any
@@ -73,24 +118,29 @@ async function apiCreateUser(req, res) {
 
   // Validation
   const errors = [];
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+  if (typeof email !== 'string' || email.length > 255 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
     errors.push('Valid email is required.');
   }
-  if (!password || password.length < 8) {
-    errors.push('Password must be at least 8 characters.');
-  } else {
-    if (!/[A-Z]/.test(password)) errors.push('Password must contain uppercase letter.');
-    if (!/[a-z]/.test(password)) errors.push('Password must contain lowercase letter.');
-    if (!/[0-9]/.test(password)) errors.push('Password must contain a digit.');
+  validatePassword(password, errors);
+  if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 100) {
+    errors.push('Name must be between 2 and 100 characters.');
   }
-  if (!name || name.trim().length < 2) {
-    errors.push('Name is required (minimum 2 characters).');
-  }
-  if (!['admin', 'teacher', 'student'].includes(role)) {
+  if (!USER_ROLES.has(role)) {
     errors.push('Invalid role. Must be admin, teacher, or student.');
   }
-  if (role === 'student' && studentId !== undefined && studentId !== null && isNaN(parseInt(studentId))) {
-    errors.push('studentId must be a number.');
+  const linkedStudentId = studentId === undefined || studentId === null || studentId === ''
+    ? null
+    : parsePositiveSafeInteger(studentId);
+  if (role === 'student'
+      && studentId !== undefined
+      && studentId !== null
+      && studentId !== ''
+      && linkedStudentId === null) {
+    errors.push('studentId must be a positive integer.');
+  }
+  if (department !== undefined && department !== null
+      && (typeof department !== 'string' || department.trim().length > 100)) {
+    errors.push('Department cannot exceed 100 characters.');
   }
 
   if (errors.length) {
@@ -104,9 +154,9 @@ async function apiCreateUser(req, res) {
       return res.status(409).json({ error: 'Email already registered.' });
     }
 
-    // If student role, verify studentId exists in students table
-    if (role === 'student' && studentId) {
-      const student = await studentService.findById(parseInt(studentId));
+    // If student role, verify studentId exists in students table.
+    if (role === 'student' && linkedStudentId !== null) {
+      const student = await studentService.findById(linkedStudentId);
       if (!student) {
         return res.status(400).json({ error: 'Student ID does not exist in students table.' });
       }
@@ -117,8 +167,10 @@ async function apiCreateUser(req, res) {
       password,
       name: name.trim(),
       role,
-      studentId: studentId ? parseInt(studentId) : null,
-      department: department?.trim() || null,
+      studentId: role === 'student' ? linkedStudentId : null,
+      department: role === 'teacher' && typeof department === 'string'
+        ? (department.trim() || null)
+        : null,
     });
 
     // Log audit event
@@ -144,8 +196,37 @@ async function apiCreateUser(req, res) {
  * Update user details (name, role, password, department, isActive).
  */
 async function apiUpdateUser(req, res) {
-  const id = parseInt(req.params.id, 10);
-  const { name, role, password, department, isActive } = req.body || {};
+  const id = parsePositiveSafeInteger(req.params.id);
+  if (id === null) {
+    return res.status(400).json({ error: 'User ID must be a positive integer.' });
+  }
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(400).json({ error: 'Request body must be an object.' });
+  }
+
+  const { name, role, password, department, isActive } = req.body;
+  const errors = [];
+  if (name !== undefined
+      && (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 100)) {
+    errors.push('Name must be between 2 and 100 characters.');
+  }
+  if (role !== undefined && !USER_ROLES.has(role)) {
+    errors.push('Invalid role. Must be admin, teacher, or student.');
+  }
+  if (password !== undefined) validatePassword(password, errors);
+  if (department !== undefined && department !== null
+      && (typeof department !== 'string' || department.trim().length > 100)) {
+    errors.push('Department cannot exceed 100 characters.');
+  }
+  if (isActive !== undefined && typeof isActive !== 'boolean') {
+    errors.push('isActive must be a boolean.');
+  }
+  if ([name, role, password, department, isActive].every((value) => value === undefined)) {
+    errors.push('At least one supported field is required.');
+  }
+  if (errors.length) {
+    return res.status(400).json({ error: errors[0], errors });
+  }
 
   if (id === req.user.id) {
     return res.status(400).json({ error: 'You cannot modify your own account via this endpoint.' });
@@ -157,30 +238,60 @@ async function apiUpdateUser(req, res) {
       return res.status(404).json({ error: 'User not found.' });
     }
 
-    // Prevent demoting the last admin
-    if (targetUser.role === 'admin' && role && role !== 'admin') {
-      const [{ adminCount }] = await pool.query(
-        'SELECT COUNT(*) AS adminCount FROM users WHERE role = ?',
+    // Preserve at least one admin and one active admin.
+    if (targetUser.role === 'admin'
+        && ((role !== undefined && role !== 'admin') || isActive === false)) {
+      const [{ adminCount, activeAdminCount }] = await pool.query(
+        `SELECT COUNT(*) AS adminCount,
+                SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) AS activeAdminCount
+         FROM users WHERE role = ?`,
         ['admin']
       );
-      if (adminCount <= 1) {
+      if (role !== undefined && role !== 'admin' && adminCount <= 1) {
         return res.status(400).json({ error: 'Cannot demote the last admin user.' });
+      }
+      if (isActive === false && Boolean(targetUser.is_active) && activeAdminCount <= 1) {
+        return res.status(400).json({ error: 'Cannot deactivate the last active admin user.' });
       }
     }
 
-    const updated = await authService.updateUser(id, { name, role, password, department, isActive });
+    const changes = {
+      name: name === undefined ? undefined : name.trim(),
+      role,
+      password,
+      department: department === undefined
+        ? undefined
+        : (typeof department === 'string' ? (department.trim() || null) : null),
+      isActive,
+    };
+    const updated = await authService.updateUser(id, changes);
 
     if (!updated) {
       return res.status(404).json({ error: 'User not found or no changes made.' });
     }
 
-    // Log audit event
+    const changedFields = Object.entries(changes)
+      .filter(([, value]) => value !== undefined)
+      .map(([field]) => field === 'password' ? 'password' : field);
+    const auditMetadata = { changedFields };
+    if (role !== undefined) {
+      auditMetadata.roleChange = { from: targetUser.role, to: role };
+    }
+    if (isActive !== undefined) {
+      auditMetadata.activeChange = {
+        from: Boolean(targetUser.is_active),
+        to: isActive,
+      };
+    }
+    if (password !== undefined) auditMetadata.passwordChanged = true;
+
+    // Log only field names and non-secret security transitions.
     await logAuditEvent({
       userId: req.user.id,
       action: 'UPDATE_USER',
       resourceType: 'user',
       resourceId: id,
-      metadata: { changes: req.body },
+      metadata: auditMetadata,
       ipAddress: req.ip || req.headers['x-forwarded-for'] || 'unknown',
       userAgent: req.headers['user-agent'],
     });
@@ -199,7 +310,10 @@ async function apiUpdateUser(req, res) {
  * Delete a user (admin only, cannot delete self).
  */
 async function apiDeleteUser(req, res) {
-  const id = parseInt(req.params.id, 10);
+  const id = parsePositiveSafeInteger(req.params.id);
+  if (id === null) {
+    return res.status(400).json({ error: 'User ID must be a positive integer.' });
+  }
 
   if (id === req.user.id) {
     return res.status(400).json({ error: 'You cannot delete your own account.' });
@@ -211,15 +325,9 @@ async function apiDeleteUser(req, res) {
       return res.status(404).json({ error: 'User not found.' });
     }
 
-    // Prevent deleting the last admin
+    // Admin accounts must be demoted before deletion.
     if (targetUser.role === 'admin') {
-      const [{ adminCount }] = await pool.query(
-        'SELECT COUNT(*) AS adminCount FROM users WHERE role = ?',
-        ['admin']
-      );
-      if (adminCount <= 1) {
-        return res.status(400).json({ error: 'Cannot delete the last admin user.' });
-      }
+      return res.status(400).json({ error: 'Admin accounts must be demoted before deletion.' });
     }
 
     const affected = await authService.deleteUser(id);
@@ -251,15 +359,24 @@ async function apiDeleteUser(req, res) {
  */
 async function apiGetAuditLogs(req, res) {
   try {
-    const page = parseInt(req.query.page, 10) || 1;
-    const size = parseInt(req.query.size, 10) || 50;
-    const action = req.query.action || '';
-    const resourceType = req.query.resource_type || '';
-    const userId = req.query.user_id ? parseInt(req.query.user_id, 10) : null;
+    const page = parsePositiveSafeInteger(req.query.page) || 1;
+    const size = Math.min(100, parsePositiveSafeInteger(req.query.size) || 50);
+    const action = boundedString(req.query.action, { field: 'action', max: 50 });
+    const resourceType = boundedString(req.query.resource_type, {
+      field: 'resource_type',
+      max: 50,
+    });
+    const userId = req.query.user_id === undefined || req.query.user_id === ''
+      ? null
+      : parsePositiveSafeInteger(req.query.user_id);
+    if (req.query.user_id !== undefined && req.query.user_id !== '' && userId === null) {
+      return res.status(400).json({ error: 'user_id must be a positive integer.' });
+    }
 
     const result = await authService.getAuditLogs({ page, size, action, resourceType, userId });
     res.json(result);
   } catch (err) {
+    if (validationError(res, err)) return;
     console.error('[apiGetAuditLogs]', err);
     res.status(500).json({ error: 'Failed to load audit logs.' });
   }
@@ -368,24 +485,30 @@ async function apiAdminAtRisk(req, res) {
  */
 async function apiAdminListStudents(req, res) {
   const { loadSchemaMap, getDisplayColumns, getSchemaMap } = require('../utils/schemaMap');
-  loadSchemaMap();
-
-  const q = req.query.q || '';
-  const sort = req.query.sort || 'id';
-  const dir = req.query.dir || 'asc';
-  const page = parseInt(req.query.page, 10) || 1;
-  const size = parseInt(req.query.size, 10) || 20;
-
-  // Parse filters from query params
-  const filters = {
-    grade: req.query.grade || 'all',
-    gender: req.query.gender || 'all',
-    part_time_job: req.query.part_time_job || 'all',
-    parental_education: req.query.parental_education || 'all',
-    at_risk: req.query.at_risk || 'all',
-  };
 
   try {
+    loadSchemaMap();
+    const normalized = normalizeBulkFilters({
+      q: req.query.q,
+      grade: req.query.grade,
+      gender: req.query.gender,
+      part_time_job: req.query.part_time_job,
+      parental_education: req.query.parental_education,
+      at_risk: req.query.at_risk,
+    });
+    const q = normalized.q || '';
+    const sort = boundedString(req.query.sort, { field: 'sort', max: 100 }) || 'id';
+    const dir = boundedString(req.query.dir, { field: 'dir', max: 4 }) || 'asc';
+    const page = parsePositiveSafeInteger(req.query.page) || 1;
+    const size = Math.min(100, parsePositiveSafeInteger(req.query.size) || 20);
+    const filters = {
+      grade: normalized.grade || 'all',
+      gender: normalized.gender || 'all',
+      part_time_job: normalized.part_time_job || 'all',
+      parental_education: normalized.parental_education || 'all',
+      at_risk: normalized.at_risk || 'all',
+    };
+
     const [rows, total] = await Promise.all([
       studentService.listStudents({ q, sort, dir, page, size, filters }),
       studentService.countStudents({ q, filters }),
@@ -397,6 +520,7 @@ async function apiAdminListStudents(req, res) {
 
     res.json({ rows, total, page, totalPages, columns, schemaMap, filters });
   } catch (err) {
+    if (validationError(res, err)) return;
     console.error('[apiAdminListStudents]', err);
     res.status(500).json({ error: 'Failed to load students.' });
   }
@@ -406,36 +530,34 @@ async function apiAdminListStudents(req, res) {
  * POST /api/admin/students/bulk-export — Export filtered students as CSV
  */
 async function apiAdminBulkExport(req, res) {
-  const { ids = [], filters = {} } = req.body || {};
-
   try {
-    const rows = await studentService.getStudentsForBulk({ ids, filters });
+    const { ids, filters } = normalizeBulkRequest(req.body, 100);
+    const rows = await studentService.getStudentsForBulk({
+      ids,
+      filters,
+      size: 100,
+    });
 
-    // Generate CSV
     const { getDisplayColumns, loadSchemaMap } = require('../utils/schemaMap');
     loadSchemaMap();
     const displayCols = getDisplayColumns();
+    const csvRows = [
+      encodeCsvRow(['id', ...displayCols.map((column) => column.name)]),
+      ...rows.map((row) => encodeCsvRow([
+        row.id,
+        ...displayCols.map((column) => row[column.name]),
+      ])),
+    ];
+    const csv = csvRows.join('\r\n');
 
-    const header = ['id', ...displayCols.map(c => c.name)].join(',');
-    const csvRows = rows.map(row => {
-      return [row.id, ...displayCols.map(c => {
-        const val = row[c.name];
-        if (val === null || val === undefined) return '';
-        // Escape commas and quotes
-        const str = String(val);
-        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-          return `"${str.replace(/"/g, '""')}"`;
-        }
-        return str;
-      })].join(',');
-    });
-
-    const csv = [header, ...csvRows].join('\n');
-
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="students-export-${new Date().toISOString().split('T')[0]}.csv"`);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="students-export-${new Date().toISOString().split('T')[0]}.csv"`
+    );
     res.send(csv);
   } catch (err) {
+    if (validationError(res, err)) return;
     console.error('[apiAdminBulkExport]', err);
     res.status(500).json({ error: 'Failed to export students.' });
   }
@@ -445,32 +567,60 @@ async function apiAdminBulkExport(req, res) {
  * POST /api/admin/students/bulk-ai-evaluate — Run AI evaluation on multiple students
  */
 async function apiAdminBulkAiEvaluate(req, res) {
-  const { ids = [], filters = {} } = req.body || {};
-
   try {
-    const rows = await studentService.getStudentsForBulk({ ids, filters, size: 50 }); // Limit to 50
+    const { ids, filters } = normalizeBulkRequest(req.body, 50);
+    const rows = await studentService.getStudentsForBulk({ ids, filters, size: 50 });
 
-    // For each student, generate AI feedback
-    const results = [];
-    for (const student of rows) {
-      try {
-        const noteResult = await studentService.generateInterventionNote(student.id);
-        results.push({
-          studentId: student.id,
-          student_id: student.student_id,
-          interventionNote: noteResult.interventionNote,
-        });
-      } catch (e) {
-        results.push({
-          studentId: student.id,
-          student_id: student.student_id,
-          error: e.message,
-        });
+    const studentIds = rows.map(s => s.id);
+
+    // Use centralized batch prediction (sequential, respects runner concurrency cap)
+    let batchResults;
+    try {
+      batchResults = await mlService.batchPredict(studentIds);
+    } catch (err) {
+      if (err.message === 'ML capacity exceeded') {
+        return res.status(503).json({ error: 'ML service temporarily unavailable, please retry' });
       }
+      throw err;
     }
+
+    // Build results with intervention notes for successful predictions
+    const { generateInterventionNote } = require('../services/aiCounselService');
+    const results = await Promise.all(batchResults.map(async (item) => {
+      if (item.error) {
+        return {
+          studentId: item.studentId,
+          student_id: rows.find(s => s.id === item.studentId)?.student_id ?? null,
+          error: 'Prediction failed for this student.',
+        };
+      }
+      try {
+        const student = rows.find(s => s.id === item.studentId);
+        const noteResult = await generateInterventionNote(item.studentId, null, item.prediction);
+        return {
+          studentId: item.studentId,
+          student_id: student?.student_id ?? null,
+          interventionNote: noteResult.interventionNote,
+          prediction: {
+            final_score: item.prediction.final_score,
+            grade: item.prediction.grade,
+            grade_confidence: item.prediction.grade_confidence,
+            grade_probabilities: item.prediction.grade_probabilities,
+          },
+        };
+      } catch (err) {
+        console.error(`[apiAdminBulkAiEvaluate] student ${item.studentId}`, err);
+        return {
+          studentId: item.studentId,
+          student_id: rows.find(s => s.id === item.studentId)?.student_id ?? null,
+          error: 'Evaluation failed for this student.',
+        };
+      }
+    }));
 
     res.json({ results });
   } catch (err) {
+    if (validationError(res, err)) return;
     console.error('[apiAdminBulkAiEvaluate]', err);
     res.status(500).json({ error: 'Failed to run bulk AI evaluation.' });
   }
@@ -480,10 +630,29 @@ async function apiAdminBulkAiEvaluate(req, res) {
  * POST /api/admin/students/:id/intervention — Generate intervention note for a student
  */
 async function apiAdminGenerateIntervention(req, res) {
-  const id = parseInt(req.params.id, 10);
+  const id = parsePositiveSafeInteger(req.params.id);
+  if (id === null) {
+    return res.status(400).json({ error: 'Student ID must be a positive integer.' });
+  }
 
   try {
-    const result = await studentService.generateInterventionNote(id);
+    const student = await studentService.findById(id);
+    if (!student) return res.status(404).json({ error: 'Student not found.' });
+
+    // Get prediction first
+    let prediction;
+    try {
+      prediction = await mlService.predictForStudent(id);
+    } catch (err) {
+      if (err.message === 'ML capacity exceeded') {
+        return res.status(503).json({ error: 'Intervention service temporarily unavailable, please retry' });
+      }
+      throw err;
+    }
+
+    // Generate intervention note using prediction
+    const { generateInterventionNote } = require('../services/aiCounselService');
+    const result = await generateInterventionNote(id, null, prediction);
     res.json(result);
   } catch (err) {
     console.error('[apiAdminGenerateIntervention]', err);
@@ -495,9 +664,14 @@ async function apiAdminGenerateIntervention(req, res) {
  * POST /api/admin/students/:id/summarize-habits — Generate habit summary for notes
  */
 async function apiAdminSummarizeHabits(req, res) {
-  const id = parseInt(req.params.id, 10);
+  const id = parsePositiveSafeInteger(req.params.id);
+  if (id === null) {
+    return res.status(400).json({ error: 'Student ID must be a positive integer.' });
+  }
 
   try {
+    const student = await studentService.findById(id);
+    if (!student) return res.status(404).json({ error: 'Student not found.' });
     const result = await studentService.summarizeHabits(id);
     res.json(result);
   } catch (err) {

@@ -1,0 +1,44 @@
+{
+  "name": "student-performance-study-habits",
+  "version": "1.0.0",
+  "description": "CRUD + Dashboard web app for the Student Performance & Study Habits dataset (Kaggle), backed by MySQL 8.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node \"node_modules/nodemon/bin/nodemon.js\" src/server.js",
+    "dev:full": "concurrently \"npm run dev\" \"npm run dev:frontend\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build:frontend": "cd frontend && npm run build",
+    "import": "node src/scripts/import.js",
+    "import:sample": "node src/scripts/import.js --file seed/sample_students.csv",
+    "import:force": "node src/scripts/import.js --replace",
+    "seed:admin": "node src/scripts/seedAdmin.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "express",
+    "mysql",
+    "react",
+    "vite",
+    "dashboard",
+    "crud"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.6",
+    "csv-parse": "^5.5.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-session": "^1.19.0",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "mysql2": "^3.10.1"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.1.4"
+  }
+}

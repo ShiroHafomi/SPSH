@@ -3,8 +3,19 @@
  * Mounted at /api in app.js.
  */
 const express = require('express');
-const { requireAuth, requireRole, sessionAuth } = require('../middleware/auth');
-const { loginLimiter, registerLimiter, rateLimitMiddleware } = require('../utils/rateLimiter');
+const { requireAuth, requireRole, sessionAuth, optionalAuth } = require('../middleware/auth');
+const {
+  adminAiLimiter,
+  adminBulkAiLimiter,
+  authenticatedRateLimitKey,
+  loginLimiter,
+  predictionLimiter,
+  rateLimitMiddleware,
+  refreshLimiter,
+  registerLimiter,
+  studentAiLimiter,
+  teacherAiLimiter,
+} = require('../utils/rateLimiter');
 
 // Auth
 const {
@@ -63,11 +74,14 @@ const {
 } = require('../controllers/studentController');
 
 const router = express.Router();
+const authenticatedLimit = (limiter) => rateLimitMiddleware(limiter, {
+  keyGenerator: authenticatedRateLimitKey,
+});
 
 // ─── Auth (no auth required) — rate-limited ───────────────────────────────────
 router.post('/auth/login', rateLimitMiddleware(loginLimiter), apiLogin);
-router.post('/auth/logout', apiLogout);
-router.post('/auth/refresh', apiRefresh);
+router.post('/auth/logout', optionalAuth, apiLogout);
+router.post('/auth/refresh', rateLimitMiddleware(refreshLimiter), apiRefresh);
 router.post('/auth/register', rateLimitMiddleware(registerLimiter), apiRegister);
 
 // ─── Auth (requires auth) ────────────────────────────────────────────────────
@@ -75,14 +89,15 @@ router.get('/auth/me', sessionAuth, apiMe);
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
 router.get('/dashboard/stats', requireAuth, apiDashboardStats);
-router.get('/dashboard/at-risk', requireAuth, apiAtRiskStudents);
+router.get('/dashboard/at-risk', requireAuth, requireRole('admin', 'teacher'), apiAtRiskStudents);
 
-// ─── Students ────────────────────────────────────────────────────────────────
-router.get('/students', requireAuth, apiListStudents);
-router.get('/students/:id', requireAuth, apiGetStudent);
-router.post('/students', requireAuth, apiCreateStudent);
-router.post('/students/:id', requireAuth, apiUpdateStudent);
-router.post('/students/:id/delete', requireAuth, apiDeleteStudent);
+// ─── Students (staff only; students use /student/me/*) ───────────────────────
+const requireStudentManagement = [requireAuth, requireRole('admin', 'teacher')];
+router.get('/students', ...requireStudentManagement, apiListStudents);
+router.get('/students/:id', ...requireStudentManagement, apiGetStudent);
+router.post('/students', ...requireStudentManagement, apiCreateStudent);
+router.post('/students/:id', ...requireStudentManagement, apiUpdateStudent);
+router.post('/students/:id/delete', ...requireStudentManagement, apiDeleteStudent);
 
 // ─── Admin (requires admin) ───────────────────────────────────────────────────
 const adminRouter = express.Router();
@@ -101,10 +116,18 @@ adminRouter.get('/at-risk', apiAdminAtRisk);
 // Student management (filtered, with search/sort/pagination)
 adminRouter.get('/students', apiAdminListStudents);
 adminRouter.post('/students/bulk-export', apiAdminBulkExport);
-adminRouter.post('/students/bulk-ai-evaluate', apiAdminBulkAiEvaluate);
+adminRouter.post(
+  '/students/bulk-ai-evaluate',
+  authenticatedLimit(adminBulkAiLimiter),
+  apiAdminBulkAiEvaluate
+);
 
 // Individual student AI actions
-adminRouter.post('/students/:id/intervention', apiAdminGenerateIntervention);
+adminRouter.post(
+  '/students/:id/intervention',
+  authenticatedLimit(adminAiLimiter),
+  apiAdminGenerateIntervention
+);
 adminRouter.post('/students/:id/summarize-habits', apiAdminSummarizeHabits);
 
 // User management
@@ -126,7 +149,11 @@ teacherRouter.get('/analytics', apiTeacherAnalytics);
 teacherRouter.get('/at-risk', apiTeacherAtRisk);
 
 // AI Counsel
-teacherRouter.post('/ai-counsel', apiTeacherAiCounsel);
+teacherRouter.post(
+  '/ai-counsel',
+  authenticatedLimit(teacherAiLimiter),
+  apiTeacherAiCounsel
+);
 
 // Student management
 teacherRouter.get('/students', apiTeacherStudents);
@@ -143,15 +170,33 @@ studentRouter.use(requireAuth, requireRole('student'));
 studentRouter.get('/me/profile', apiStudentProfile);
 
 // What-If Simulator
-studentRouter.post('/me/simulate', apiStudentSimulate);
+studentRouter.post(
+  '/me/simulate',
+  authenticatedLimit(studentAiLimiter),
+  apiStudentSimulate
+);
 
 // AI Advisor
-studentRouter.get('/me/advisor', apiStudentAdvisor);
+studentRouter.get(
+  '/me/advisor',
+  authenticatedLimit(studentAiLimiter),
+  apiStudentAdvisor
+);
 
 router.use('/student', studentRouter);
 
 // ─── ML Prediction ────────────────────────────────────────────────────────────
-router.post('/predict', requireAuth, apiPredict);
-router.post('/feedback', requireAuth, apiFeedback);
+router.post(
+  '/predict',
+  requireAuth,
+  authenticatedLimit(predictionLimiter),
+  apiPredict
+);
+router.post(
+  '/feedback',
+  requireAuth,
+  authenticatedLimit(predictionLimiter),
+  apiFeedback
+);
 
 module.exports = router;

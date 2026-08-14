@@ -1,6 +1,6 @@
 # Student Performance & Study Habits — SPA + ML Pipeline
 
-A **Vanilla JS Single-Page Application** (hash-based routing) backed by an **Express REST API** and **MySQL 8**, with a **traditional ML pipeline** for predicting student outcomes from study habits and demographics.
+A **React/Vite single-page application** backed by an **Express REST API** and **MySQL 8**, with a traditional ML pipeline for predicting student outcomes from study habits and demographics.
 
 ---
 
@@ -11,7 +11,7 @@ A **Vanilla JS Single-Page Application** (hash-based routing) backed by an **Exp
 | **Schema-Agnostic** | No hardcoded column names. Columns are inferred from CSV at import time via `schema_map.json`. UI (tables, forms, charts) adapts automatically. |
 | **SPA Dashboard** | KPI cards + 3 Chart.js charts (bar, scatter, histogram) with semantic heuristic chart-role assignment. |
 | **Student CRUD** | Searchable, sortable, paginated table. Dynamic create/edit forms rendered from schema metadata. |
-| **Auth & Admin** | Session-based auth (`express-session` + `bcryptjs`). First user = admin. Admin user management panel. |
+| **Auth & Admin** | Rotating JWT cookie sessions, bcryptjs password hashing, role-based access, audit logs, and an admin user-management panel. |
 | **ML Prediction** | Two traditional ML models: RidgeCV regression (Final_Score, R²≈0.98) + GradientBoosting classification (Grade A–F, Acc≈0.82). |
 | **Robust Import** | Streaming CSV importer (two-pass: type inference → batch INSERT). Handles MySQL STRICT mode, logs errors to `import_errors.log`. |
 
@@ -23,9 +23,9 @@ A **Vanilla JS Single-Page Application** (hash-based routing) backed by an **Exp
 |-------|------------|
 | **Runtime** | Node 22 |
 | **API/Static** | Express 4 |
-| **Frontend** | Vanilla JS (ESM), hash-router, Tailwind CSS (CDN), Chart.js (CDN) |
+| **Frontend** | React 18, React Router 6, Vite 5, Tailwind CSS, Chart.js |
 | **Database** | MySQL 8.0, `mysql2/promise` pool |
-| **Auth** | `express-session` (memory), `bcryptjs` (12 rounds) |
+| **Auth** | Access/refresh JWT cookies, database-backed refresh sessions, `bcryptjs` (12 rounds) |
 | **Import** | `csv-parse` (Adaltas, streaming) |
 | **ML** | Python 3.11, scikit-learn, XGBoost, pandas, joblib |
 
@@ -234,12 +234,32 @@ All return JSON. Session cookie sent automatically by browser.
 
 ##  Security
 
-- **Auth**: Session-based, httpOnly, sameSite=lax, 24h expiry
-- **Passwords**: bcryptjs, 12 salt rounds
-- **CSRF**: Origin/Referer check on mutating requests
-- **SQLi**: Column whitelist from `schema_map.json` for ORDER BY/WHERE; all values via `?` placeholders
-- **XSS**: `escapeHtml()` + textContent assignment, no `innerHTML` with user data
-- **Validation**: Server-side required/nullable, type, length, date checks
+- **Authentication**: Short-lived access JWTs and rotating refresh JWTs use HttpOnly, Secure-in-production, SameSite=Lax cookies. Refresh-token hashes and revocation state are stored in MySQL; logout and security-sensitive account changes revoke sessions.
+- **Authorization**: Generic student CRUD and at-risk datasets are restricted to teachers/admins. Student accounts use the account-linked `/api/student/me/*` endpoints.
+- **Passwords**: bcryptjs with 12 salt rounds. Production bootstrap credentials must be explicit, and seed scripts never print passwords.
+- **Request provenance**: Cookie-authenticated mutations require an exact allowed Origin/Referer in production and reject hostile Fetch Metadata. Explicit Bearer clients do not rely on ambient cookies.
+- **Browser policy**: Helmet provides CSP, HSTS in production, framing/object restrictions, a strict referrer policy, and a restrictive Permissions Policy.
+- **SQL injection**: Sort/search identifiers use a whitelist derived from `schema_map.json`; request values use `?` bindings.
+- **Resource limits**: Request bodies, bulk selections, filters, audit metadata, CSV output, ML processes, and sensitive/expensive endpoints are bounded.
+
+### Internet-facing production deployment
+
+1. Build the React client with `npm --prefix frontend run build`; production Express serves only `frontend/dist`. Do not run the Vite development server in production.
+2. Set `NODE_ENV=production`, an HTTPS `APP_ORIGIN`, strong distinct `JWT_SECRET` and `JWT_REFRESH_SECRET` values (at least 32 random bytes each), and production database credentials.
+3. Terminate HTTPS at a trusted reverse proxy or load balancer. Set `TRUST_PROXY` only to the exact proxy address/subnet or known hop count; leave it unset when Express receives clients directly.
+4. Keep the SPA and `/api` on the same origin. The cookie and provenance policy intentionally assumes a same-origin deployment.
+5. Set explicit `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `ADMIN_NAME` before running `npm run seed:admin`. The development `Admin123!` fallback is rejected in production.
+6. Use a shared rate-limit store or equivalent reverse-proxy/WAF limits before scaling to multiple Node replicas; the built-in limiter is process-local.
+7. Back up MySQL, restrict model and application files to the service account, and keep `.env` and secrets out of source control.
+
+### Deferred framework security migrations
+
+The compatible-update pass patches `nanoid` to 3.3.18 but deliberately retains Vite 5 and React Router 6. Their remaining advisories require major upgrades:
+
+- Vite/esbuild findings affect development tooling. Vite is bound to `127.0.0.1`, must never be exposed as a production server, and developers should not browse untrusted sites while it is running. Plan a separately tested Vite 8 migration.
+- React Router's SSR hydration advisory is not reachable because this application is a client-only SPA. Dynamic post-login navigation is constrained to validated internal paths. Plan a separately tested React Router 7 migration to remove the residual Router advisories.
+
+Run `npm audit` and `npm --prefix frontend audit` during every dependency update. Do not interpret the mitigations above as patched package versions.
 
 ---
 

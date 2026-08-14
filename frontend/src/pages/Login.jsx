@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { useAuth, homeForRole } from '../hooks/useAuth';
 import { useFlash } from '../components/FlashProvider';
 import { useLanguage } from '../hooks/useLanguage';
+import { safeReturnPath } from '../utils/safeNavigation';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -21,7 +22,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  const from = location.state?.from?.pathname || null;
+  const from = location.state?.from || null;
 
   const {
     register,
@@ -37,9 +38,8 @@ export default function Login() {
     try {
       const user = await login(data.email, data.password);
       addFlash(t('login.welcome'), 'success');
-      // Redirect based on role
-      const targetPath = from || homeForRole(user.role);
-      navigate(targetPath, { replace: true });
+      const roleHome = homeForRole(user.role);
+      navigate(safeReturnPath(from, roleHome), { replace: true });
     } catch (err) {
       addFlash(err.message || t('login.loginFailed'), 'error');
     } finally {

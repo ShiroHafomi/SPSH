@@ -5,6 +5,8 @@
 const studentService = require('../services/studentService');
 const { logAuditEvent } = require('../services/authService');
 const { generateInterventionNote } = require('../services/aiCounselService');
+const mlService = require('../services/mlService');
+const { parsePositiveSafeInteger } = require('../utils/inputValidation');
 
 /**
  * GET /api/teacher/analytics
@@ -81,7 +83,10 @@ async function apiTeacherStudents(req, res) {
  */
 async function apiGetTeacherStudent(req, res) {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parsePositiveSafeInteger(req.params.id);
+    if (id === null) {
+      return res.status(400).json({ error: 'Student ID must be a positive integer.' });
+    }
     const student = await studentService.findById(id);
 
     if (!student) {
@@ -104,7 +109,10 @@ async function apiGetTeacherStudent(req, res) {
  */
 async function apiUpdateTeacherStudent(req, res) {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parsePositiveSafeInteger(req.params.id);
+    if (id === null) {
+      return res.status(400).json({ error: 'Student ID must be a positive integer.' });
+    }
     const data = { ...req.body };
 
     // Teachers can update: final_score, grade, notes, attendance_percent, study_hours_per_day, etc.
@@ -126,7 +134,14 @@ async function apiUpdateTeacherStudent(req, res) {
       return res.status(400).json({ error: 'No valid fields to update.' });
     }
 
-    await studentService.updateStudent(id, updateData);
+    const updated = await studentService.updateStudent(id, updateData);
+    if (!updated) {
+      const existing = await studentService.findById(id);
+      if (!existing) {
+        return res.status(404).json({ error: 'Student not found.' });
+      }
+      return res.status(400).json({ error: 'No student fields were changed.' });
+    }
 
     // Log audit event
     await logAuditEvent({
@@ -215,20 +230,32 @@ async function apiTeacherAtRisk(req, res) {
  */
 async function apiTeacherAiCounsel(req, res) {
   try {
-    const { studentId, customPrompt } = req.body || {};
+    const { customPrompt } = req.body || {};
+    const studentId = parsePositiveSafeInteger(req.body?.studentId);
 
-    if (!studentId) {
-      return res.status(400).json({ error: 'studentId is required.' });
+    if (studentId === null) {
+      return res.status(400).json({ error: 'studentId must be a positive integer.' });
     }
 
     // Verify student exists
-    const student = await studentService.findById(parseInt(studentId));
+    const student = await studentService.findById(studentId);
     if (!student) {
       return res.status(404).json({ error: 'Student not found.' });
     }
 
-    // Generate intervention note using AI/ML service
-    const result = await generateInterventionNote(studentId, customPrompt);
+    // Get ML prediction first
+    let prediction;
+    try {
+      prediction = await mlService.predictForStudent(studentId);
+    } catch (err) {
+      if (err.message === 'ML capacity exceeded') {
+        return res.status(503).json({ error: 'Counsel service temporarily unavailable, please retry' });
+      }
+      throw err;
+    }
+
+    // Generate intervention note using prediction
+    const result = await generateInterventionNote(studentId, customPrompt, prediction);
 
     // Save intervention note to student's notes
     await studentService.updateStudent(studentId, {

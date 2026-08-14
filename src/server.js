@@ -6,6 +6,7 @@ require('dotenv').config();
 const { createApp } = require('./app');
 const { ensureReady } = require('./config/db');
 const { ensureUsersTable, ensureAuditLogsTable } = require('./services/authService');
+const { ensureAuthSessionsTable } = require('./services/authSessionService');
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -22,6 +23,14 @@ async function main() {
     console.log('   Users table: ready');
   } catch (err) {
     console.error('   Users table: FAILED —', err.message);
+  }
+
+  // Auto-create the refresh-session table after users (foreign-key dependency)
+  try {
+    await ensureAuthSessionsTable();
+    console.log('   Auth sessions table: ready');
+  } catch (err) {
+    console.error('   Auth sessions table: FAILED —', err.message);
   }
 
   // Auto-create the audit_logs table

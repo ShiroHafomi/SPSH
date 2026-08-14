@@ -3,8 +3,6 @@
  * Uses rule-based templates + ML predictions for immediate value.
  * Scaffolding for future LLM integration (Phase 3).
  */
-const { execFile } = require('child_process');
-const path = require('path');
 const studentService = require('./studentService');
 
 // Risk threshold constants
@@ -18,15 +16,21 @@ const RISK_THRESHOLDS = {
 /**
  * Generate intervention note for a student (used by Teacher/Admin).
  * Saves to student.notes column.
+ * @param {number} studentId - Internal students.id
+ * @param {string} [customPrompt] - Optional custom notes
+ * @param {Object} [prediction] - Pre-fetched ML prediction (avoids duplicate call)
  */
-async function generateInterventionNote(studentId, customPrompt) {
+async function generateInterventionNote(studentId, customPrompt, prediction) {
   const student = await studentService.findById(studentId);
   if (!student) {
     throw new Error('Student not found');
   }
 
-  // Get ML prediction
-  const prediction = await runPrediction(student);
+  // Get ML prediction if not provided
+  if (!prediction) {
+    const mlService = require('./mlService');
+    prediction = await mlService.predictForStudent(studentId);
+  }
 
   // Assess risk factors
   const riskAssessment = assessRisk(student);
@@ -457,62 +461,9 @@ function determinePersonality(student, prediction) {
   return 'developing_learner';
 }
 
-/**
- * Run ML prediction for a student.
- */
-function runPrediction(student) {
-  return new Promise((resolve, reject) => {
-    const scriptPath = path.join(__dirname, '..', '..', 'ml', 'inference.py');
-
-    // Prepare input
-    const input = {
-      gender: student.gender,
-      age: student.age,
-      study_hours_per_day: student.study_hours_per_day,
-      attendance_percent: student.attendance_percent,
-      sleep_hours: student.sleep_hours,
-      previous_gpa: student.previous_gpa,
-      parental_education: student.parental_education,
-      internet_access: student.internet_access ? 1 : 0,
-      extracurricular: student.extracurricular ? 1 : 0,
-      part_time_job: student.part_time_job ? 1 : 0,
-    };
-
-    const proc = execFile('py', [scriptPath, '--json', '-'], {
-      maxBuffer: 1024 * 1024,
-      timeout: 30000,
-    });
-
-    let stdout = '';
-    let stderr = '';
-
-    proc.on('close', (code) => {
-      if (code !== 0) {
-        console.error('[runPrediction] Python error:', stderr);
-        return reject(new Error('Prediction failed: ' + stderr));
-      }
-
-      try {
-        const result = JSON.parse(stdout.trim());
-        resolve(result);
-      } catch (parseErr) {
-        console.error('[runPrediction] Parse error:', parseErr);
-        reject(new Error('Failed to parse prediction'));
-      }
-    });
-
-    proc.on('error', (error) => reject(error));
-    proc.stdout.on('data', (data) => { stdout += data; });
-    proc.stderr.on('data', (data) => { stderr += data; });
-    proc.stdin.write(JSON.stringify(input));
-    proc.stdin.end();
-  });
-}
-
 module.exports = {
   generateInterventionNote,
   generateStudentAdvice,
   summarizeHabits,
   assessRisk,
-  runPrediction,
 };

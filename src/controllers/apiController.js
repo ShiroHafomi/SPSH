@@ -4,12 +4,13 @@
  */
 const studentService = require('../services/studentService');
 const authService = require('../services/authService');
+const mlService = require('../services/mlService');
 const { getDisplayColumns, getSchemaMap, loadSchemaMap } = require('../utils/schemaMap');
 const { buildColumnSets } = require('../utils/columns');
 const { buildChartConfig } = require('../utils/chartConfig');
-const { execFile } = require('child_process');
-const path = require('path');
 const { generateFeedback } = require('../utils/feedbackTemplates');
+const { parsePositiveSafeInteger } = require('../utils/inputValidation');
+const { validatePredictionProfile } = require('../utils/mlValidation');
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
@@ -228,7 +229,10 @@ async function apiListStudents(req, res) {
 /** GET /api/students/:id */
 async function apiGetStudent(req, res) {
   loadSchemaMap();
-  const id = parseInt(req.params.id, 10);
+  const id = parsePositiveSafeInteger(req.params.id);
+  if (id === null) {
+    return res.status(400).json({ error: 'Student ID must be a positive integer.' });
+  }
 
   try {
     const student = await studentService.findById(id);
@@ -275,7 +279,10 @@ async function apiCreateStudent(req, res) {
 /** POST /api/students/:id */
 async function apiUpdateStudent(req, res) {
   loadSchemaMap();
-  const id = parseInt(req.params.id, 10);
+  const id = parsePositiveSafeInteger(req.params.id);
+  if (id === null) {
+    return res.status(400).json({ error: 'Student ID must be a positive integer.' });
+  }
   const displayCols = getDisplayColumns();
   const data = {};
 
@@ -291,8 +298,15 @@ async function apiUpdateStudent(req, res) {
   }
 
   try {
-    await studentService.updateStudent(id, data);
-    res.json({ ok: true });
+    const updated = await studentService.updateStudent(id, data);
+    if (!updated) {
+      const existing = await studentService.findById(id);
+      if (!existing) {
+        return res.status(404).json({ error: 'Student not found.' });
+      }
+      return res.status(400).json({ error: 'No student fields were changed.' });
+    }
+    return res.json({ ok: true });
   } catch (err) {
     console.error('[apiUpdateStudent]', err);
     res.status(500).json({ error: 'Failed to update student.' });
@@ -301,11 +315,17 @@ async function apiUpdateStudent(req, res) {
 
 /** POST /api/students/:id/delete */
 async function apiDeleteStudent(req, res) {
-  const id = parseInt(req.params.id, 10);
+  const id = parsePositiveSafeInteger(req.params.id);
+  if (id === null) {
+    return res.status(400).json({ error: 'Student ID must be a positive integer.' });
+  }
 
   try {
-    await studentService.deleteStudent(id);
-    res.json({ ok: true });
+    const deleted = await studentService.deleteStudent(id);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Student not found.' });
+    }
+    return res.json({ ok: true });
   } catch (err) {
     console.error('[apiDeleteStudent]', err);
     res.status(500).json({ error: 'Failed to delete student.' });
@@ -353,67 +373,26 @@ async function apiDeleteUser(req, res) {
 async function apiPredict(req, res) {
   const input = req.body || {};
 
-  // Validate required fields
-  const requiredFields = ['gender', 'age', 'study_hours_per_day', 'attendance_percent',
-                          'sleep_hours', 'previous_gpa', 'parental_education',
-                          'internet_access', 'extracurricular', 'part_time_job'];
-  const missing = requiredFields.filter(f => input[f] === undefined || input[f] === null || input[f] === '');
-  if (missing.length > 0) {
-    return res.status(400).json({
-      error: 'Missing required fields',
-      missing,
-      required: requiredFields
-    });
+  try {
+    const validated = validatePredictionProfile(input);
+    const result = await mlService.predict(validated);
+    res.json(result);
+  } catch (err) {
+    if (err instanceof TypeError || err instanceof RangeError) {
+      return res.status(400).json({ error: err.message });
+    }
+    if (err.message === 'ML capacity exceeded') {
+      return res.status(503).json({ error: 'Prediction service temporarily unavailable, please retry' });
+    }
+    if (err.message === 'Prediction failed') {
+      return res.status(500).json({ error: 'Prediction failed' });
+    }
+    if (err.message === 'Failed to parse prediction result' || err.message === 'ML process failed to start' || err.message === 'ML output too large' || err.message === 'ML inference timeout') {
+      return res.status(500).json({ error: 'Prediction service error' });
+    }
+    console.error('[apiPredict]', err);
+    res.status(500).json({ error: 'Prediction failed' });
   }
-
-  // Convert Yes/No to 1/0 for binary features
-  const pythonInput = { ...input };
-  for (const key of ['internet_access', 'extracurricular', 'part_time_job']) {
-    if (typeof pythonInput[key] === 'string') {
-      pythonInput[key] = pythonInput[key].toLowerCase() === 'yes' ? 1 : 0;
-    }
-  }
-
-  // Path to inference script
-  const scriptPath = path.join(__dirname, '..', '..', 'ml', 'inference.py');
-
-  const proc = execFile('py', [scriptPath, '--json', '-'], {
-    maxBuffer: 1024 * 1024,
-    timeout: 30000,
-  });
-
-  let stdout = '';
-  let stderr = '';
-
-  proc.on('close', (code) => {
-    if (code !== 0) {
-      console.error('[apiPredict] Python error:', stderr);
-      return res.status(500).json({ error: 'Prediction failed', details: stderr });
-    }
-
-    try {
-      // Parse JSON from stdout
-      const result = JSON.parse(stdout.trim());
-      res.json(result);
-    } catch (parseErr) {
-      console.error('[apiPredict] Parse error:', parseErr);
-      console.error('[apiPredict] stdout:', stdout);
-      res.status(500).json({ error: 'Failed to parse prediction result' });
-    }
-  });
-
-  proc.on('error', (error) => {
-    console.error('[apiPredict] Process error:', error);
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Prediction failed', details: error.message });
-    }
-  });
-
-  proc.stdout.on('data', (data) => { stdout += data; });
-  proc.stderr.on('data', (data) => { stderr += data; });
-
-  proc.stdin.write(JSON.stringify(pythonInput));
-  proc.stdin.end();
 }
 
 // ─── At-Risk Students ────────────────────────────────────────────────────────
@@ -441,75 +420,34 @@ async function apiAtRiskStudents(req, res) {
 async function apiFeedback(req, res) {
   const input = req.body || {};
 
-  // Validate required fields
-  const requiredFields = ['gender', 'age', 'study_hours_per_day', 'attendance_percent',
-                          'sleep_hours', 'previous_gpa', 'parental_education',
-                          'internet_access', 'extracurricular', 'part_time_job'];
-  const missing = requiredFields.filter(f => input[f] === undefined || input[f] === null || input[f] === '');
-  if (missing.length > 0) {
-    return res.status(400).json({
-      error: 'Missing required fields',
-      missing,
-      required: requiredFields
+  try {
+    const validated = validatePredictionProfile(input);
+    const prediction = await mlService.predict(validated);
+    const feedback = generateFeedback(input, prediction);
+
+    res.json({
+      final_score: prediction.final_score,
+      grade: prediction.grade,
+      grade_confidence: prediction.grade_confidence,
+      grade_probabilities: prediction.grade_probabilities,
+      feedback,
     });
+  } catch (err) {
+    if (err instanceof TypeError || err instanceof RangeError) {
+      return res.status(400).json({ error: err.message });
+    }
+    if (err.message === 'ML capacity exceeded') {
+      return res.status(503).json({ error: 'Prediction service temporarily unavailable, please retry' });
+    }
+    if (err.message === 'Prediction failed') {
+      return res.status(500).json({ error: 'Prediction failed' });
+    }
+    if (err.message === 'Failed to parse prediction result' || err.message === 'ML process failed to start' || err.message === 'ML output too large' || err.message === 'ML inference timeout') {
+      return res.status(500).json({ error: 'Prediction service error' });
+    }
+    console.error('[apiFeedback]', err);
+    res.status(500).json({ error: 'Prediction failed' });
   }
-
-  // Run ML inference
-  const pythonInput = { ...input };
-  for (const key of ['internet_access', 'extracurricular', 'part_time_job']) {
-    if (typeof pythonInput[key] === 'string') {
-      pythonInput[key] = pythonInput[key].toLowerCase() === 'yes' ? 1 : 0;
-    }
-  }
-
-  const scriptPath = path.join(__dirname, '..', '..', 'ml', 'inference.py');
-
-  const proc = execFile('py', [scriptPath, '--json', '-'], {
-    maxBuffer: 1024 * 1024,
-    timeout: 30000,
-  });
-
-  let stdout = '';
-  let stderr = '';
-
-  proc.on('close', (code) => {
-    if (code !== 0) {
-      console.error('[apiFeedback] Python error:', stderr);
-      return res.status(500).json({ error: 'Prediction failed', details: stderr });
-    }
-
-    try {
-      const prediction = JSON.parse(stdout.trim());
-
-      // Generate rule-based feedback
-      const feedback = generateFeedback(input, prediction);
-
-      res.json({
-        final_score: prediction.final_score,
-        grade: prediction.grade,
-        grade_confidence: prediction.grade_confidence,
-        grade_probabilities: prediction.grade_probabilities,
-        feedback,
-      });
-    } catch (parseErr) {
-      console.error('[apiFeedback] Parse error:', parseErr);
-      console.error('[apiFeedback] stdout:', stdout);
-      res.status(500).json({ error: 'Failed to parse prediction result' });
-    }
-  });
-
-  proc.on('error', (error) => {
-    console.error('[apiFeedback] Process error:', error);
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Prediction failed', details: error.message });
-    }
-  });
-
-  proc.stdout.on('data', (data) => { stdout += data; });
-  proc.stderr.on('data', (data) => { stderr += data; });
-
-  proc.stdin.write(JSON.stringify(pythonInput));
-  proc.stdin.end();
 }
 
 /** GET /api/admin/analytics — Admin dashboard analytics */

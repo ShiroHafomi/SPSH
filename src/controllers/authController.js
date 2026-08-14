@@ -5,12 +5,26 @@
 const authService = require('../services/authService');
 const {
   generateAccessToken,
-  generateRefreshToken,
   setAuthCookies,
   clearAuthCookies,
-  verifyRefreshToken,
 } = require('../utils/jwtUtils');
+const {
+  issueRefreshSession,
+  revokeRefreshSession,
+  rotateRefreshSession,
+} = require('../services/authSessionService');
 const { logAuditEvent } = require('../services/authService');
+
+function publicUser(user) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    studentId: user.student_id,
+    department: user.department,
+  };
+}
 
 /**
  * POST /api/auth/login
@@ -40,38 +54,29 @@ async function apiLogin(req, res) {
       return res.status(401).json({ error: 'Account is deactivated. Contact administrator.' });
     }
 
-    // Generate tokens
     const accessToken = generateAccessToken(user);
-    const refreshToken = generateRefreshToken(user.id);
+    const { refreshToken } = await issueRefreshSession(user.id);
 
-    // Set cookies
+    const maintenance = await Promise.allSettled([
+      authService.updateLastLogin(user.id),
+      logAuditEvent({
+        userId: user.id,
+        action: 'LOGIN',
+        resourceType: 'auth',
+        resourceId: user.id,
+        metadata: { method: 'password' },
+        ipAddress: req.ip || 'unknown',
+        userAgent: req.headers['user-agent'],
+      }),
+    ]);
+    maintenance.forEach((result) => {
+      if (result.status === 'rejected') {
+        console.error('[apiLogin] post-login maintenance failed:', result.reason?.message);
+      }
+    });
+
     setAuthCookies(res, accessToken, refreshToken);
-
-    // Update last login
-    await authService.updateLastLogin(user.id);
-
-    // Log audit event
-    await logAuditEvent({
-      userId: user.id,
-      action: 'LOGIN',
-      resourceType: 'auth',
-      resourceId: user.id,
-      metadata: { method: 'password' },
-      ipAddress: req.ip || req.headers['x-forwarded-for'] || 'unknown',
-      userAgent: req.headers['user-agent'],
-    });
-
-    // Return user object (without sensitive data)
-    res.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        studentId: user.student_id,
-        department: user.department,
-      },
-    });
+    return res.json({ user: publicUser(user) });
   } catch (err) {
     console.error('[apiLogin]', err);
     res.status(500).json({ error: 'Something went wrong. Please try again.' });
@@ -83,25 +88,28 @@ async function apiLogin(req, res) {
  * Clear auth cookies and optionally invalidate refresh token.
  */
 async function apiLogout(req, res) {
+  const refreshToken = req.cookies?.refresh_token;
+
   try {
-    // Log audit event if user is authenticated
+    if (refreshToken) {
+      await revokeRefreshSession(refreshToken);
+    }
     if (req.user) {
       await logAuditEvent({
         userId: req.user.id,
         action: 'LOGOUT',
         resourceType: 'auth',
         resourceId: req.user.id,
-        ipAddress: req.ip || req.headers['x-forwarded-for'] || 'unknown',
+        ipAddress: req.ip || 'unknown',
         userAgent: req.headers['user-agent'],
       });
     }
   } catch (err) {
-    console.error('[apiLogout] audit log failed:', err);
+    console.error('[apiLogout] session revocation or audit failed:', err.message);
   }
 
-  // Clear cookies
   clearAuthCookies(res);
-  res.json({ ok: true });
+  return res.json({ ok: true });
 }
 
 /**
@@ -116,38 +124,18 @@ async function apiRefresh(req, res) {
   }
 
   try {
-    const decoded = verifyRefreshToken(refreshToken);
-    const user = await authService.getUserById(decoded.id);
-
-    if (!user || !user.is_active) {
-      clearAuthCookies(res);
-      return res.status(401).json({ error: 'Invalid refresh token', code: 'INVALID_REFRESH_TOKEN' });
-    }
-
-    // Generate new access token
+    const { user, refreshToken: replacementToken } = await rotateRefreshSession(refreshToken);
     const accessToken = generateAccessToken(user);
-
-    // Set new access token cookie
-    res.cookie('access_token', accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 15 * 60 * 1000,
-    });
-
-    res.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        studentId: user.student_id,
-        department: user.department,
-      },
-    });
+    setAuthCookies(res, accessToken, replacementToken);
+    return res.json({ user: publicUser(user) });
   } catch (err) {
-    clearAuthCookies(res);
-    return res.status(401).json({ error: 'Session expired, please login again', code: 'SESSION_EXPIRED' });
+    if (!err.preserveCookies) {
+      clearAuthCookies(res);
+    }
+    return res.status(401).json({
+      error: 'Session expired, please login again',
+      code: err.code || 'SESSION_EXPIRED',
+    });
   }
 }
 

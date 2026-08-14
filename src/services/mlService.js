@@ -1,118 +1,101 @@
-/**
- * ML Service — Wrapper for Python inference.py
- * Handles prediction, what-if simulation, and batch evaluation.
- */
-const { execFile } = require('child_process');
-const path = require('path');
-
-const SCRIPT_PATH = path.join(__dirname, '..', '..', 'ml', 'inference.py');
+'use strict';
 
 /**
- * Run prediction for a student profile.
+ * Unified ML Service
+ * Single entry point for all prediction paths.
+ * Uses strict validation + bounded runner.
  */
-function runPrediction(input) {
-  return new Promise((resolve, reject) => {
-    // Ensure binary features are 0/1
-    const pythonInput = { ...input };
-    for (const key of ['internet_access', 'extracurricular', 'part_time_job']) {
-      if (typeof pythonInput[key] === 'string') {
-        pythonInput[key] = pythonInput[key].toLowerCase() === 'yes' ? 1 : 0;
-      } else if (typeof pythonInput[key] === 'boolean') {
-        pythonInput[key] = pythonInput[key] ? 1 : 0;
-      }
-    }
 
-    const proc = execFile('py', [SCRIPT_PATH, '--json', '-'], {
-      maxBuffer: 1024 * 1024,
-      timeout: 30000,
-    });
+const { validatePredictionProfile, studentToProfile } = require('../utils/mlValidation');
+const { runInference, getRunnerStats } = require('../utils/mlRunner');
+const studentService = require('./studentService');
+const { getSchemaMap } = require('../utils/schemaMap');
 
-    let stdout = '';
-    let stderr = '';
-
-    proc.on('close', (code) => {
-      if (code !== 0) {
-        console.error('[runPrediction] Python error:', stderr);
-        return reject(new Error(`Prediction failed: ${stderr}`));
-      }
-
-      try {
-        const result = JSON.parse(stdout.trim());
-        resolve(result);
-      } catch (parseErr) {
-        console.error('[runPrediction] Parse error:', parseErr);
-        reject(new Error('Failed to parse prediction result'));
-      }
-    });
-
-    proc.on('error', (error) => reject(error));
-    proc.stdout.on('data', (data) => { stdout += data; });
-    proc.stderr.on('data', (data) => { stderr += data; });
-    proc.stdin.write(JSON.stringify(pythonInput));
-    proc.stdin.end();
-  });
+/**
+ * Internal: run a single validated prediction.
+ */
+async function predict(input) {
+  const validated = validatePredictionProfile(input);
+  return runInference(validated);
 }
 
 /**
- * What-If simulation: run prediction with modified habit values.
- * Returns both current and simulated predictions.
+ * Prediction from raw API input (used by /predict, /feedback).
  */
-async function runWhatIfSimulation(student, modifications = {}) {
-  // Build current prediction input
-  const currentInput = {
-    gender: student.gender,
-    age: student.age,
-    study_hours_per_day: student.study_hours_per_day,
-    attendance_percent: student.attendance_percent,
-    sleep_hours: student.sleep_hours,
-    previous_gpa: student.previous_gpa,
-    parental_education: student.parental_education,
-    internet_access: student.internet_access ? 1 : 0,
-    extracurricular: student.extracurricular ? 1 : 0,
-    part_time_job: student.part_time_job ? 1 : 0,
-  };
+async function predictFromInput(rawInput) {
+  return predict(rawInput);
+}
 
-  // Build simulated input with modifications
-  const simulatedInput = { ...currentInput, ...modifications };
+/**
+ * Prediction for a student by ID (used by simulator, advisor, counsel, intervention).
+ * Fetches student, adapts via schema map, runs prediction.
+ */
+async function predictForStudent(studentId) {
+  const student = await studentService.findById(studentId);
+  if (!student) throw new Error('Student not found');
 
-  // Run both predictions in parallel
-  const [current, simulated] = await Promise.all([
-    runPrediction(currentInput),
-    runPrediction(simulatedInput),
-  ]);
+  const schemaMap = getSchemaMap();
+  const profile = studentToProfile(student, schemaMap);
+  return predict(profile);
+}
+
+/**
+ * What-if simulation: current + modified.
+ * Returns { current, simulated } where each is the raw ML result.
+ */
+async function simulate(studentId, modifications) {
+  const student = await studentService.findById(studentId);
+  if (!student) throw new Error('Student not found');
+
+  const schemaMap = getSchemaMap();
+  const baseProfile = studentToProfile(student, schemaMap);
+
+  // Current prediction
+  const current = await predict(baseProfile);
+
+  // Simulated prediction with modifications
+  const simulatedProfile = { ...baseProfile, ...modifications };
+  const simulated = await predict(simulatedProfile);
 
   return { current, simulated };
 }
 
 /**
- * Batch prediction for multiple students (max 50 for performance).
+ * Batch prediction for multiple students (max 50).
  */
-async function runBatchPrediction(students) {
+async function batchPredict(studentIds) {
+  if (!Array.isArray(studentIds) || studentIds.length === 0) {
+    return [];
+  }
+  if (studentIds.length > 50) {
+    throw new RangeError('Batch size cannot exceed 50');
+  }
+
+  // Sequential to respect runner concurrency cap
   const results = [];
-  for (const student of students) {
+  for (const id of studentIds) {
     try {
-      const prediction = await runPrediction({
-        gender: student.gender,
-        age: student.age,
-        study_hours_per_day: student.study_hours_per_day,
-        attendance_percent: student.attendance_percent,
-        sleep_hours: student.sleep_hours,
-        previous_gpa: student.previous_gpa,
-        parental_education: student.parental_education,
-        internet_access: student.internet_access ? 1 : 0,
-        extracurricular: student.extracurricular ? 1 : 0,
-        part_time_job: student.part_time_job ? 1 : 0,
-      });
-      results.push({ studentId: student.id, student_id: student.student_id, prediction });
+      const prediction = await predictForStudent(id);
+      results.push({ studentId: id, prediction });
     } catch (err) {
-      results.push({ studentId: student.id, student_id: student.student_id, error: err.message });
+      results.push({ studentId: id, error: 'Prediction failed' });
     }
   }
   return results;
 }
 
+/**
+ * Get runner stats for admin health endpoint.
+ */
+function getStats() {
+  return getRunnerStats();
+}
+
 module.exports = {
-  runPrediction,
-  runWhatIfSimulation,
-  runBatchPrediction,
+  predict,
+  predictFromInput,
+  predictForStudent,
+  simulate,
+  batchPredict,
+  getStats,
 };

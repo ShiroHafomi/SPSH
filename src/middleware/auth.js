@@ -7,10 +7,11 @@ const {
   extractToken,
   extractRefreshToken,
   generateAccessToken,
-  verifyRefreshToken,
+  setAuthCookies,
   clearAuthCookies,
 } = require('../utils/jwtUtils');
 const { findById } = require('../services/authService');
+const { rotateRefreshSession } = require('../services/authSessionService');
 
 function toRequestUser(user) {
   return {
@@ -21,15 +22,6 @@ function toRequestUser(user) {
     studentId: user.student_id,
     department: user.department,
   };
-}
-
-function setAccessTokenCookie(res, accessToken) {
-  res.cookie('access_token', accessToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 15 * 60 * 1000,
-  });
 }
 
 /**
@@ -86,25 +78,18 @@ async function handleTokenRefresh(req, res, next) {
   }
 
   try {
-    const decoded = verifyRefreshToken(refreshToken);
-    const user = await findById(decoded.id);
-
-    if (!user || !user.is_active) {
-      return res.status(401).json({ error: 'Invalid refresh token', code: 'INVALID_REFRESH_TOKEN' });
-    }
-
-    // Generate new access token
-    const newAccessToken = generateAccessToken(user);
-
-    // Set new access token cookie
-    setAccessTokenCookie(res, newAccessToken);
-
-    // Attach user and continue
+    const { user, refreshToken: replacementToken } = await rotateRefreshSession(refreshToken);
+    setAuthCookies(res, generateAccessToken(user), replacementToken);
     req.user = toRequestUser(user);
-
-    next();
+    return next();
   } catch (err) {
-    return res.status(401).json({ error: 'Session expired, please login again', code: 'SESSION_EXPIRED' });
+    if (!err.preserveCookies) {
+      clearAuthCookies(res);
+    }
+    return res.status(401).json({
+      error: 'Session expired, please login again',
+      code: err.code || 'SESSION_EXPIRED',
+    });
   }
 }
 
@@ -163,15 +148,17 @@ async function sessionAuth(req, res, next) {
 
   if (refreshToken) {
     try {
-      const decoded = verifyRefreshToken(refreshToken);
-      const user = await findById(decoded.id);
-      if (user?.is_active) {
-        setAccessTokenCookie(res, generateAccessToken(user));
-        req.user = toRequestUser(user);
-        return next();
+      const { user, refreshToken: replacementToken } = await rotateRefreshSession(refreshToken);
+      setAuthCookies(res, generateAccessToken(user), replacementToken);
+      req.user = toRequestUser(user);
+      return next();
+    } catch (err) {
+      // Stale probes are anonymous; avoid clearing a newer cookie after a
+      // concurrent request already rotated this token.
+      if (!err.preserveCookies) {
+        clearAuthCookies(res);
       }
-    } catch {
-      // Stale session probes are anonymous, not failed API requests.
+      return next();
     }
   }
 
@@ -238,39 +225,11 @@ function requireAnyRole(req, res, next) {
   return requireAuth(req, res, next);
 }
 
-/**
- * Require student access - students can only access their own data,
- * teachers and admins can access any student's data.
- */
-function requireStudentAccess(req, res, next) {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required', code: 'UNAUTHENTICATED' });
-  }
-
-  // Admin and teacher can access any student
-  if (req.user.role === 'admin' || req.user.role === 'teacher') {
-    return next();
-  }
-
-  // Student can only access their own data
-  // Check if the requested studentId matches their own
-  const requestedStudentId = parseInt(req.params.id || req.params.studentId || req.body.studentId, 10);
-  if (req.user.studentId && requestedStudentId && req.user.studentId !== requestedStudentId) {
-    return res.status(403).json({
-      error: 'Students can only access their own data',
-      code: 'FORBIDDEN',
-    });
-  }
-
-  next();
-}
-
 module.exports = {
   requireAuth,
   requireRole,
   sessionAuth,
   optionalAuth,
-  requireStudentAccess,
   requireAdmin,
   requireTeacherOrAdmin,
   requireStudent,

@@ -4,6 +4,8 @@
  */
 const bcrypt = require('bcryptjs');
 const { pool } = require('../config/db');
+const { revokeAllUserSessions } = require('./authSessionService');
+const { sanitizeAuditMetadata } = require('../utils/auditSanitizer');
 
 const SALT_ROUNDS = 12;
 const VALID_ROLES = ['admin', 'teacher', 'student'];
@@ -215,7 +217,11 @@ async function updateUser(id, { name, role, password, department, isActive }) {
     values
   );
 
-  return result.affectedRows > 0;
+  const updated = result.affectedRows > 0;
+  if (updated && (password !== undefined || role !== undefined || isActive !== undefined)) {
+    await revokeAllUserSessions(id);
+  }
+  return updated;
 }
 
 /**
@@ -321,10 +327,23 @@ async function ensureAuditLogsTable() {
  * Log an audit event.
  */
 async function logAuditEvent({ userId, action, resourceType, resourceId, metadata, ipAddress, userAgent }) {
+  const sanitizedMetadata = metadata === undefined || metadata === null
+    ? null
+    : sanitizeAuditMetadata(metadata);
+  const safeUserAgent = typeof userAgent === 'string' ? userAgent.slice(0, 1000) : null;
+
   await pool.query(
     `INSERT INTO audit_logs (user_id, action, resource_type, resource_id, metadata, ip_address, user_agent)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [userId, action, resourceType, resourceId, metadata ? JSON.stringify(metadata) : null, ipAddress, userAgent]
+    [
+      userId,
+      action,
+      resourceType,
+      resourceId,
+      sanitizedMetadata !== null ? JSON.stringify(sanitizedMetadata) : null,
+      ipAddress,
+      safeUserAgent,
+    ]
   );
 }
 

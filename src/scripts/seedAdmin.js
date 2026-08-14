@@ -10,15 +10,14 @@
  * credential is identical to one created through the normal API.
  *
  * Usage:
- *   node src/scripts/seedAdmin.js                          # create admin with defaults
- *   node src/scripts/seedAdmin.js --email a@b.com --password secret --name "Jane"
- *   node src/scripts/seedAdmin.js --reset --password NewPass!   # reset existing admin's password
- *   npm run seed:admin                                      # via package script
+ *   node src/scripts/seedAdmin.js
+ *   node src/scripts/seedAdmin.js --email a@b.com --password <secret> --name "Jane"
+ *   node src/scripts/seedAdmin.js --reset --password <new-secret>
+ *   npm run seed:admin
  *
- * Defaults (overridable by flag or ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_NAME env):
- *   email    = admin@school.edu
- *   password = Admin123!
- *   name     = System Admin
+ * ADMIN_EMAIL, ADMIN_PASSWORD, and ADMIN_NAME (or matching CLI flags) are
+ * mandatory in production. Development retains convenience defaults with an
+ * explicit warning. Password values are never written to output.
  *
  * The script never deletes or downgrades an existing admin account; it only
  * inserts a new one or (with --reset) updates the password of the matched
@@ -28,30 +27,81 @@ require('dotenv').config();
 const { pool } = require('../config/db');
 const { ensureUsersTable, createUser, updateUser } = require('../services/authService');
 
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const DEVELOPMENT_DEFAULTS = {
+  email: 'admin@school.edu',
+  password: 'Admin123!',
+  name: 'System Admin',
+};
 const DEFAULTS = {
-  email: process.env.ADMIN_EMAIL || 'admin@school.edu',
-  password: process.env.ADMIN_PASSWORD || 'Admin123!',
-  name: process.env.ADMIN_NAME || 'System Admin',
+  email: process.env.ADMIN_EMAIL || (IS_PRODUCTION ? '' : DEVELOPMENT_DEFAULTS.email),
+  password: process.env.ADMIN_PASSWORD || (IS_PRODUCTION ? '' : DEVELOPMENT_DEFAULTS.password),
+  name: process.env.ADMIN_NAME || (IS_PRODUCTION ? '' : DEVELOPMENT_DEFAULTS.name),
 };
 
 function parseArgs(argv) {
   const opts = { email: DEFAULTS.email, password: DEFAULTS.password, name: DEFAULTS.name, reset: false };
   for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a === '--email' && i + 1 < argv.length) opts.email = argv[++i];
-    else if (a === '--password' && i + 1 < argv.length) opts.password = argv[++i];
-    else if (a === '--name' && i + 1 < argv.length) opts.name = argv[++i];
-    else if (a === '--reset') opts.reset = true;
-    else if (a === '--help' || a === '-h') {
-      console.log(`Usage: node src/scripts/seedAdmin.js [--email <email>] [--password <pw>] [--name <name>] [--reset]`);
+    const arg = argv[i];
+    if (['--email', '--password', '--name'].includes(arg)) {
+      if (i + 1 >= argv.length || argv[i + 1].startsWith('--')) {
+        throw new Error(`${arg} requires a value.`);
+      }
+      opts[arg.slice(2)] = argv[++i];
+    } else if (arg === '--reset') {
+      opts.reset = true;
+    } else if (arg === '--help' || arg === '-h') {
+      console.log('Usage: node src/scripts/seedAdmin.js [--email <email>] [--password <pw>] [--name <name>] [--reset]');
       process.exit(0);
+    } else {
+      throw new Error(`Unknown argument: ${arg}`);
     }
   }
   return opts;
 }
 
+function validateOptions(opts) {
+  if (IS_PRODUCTION && (!opts.email || !opts.password || !opts.name)) {
+    throw new Error(
+      'Production seeding requires ADMIN_EMAIL, ADMIN_PASSWORD, and ADMIN_NAME or matching CLI flags.'
+    );
+  }
+  if (IS_PRODUCTION && opts.password === DEVELOPMENT_DEFAULTS.password) {
+    throw new Error('The development fallback password is forbidden in production.');
+  }
+  if (typeof opts.email !== 'string'
+      || opts.email.length > 255
+      || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(opts.email.trim())) {
+    throw new Error('A valid admin email is required.');
+  }
+  if (typeof opts.name !== 'string'
+      || opts.name.trim().length < 2
+      || opts.name.trim().length > 100) {
+    throw new Error('Admin name must be between 2 and 100 characters.');
+  }
+  if (typeof opts.password !== 'string'
+      || opts.password.length < 8
+      || !/[A-Z]/.test(opts.password)
+      || !/[a-z]/.test(opts.password)
+      || !/[0-9]/.test(opts.password)) {
+    throw new Error(
+      'Admin password must be at least 8 characters and contain uppercase, lowercase, and numeric characters.'
+    );
+  }
+  if (Buffer.byteLength(opts.password, 'utf8') > 72) {
+    throw new Error('Admin password cannot exceed 72 UTF-8 bytes.');
+  }
+  if (!IS_PRODUCTION && opts.password === DEVELOPMENT_DEFAULTS.password) {
+    console.warn('\n! Using the predictable development admin password. Set ADMIN_PASSWORD before sharing this environment.');
+  }
+
+  opts.email = opts.email.trim().toLowerCase();
+  opts.name = opts.name.trim();
+}
+
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
+  validateOptions(opts);
 
   // Guarantee the table exists (same as server boot) so this runs even before
   // the app has ever started.
@@ -82,9 +132,9 @@ async function main() {
     }
     await updateUser(existingByEmail.id, { password: opts.password });
     console.log('\n✓ Admin password reset.');
-    console.log(`  email    : ${existingByEmail.email}`);
-    console.log(`  password : ${opts.password}`);
-    console.log('\nLog in at http://localhost:3000/#/login\n');
+    console.log(`  email : ${existingByEmail.email}`);
+    console.log('  The new password was not printed.');
+    console.log('\nLog in at http://localhost:3000/login\n');
     return;
   }
 
@@ -96,8 +146,9 @@ async function main() {
     console.log(`  name   : ${existingAdmin.name}`);
     if (opts.reset) {
       await updateUser(existingAdmin.id, { password: opts.password });
-      console.log(`\n✓ Password for that admin has been reset to: ${opts.password}`);
-      console.log('\nLog in at http://localhost:3000/#/login\n');
+      console.log('\n✓ Password for that admin has been reset.');
+      console.log('  The new password was not printed.');
+      console.log('\nLog in at http://localhost:3000/login\n');
     } else {
       console.log('\nNot creating a duplicate. To reset that admin\'s password, re-run with --reset --password <newpw>\n');
     }
@@ -117,8 +168,8 @@ async function main() {
   console.log(`  email    : ${created.email}`);
   console.log(`  name     : ${created.name}`);
   console.log(`  role     : ${created.role}`);
-  console.log(`  password : ${opts.password}`);
-  console.log('\nLog in at http://localhost:3000/#/login');
+  console.log('  password : configured (not printed)');
+  console.log('\nLog in at http://localhost:3000/login');
   console.log('(Change this password after first login via Admin → User Management.)\n');
 }
 
