@@ -1,17 +1,44 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, homeForRole } from '../hooks/useAuth';
 import { useFlash } from '../components/FlashProvider';
 import { useLanguage } from '../hooks/useLanguage';
 import { api } from '../api';
 import { renderIcon } from '../components/IconMap';
+import { MessageSquare, AlertTriangle, Users, CheckCircle, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { MULTI_SERIES_COLORS, GRADE_COLORS, getChartOptions, getScatterOptions, getHorizontalBarOptions } from '../utils/chartTheme';
 import { formatLabel } from '../utils/formatLabel';
 import { useTheme } from '../hooks/useTheme';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, PointElement, ArcElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { Bar, Scatter } from 'react-chartjs-2';
+import { Card, Badge, Button, Modal, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, ArcElement, Title, Tooltip, Legend, Filler);
+
+// Grade color utility
+const gradeColors = {
+  A: { bg: 'bg-success-100 dark:bg-success-950/40', text: 'text-success-700 dark:text-success-300', border: 'border-success-500' },
+  B: { bg: 'bg-sky-100 dark:bg-sky-950/40', text: 'text-sky-700 dark:text-sky-300', border: 'border-sky-500' },
+  C: { bg: 'bg-warning-100 dark:bg-warning-950/40', text: 'text-warning-700 dark:text-warning-300', border: 'border-warning-500' },
+  D: { bg: 'bg-danger-100 dark:bg-danger-950/40', text: 'text-danger-700 dark:text-danger-300', border: 'border-danger-500' },
+  F: { bg: 'bg-danger-100 dark:bg-danger-950/40', text: 'text-danger-700 dark:text-danger-300', border: 'border-danger-500' },
+};
+
+// Risk level colors
+const riskLevelColors = {
+  high: { bg: 'bg-danger-100 dark:bg-danger-950/40', text: 'text-danger-700 dark:text-danger-300' },
+  medium: { bg: 'bg-warning-100 dark:bg-warning-950/40', text: 'text-warning-700 dark:text-warning-300' },
+  low: { bg: 'bg-success-100 dark:bg-success-950/40', text: 'text-success-700 dark:text-success-300' },
+};
+
+const getGradeBadge = (grade) => {
+  const colors = gradeColors[grade] || { bg: 'bg-gray-100 dark:bg-gray-800', text: 'text-gray-700 dark:text-gray-300' };
+  return colors;
+};
+
+const getRiskBadge = (level) => {
+  return riskLevelColors[level] || { bg: 'bg-gray-100 dark:bg-gray-800', text: 'text-gray-700 dark:text-gray-300' };
+};
 
 export default function TeacherDashboard() {
   const { user, homeForRole } = useAuth();
@@ -33,19 +60,64 @@ export default function TeacherDashboard() {
   const { isDark } = useTheme();
 
   // ─── Data fetching ────────────────────────────────────────────────────────────
+  const fetchAnalytics = useCallback(async () => {
+    try {
+      const res = await api.get('/teacher/analytics');
+      setAnalytics(res);
+      setFilterOptions(res.filterOptions || {});
+    } catch (err) {
+      console.error('Failed to fetch analytics:', err);
+      addFlash(t('teacher.analyticsLoadFailed'), 'error');
+      if (err.status === 403) navigate(homeForRole(user?.role));
+    } finally {
+      setLoading(false);
+    }
+  }, [addFlash, navigate, t, user?.role, homeForRole]);
+
+  const fetchStudents = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({ page: pagination.page, size: pagination.size, ...filters });
+      const res = await api.get(`/teacher/students?${params}`);
+      setStudents(res.rows);
+      setPagination(prev => ({ ...prev, total: res.total, totalPages: res.totalPages, page: res.page }));
+    } catch (err) {
+      console.error('Failed to fetch students:', err);
+      addFlash(t('teacher.studentsLoadFailed'), 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [addFlash, pagination.page, pagination.size, filters, t]);
+
+  const fetchAtRiskStudents = useCallback(async () => {
+    try {
+      const res = await api.get('/teacher/at-risk');
+      setAtRiskStudents(res.students || []);
+    } catch (err) {
+      console.error('Failed to fetch at-risk students:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchAnalytics();
-    fetchStudents();
-    fetchAtRiskStudents();
-  }, [activeTab, filters, pagination.page]);
+  }, [fetchAnalytics]);
 
-  // ─── Charts memo (must be before any early return to avoid hooks violation) ───
+  useEffect(() => {
+    fetchStudents();
+  }, [fetchStudents]);
+
+  useEffect(() => {
+    fetchAtRiskStudents();
+  }, [fetchAtRiskStudents]);
+
+  // ─── Charts memo ──────────────────────────────────────────────────────────────
   const charts = useMemo(() => {
     if (!analytics?.charts) return [];
     return [
-      // Grade Distribution - Bar Chart
       analytics.charts.gradeDistribution && {
         chartType: 'bar',
+        key: 'gradeDistribution',
         data: {
           labels: analytics.charts.gradeDistribution.map(g => `Grade ${g.grade}`),
           datasets: [{
@@ -63,9 +135,9 @@ export default function TeacherDashboard() {
         },
         options: getChartOptions(isDark),
       },
-      // Attendance vs Score - Scatter Plot
       analytics.charts.attendanceVsScore && {
         chartType: 'scatter',
+        key: 'attendanceVsScore',
         data: {
           datasets: [{
             label: `${t('common.attendance')} vs ${t('common.finalScore')}`,
@@ -82,9 +154,9 @@ export default function TeacherDashboard() {
         },
         options: getScatterOptions(isDark, t('common.attendance'), t('common.finalScore')),
       },
-      // Sleep Impact - Horizontal Bar Chart
       analytics.charts.sleepImpact && {
         chartType: 'bar',
+        key: 'sleepImpact',
         data: {
           labels: analytics.charts.sleepImpact.map(s => s.sleepBucket),
           datasets: [{
@@ -102,9 +174,9 @@ export default function TeacherDashboard() {
         },
         options: getHorizontalBarOptions(isDark),
       },
-      // Part-Time Job Impact - Horizontal Bar Chart
       analytics.charts.partTimeJobImpact && {
         chartType: 'bar',
+        key: 'partTimeJobImpact',
         data: {
           labels: analytics.charts.partTimeJobImpact.map(j => j.category),
           datasets: [{
@@ -125,61 +197,22 @@ export default function TeacherDashboard() {
     ].filter(Boolean);
   }, [analytics, isDark, t]);
 
-  const fetchAnalytics = async () => {
-    try {
-      const res = await api.get('/teacher/analytics');
-      setAnalytics(res);
-      setFilterOptions(res.filterOptions || {});
-    } catch (err) {
-      console.error('Failed to fetch analytics:', err);
-      addFlash(t('teacher.analyticsLoadFailed'), 'error');
-      if (err.status === 403) navigate(homeForRole(user?.role));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchStudents = async () => {
-    try {
-      const params = new URLSearchParams({ page: pagination.page, size: pagination.size, ...filters });
-      const res = await api.get(`/teacher/students?${params}`);
-      setStudents(res.rows);
-      setPagination(prev => ({ ...prev, total: res.total, totalPages: res.totalPages, page: res.page }));
-    } catch (err) {
-      console.error('Failed to fetch students:', err);
-      addFlash(t('teacher.studentsLoadFailed'), 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchAtRiskStudents = async () => {
-    try {
-      const res = await api.get('/teacher/at-risk');
-      setAtRiskStudents(res.students || []);
-    } catch (err) {
-      console.error('Failed to fetch at-risk students:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleFilterChange = (key, value) => {
+  const handleFilterChange = useCallback((key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }));
     setPagination(prev => ({ ...prev, page: 1 }));
-  };
+  }, []);
 
-  const handlePageChange = (page) => {
+  const handlePageChange = useCallback((page) => {
     setPagination(prev => ({ ...prev, page }));
-  };
+  }, []);
 
-  const handleCounsel = async (studentId) => {
-    setSelectedStudent(students.find(s => s.id === studentId));
+  const handleCounsel = useCallback((student) => {
+    setSelectedStudent(student);
     setShowCounselModal(true);
     setCounselPrompt('');
-  };
+  }, []);
 
-  const handleGenerateCounsel = async () => {
+  const handleGenerateCounsel = useCallback(async () => {
     if (!selectedStudent) return;
     setCounselLoading(true);
     try {
@@ -196,118 +229,34 @@ export default function TeacherDashboard() {
     } finally {
       setCounselLoading(false);
     }
-  };
+  }, [selectedStudent, counselPrompt, addFlash, fetchStudents, api]);
 
+  // Loading skeleton
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary-600 border-t-transparent" />
-      </div>
-    );
-  }
-
-  const riskLevelColors = {
-    high: 'bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-400',
-    medium: 'bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-400',
-    low: 'bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-400',
-  };
-
-  const gradeColor = (grade) => {
-    const colors = {
-      A: 'bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-400',
-      B: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
-      C: 'bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-400',
-      D: 'bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-400',
-      F: 'bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-400',
-    };
-    return colors[grade] || 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
-  };
-
-  // Helper components
-  const Card = ({ children, className = '', ...props }) => (
-    <div className={`card ${className}`} {...props}>{children}</div>
-  );
-
-  const Badge = ({ children, className = '', variant = 'default', size = 'default', ...props }) => {
-    const variants = {
-      default: 'badge',
-      outline: 'badge border',
-      success: 'badge-success',
-      warning: 'badge-warning',
-      danger: 'badge-danger',
-      primary: 'badge-primary',
-    };
-    const sizes = {
-      default: 'px-2.5 py-0.5 text-xs',
-      sm: 'px-2 py-0.5 text-[10px]',
-      lg: 'px-3 py-1 text-sm',
-    };
-    return (
-      <span className={`inline-flex items-center ${variants[variant]} ${sizes[size]} ${className}`} {...props}>
-        {children}
-      </span>
-    );
-  };
-
-  const Button = ({ children, className = '', variant = 'primary', size = 'default', loading = false, onClick, disabled, ...props }) => {
-    const variants = {
-      primary: 'btn btn-primary',
-      success: 'btn btn-success',
-      danger: 'btn btn-danger',
-      secondary: 'btn btn-secondary',
-      outline: 'btn border border-primary-300 text-primary-700 hover:bg-primary-50 dark:border-gray-600 dark:text-primary-400 dark:hover:bg-gray-800',
-      ghost: 'btn btn-ghost',
-    };
-    const sizes = {
-      default: 'px-4 py-2.5 text-sm',
-      sm: 'px-3 py-1.5 text-xs',
-      lg: 'px-6 py-3 text-lg',
-    };
-    return (
-      <button
-        className={`inline-flex items-center justify-center gap-2 ${variants[variant]} ${sizes[size]} ${className}`}
-        onClick={onClick}
-        disabled={disabled || loading}
-        {...props}
-      >
-        {loading && <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
-        {children}
-      </button>
-    );
-  };
-
-  const Modal = ({ isOpen, onClose, title, size = 'default', children }) => {
-    if (!isOpen) return null;
-    const sizes = {
-      default: 'max-w-md',
-      sm: 'max-w-sm',
-      lg: 'max-w-lg',
-      xl: 'max-w-xl',
-      '2xl': 'max-w-2xl',
-    };
-    return (
-      <div className="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-        <div className="flex min-h-full items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={onClose} aria-hidden="true" />
-          <div className={`relative w-full ${sizes[size]} transform overflow-hidden rounded-3xl bg-white dark:bg-gray-900 shadow-xl transition-all`}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-primary-200 dark:border-gray-700">
-              <h2 id="modal-title" className="text-lg font-semibold text-primary-950 dark:text-gray-100">{title}</h2>
-              <button onClick={onClose} className="text-primary-400 hover:text-primary-600 dark:text-gray-500 dark:hover:text-gray-300" aria-label="Close">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-            <div className="p-6">{children}</div>
+      <div className="max-w-7xl mx-auto px-4 py-8 space-y-6" role="status" aria-label="Loading dashboard">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-primary-200 dark:bg-gray-700 rounded-xl w-1/4" />
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {[1, 2, 3, 4].map(i => (
+              <Card key={i} className="p-6">
+                <div className="h-4 bg-primary-200 dark:bg-gray-700 rounded w-1/2" />
+                <div className="h-10 bg-primary-200 dark:bg-gray-700 rounded w-1/4 mt-2" />
+              </Card>
+            ))}
+          </div>
+          <div className="grid gap-6 lg:grid-cols-2">
+            {[1, 2].map(i => (
+              <Card key={i} className="p-6">
+                <div className="h-6 bg-primary-200 dark:bg-gray-700 rounded w-1/3 mb-4" />
+                <div className="h-80 bg-primary-200 dark:bg-gray-700 rounded-xl" />
+              </Card>
+            ))}
           </div>
         </div>
       </div>
     );
-  };
-
-  const Table = ({ children, className = '', ...props }) => (
-    <div className={`overflow-x-auto ${className}`} {...props}>
-      <table className="w-full">{children}</table>
-    </div>
-  );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
@@ -317,32 +266,36 @@ export default function TeacherDashboard() {
           <h1 className="text-2xl font-bold text-primary-950 dark:text-gray-100">
             {t('teacher.dashboardTitle')}
           </h1>
-          <p className="text-primary-500 dark:text-gray-400">
+          <p className="text-primary-600 dark:text-gray-400 mt-1">
             {t('teacher.dashboardSubtitle', { name: user?.name })}
           </p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-primary-200 dark:border-gray-700">
-        <nav className="flex gap-1 overflow-x-auto" role="tablist">
+      <div className="border-b border-primary-200 dark:border-gray-700" role="tablist" aria-label="Dashboard sections">
+        <nav className="flex gap-1 overflow-x-auto scrollbar-thin" role="tablist">
           {[
-            { id: 'analytics', label: t('teacher.tabAnalytics'), icon: renderIcon('LayoutDashboard', { className: "w-5 h-5" }) },
-            { id: 'students', label: t('teacher.tabStudents'), icon: renderIcon('Users', { className: "w-5 h-5" }) },
-            { id: 'at-risk', label: t('teacher.tabAtRisk'), icon: renderIcon('AlertTriangle', { className: "w-5 h-5" }) },
+            { id: 'analytics', label: t('teacher.tabAnalytics'), icon: 'LayoutDashboard' },
+            { id: 'students', label: t('teacher.tabStudents'), icon: 'Users' },
+            { id: 'at-risk', label: t('teacher.tabAtRisk'), icon: 'AlertTriangle' },
           ].map(tab => (
             <button
               key={tab.id}
               role="tab"
               aria-selected={activeTab === tab.id}
+              aria-controls={`panel-${tab.id}`}
+              id={`tab-${tab.id}`}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-3 rounded-t-xl text-sm font-medium transition-colors whitespace-nowrap ${
+              className={`flex items-center gap-2 px-4 py-3 rounded-t-xl text-sm font-medium transition-colors whitespace-nowrap focus-ring ${
                 activeTab === tab.id
                   ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 border-b-2 border-primary-500'
                   : 'text-primary-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400'
               }`}
             >
-              <span className="flex items-center">{tab.icon}</span>
+              <span className="flex items-center" aria-hidden="true">
+                {renderIcon(tab.icon, { className: "w-5 h-5" })}
+              </span>
               {tab.label}
             </button>
           ))}
@@ -351,112 +304,165 @@ export default function TeacherDashboard() {
 
       {/* Tab Panels */}
       {/* Analytics Tab */}
-      {activeTab === 'analytics' && analytics && (() => {
-        const { kpis = {}, charts = {} } = analytics;
-        return (
-          <div className="space-y-6">
-          {/* KPI Cards - Using actual backend KPIs: totalStudents, avgGpa, passRate, atRiskCount */}
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            <Card className="p-6">
-              <p className="text-sm text-primary-500 dark:text-gray-400">{t('teacher.totalStudents')}</p>
-              <p className="text-3xl font-bold font-mono text-primary-950 dark:text-gray-100 mt-1">{kpis.totalStudents}</p>
-              <p className="text-xs text-primary-400 dark:text-gray-500 mt-1">{t('teacher.kpiStudents')}</p>
-            </Card>
-            <Card className="p-6">
-              <p className="text-sm text-primary-500 dark:text-gray-400">{t('teacher.avgGPA')}</p>
-              <p className="text-3xl font-bold font-mono text-primary-950 dark:text-gray-100 mt-1">{kpis.avgGpa?.toFixed(2)}</p>
-              <p className="text-xs text-primary-400 dark:text-gray-500 mt-1">{t('teacher.kpiOutOfFour')}</p>
-            </Card>
-            <Card className="p-6">
-              <p className="text-sm text-primary-500 dark:text-gray-400">{t('teacher.passRate')}</p>
-              <p className="text-3xl font-bold font-mono text-success-600 dark:text-success-400 mt-1">{kpis.passRate?.toFixed(1)}%</p>
-              <p className="text-xs text-primary-400 dark:text-gray-500 mt-1">{t('teacher.kpiGradeABC')}</p>
-            </Card>
-            <Card className="p-6">
-              <p className="text-sm text-primary-500 dark:text-gray-400">{t('teacher.atRiskCount')}</p>
-              <p className="text-3xl font-bold font-mono text-danger-600 dark:text-danger-400 mt-1">{kpis.atRiskCount}</p>
-              <p className="text-xs text-primary-400 dark:text-gray-500 mt-1">{t('teacher.kpiNeedsAttention')}</p>
-            </Card>
-          </div>
+      {activeTab === 'analytics' && analytics && (
+        <div id="panel-analytics" role="tabpanel" aria-labelledby="tab-analytics" className="space-y-6 animate-slide-up">
+          {/* KPI Cards */}
+          <section aria-label="Key Performance Indicators">
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 bento-grid-4">
+              <Card className="p-6 kpi-card">
+                <div className="flex items-center gap-3">
+                  <div className="kpi-icon-box bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400">
+                    {renderIcon(Users, { className: "w-5 h-5" })}
+                  </div>
+                  <div>
+                    <p className="kpi-label">{t('teacher.totalStudents')}</p>
+                    <p className="kpi-value tabular-nums">{analytics.kpis.totalStudents}</p>
+                    <p className="text-xs text-primary-400 dark:text-gray-500">{t('teacher.kpiStudents')}</p>
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-6 kpi-card">
+                <div className="flex items-center gap-3">
+                  <div className="kpi-icon-box bg-sky-100 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                  </div>
+                  <div>
+                    <p className="kpi-label">{t('teacher.avgGPA')}</p>
+                    <p className="kpi-value tabular-nums">{analytics.kpis.avgGpa?.toFixed(2)}</p>
+                    <p className="text-xs text-primary-400 dark:text-gray-500">{t('teacher.kpiOutOfFour')}</p>
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-6 kpi-card">
+                <div className="flex items-center gap-3">
+                  <div className="kpi-icon-box bg-success-100 dark:bg-success-900/30 text-success-600 dark:text-success-400">
+                    {renderIcon(CheckCircle, { className: "w-5 h-5" })}
+                  </div>
+                  <div>
+                    <p className="kpi-label">{t('teacher.passRate')}</p>
+                    <p className="kpi-value tabular-nums text-success-600 dark:text-success-400">{analytics.kpis.passRate?.toFixed(1)}%</p>
+                    <p className="text-xs text-primary-400 dark:text-gray-500">{t('teacher.kpiGradeABC')}</p>
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-6 kpi-card">
+                <div className="flex items-center gap-3">
+                  <div className="kpi-icon-box bg-danger-100 dark:bg-danger-900/30 text-danger-600 dark:text-danger-400">
+                    {renderIcon(AlertTriangle, { className: "w-5 h-5" })}
+                  </div>
+                  <div>
+                    <p className="kpi-label">{t('teacher.atRiskCount')}</p>
+                    <p className="kpi-value tabular-nums text-danger-600 dark:text-danger-400">{analytics.kpis.atRiskCount}</p>
+                    <p className="text-xs text-primary-400 dark:text-gray-500">{t('teacher.kpiNeedsAttention')}</p>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          </section>
 
           {/* Charts */}
-          <div className="grid gap-6 lg:grid-cols-2">
-            {charts.map((chart, idx) => (
-              <Card key={idx} className="p-6">
-                <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-                  <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100">
-                    {formatLabel(charts.gradeDistribution && idx === 0 ? 'Grade Distribution' :
-                      charts.attendanceVsScore && idx === 1 ? 'Attendance vs Final Score' :
-                      charts.sleepImpact && (charts.gradeDistribution || charts.attendanceVsScore ? 2 : 1) ? 'Sleep Impact' :
-                      'Part-Time Job Impact')}
-                  </h3>
-                  {chart.chartType === 'scatter' && (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 text-xs font-medium">
-                      <span className="truncate max-w-[100px]">{formatLabel(chart.data.datasets[0]?.data?.[0]?.x !== undefined ? 'Attendance' : 'X')}</span>
-                      <svg className="w-3 h-3 flex-shrink-0 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
-                      <span className="truncate max-w-[100px]">{formatLabel(chart.data.datasets[0]?.data?.[0]?.y !== undefined ? 'Final Score' : 'Y')}</span>
-                    </span>
-                  )}
-                </div>
-                <div className="chart-container" style={{ height: '360px', position: 'relative' }}>
-                  {chart.chartType === 'bar' && <Bar data={chart.data} options={chart.options} />}
-                  {chart.chartType === 'scatter' && <Scatter data={chart.data} options={chart.options} />}
-                </div>
-              </Card>
-            ))}
-            {!charts.length && (
-              <Card className="p-12 text-center lg:col-span-2">
-                <svg className="w-16 h-16 mx-auto text-primary-200 dark:text-gray-700 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" width="64" height="64"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-                <p className="text-primary-400 dark:text-gray-500 font-medium text-lg">{t('dashboard.noChartData') || 'No chart data available'}</p>
-                <p className="text-sm text-primary-300 dark:text-gray-600 mt-2 max-w-xs mx-auto">
-                  {t('dashboard.noChartDataDesc') || 'Import a dataset with numeric columns to see visualizations.'}
-                </p>
-              </Card>
-            )}
-          </div>
+          <section aria-label="Analytics Charts">
+            <div className="grid gap-6 lg:grid-cols-2">
+              {charts.map((chart) => (
+                <Card key={chart.key} className="p-6">
+                  <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+                    <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100">
+                      {formatLabel(chart.key === 'gradeDistribution' ? 'Grade Distribution' :
+                        chart.key === 'attendanceVsScore' ? 'Attendance vs Final Score' :
+                        chart.key === 'sleepImpact' ? 'Sleep Impact' :
+                        'Part-Time Job Impact')}
+                    </h3>
+                    {chart.chartType === 'scatter' && (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 text-xs font-medium">
+                        <span className="truncate max-w-[100px]">{t('common.attendance')}</span>
+                        <svg className="w-3 h-3 flex-shrink-0 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+                        <span className="truncate max-w-[100px]">{t('common.finalScore')}</span>
+                      </span>
+                    )}
+                  </div>
+                  <div className="chart-container" style={{ height: '360px', position: 'relative' }} role="img" aria-label={formatLabel(chart.key)}>
+                    {chart.chartType === 'bar' && <Bar data={chart.data} options={chart.options} />}
+                    {chart.chartType === 'scatter' && <Scatter data={chart.data} options={chart.options} />}
+                  </div>
+                </Card>
+              ))}
+              {!charts.length && (
+                <Card className="p-12 text-center lg:col-span-2">
+                  <svg className="w-16 h-16 mx-auto text-primary-200 dark:text-gray-700 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" width="64" height="64" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                  <p className="text-primary-400 dark:text-gray-500 font-medium text-lg">{t('dashboard.noChartData') || 'No chart data available'}</p>
+                  <p className="text-sm text-primary-300 dark:text-gray-600 mt-2 max-w-xs mx-auto">
+                    {t('dashboard.noChartDataDesc') || 'Import a dataset with numeric columns to see visualizations.'}
+                  </p>
+                </Card>
+              )}
+            </div>
+          </section>
         </div>
-      )})}
+      )}
 
       {/* Students Tab */}
       {activeTab === 'students' && (
-        <div className="space-y-6">
+        <div id="panel-students" role="tabpanel" aria-labelledby="tab-students" className="space-y-6 animate-slide-up">
           {/* Filters */}
           <Card className="p-4">
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
               <div className="md:col-span-2">
-                <label className="label">{t('common.search')}</label>
+                <label htmlFor="student-search" className="label">{t('common.search')}</label>
                 <input
-                  type="text"
+                  id="student-search"
+                  type="search"
                   placeholder={t('common.searchPlaceholder')}
                   value={filters.q}
                   onChange={(e) => handleFilterChange('q', e.target.value)}
                   className="input"
+                  aria-describedby="search-hint"
                 />
+                <span id="search-hint" className="sr-only">{t('common.searchPlaceholder')}</span>
               </div>
               <div>
-                <label className="label">{t('common.grade')}</label>
-                <select value={filters.grade} onChange={(e) => handleFilterChange('grade', e.target.value)} className="input">
+                <label htmlFor="grade-filter" className="label">{t('common.grade')}</label>
+                <select
+                  id="grade-filter"
+                  value={filters.grade}
+                  onChange={(e) => handleFilterChange('grade', e.target.value)}
+                  className="input"
+                >
                   <option value="all">{t('common.allGrades')}</option>
                   {filterOptions.grades?.map(g => <option key={g} value={g}>{g}</option>)}
                 </select>
               </div>
               <div>
-                <label className="label">{t('common.gender')}</label>
-                <select value={filters.gender} onChange={(e) => handleFilterChange('gender', e.target.value)} className="input">
+                <label htmlFor="gender-filter" className="label">{t('common.gender')}</label>
+                <select
+                  id="gender-filter"
+                  value={filters.gender}
+                  onChange={(e) => handleFilterChange('gender', e.target.value)}
+                  className="input"
+                >
                   <option value="all">{t('common.allGenders')}</option>
                   {filterOptions.genders?.map(g => <option key={g} value={g}>{g}</option>)}
                 </select>
               </div>
               <div>
-                <label className="label">{t('common.partTimeJob')}</label>
-                <select value={filters.part_time_job} onChange={(e) => handleFilterChange('part_time_job', e.target.value)} className="input">
+                <label htmlFor="parttime-filter" className="label">{t('common.partTimeJob')}</label>
+                <select
+                  id="parttime-filter"
+                  value={filters.part_time_job}
+                  onChange={(e) => handleFilterChange('part_time_job', e.target.value)}
+                  className="input"
+                >
                   <option value="all">{t('common.all')}</option>
                   {filterOptions.partTimeJobs?.map(j => <option key={j} value={j}>{j}</option>)}
                 </select>
               </div>
               <div>
-                <label className="label">{t('common.parentalEducation')}</label>
-                <select value={filters.parental_education} onChange={(e) => handleFilterChange('parental_education', e.target.value)} className="input">
+                <label htmlFor="parental-filter" className="label">{t('common.parentalEducation')}</label>
+                <select
+                  id="parental-filter"
+                  value={filters.parental_education}
+                  onChange={(e) => handleFilterChange('parental_education', e.target.value)}
+                  className="input"
+                >
                   <option value="all">{t('common.all')}</option>
                   {filterOptions.parentalEducations?.map(e => <option key={e} value={e}>{e}</option>)}
                 </select>
@@ -466,72 +472,96 @@ export default function TeacherDashboard() {
 
           {/* Students Table */}
           <Card className="p-0 overflow-hidden">
-            <Table>
-              <thead>
-                <tr className="bg-primary-50 dark:bg-gray-800/50">
-                  <th className="px-4 py-3 text-left text-sm font-medium text-primary-500 dark:text-gray-400">{t('common.studentId')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-primary-500 dark:text-gray-400">{t('common.name')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-primary-500 dark:text-gray-400">{t('common.grade')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-primary-500 dark:text-gray-400">{t('common.finalScore')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-primary-500 dark:text-gray-400">{t('common.attendance')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-primary-500 dark:text-gray-400">{t('common.studyHours')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-primary-500 dark:text-gray-400">{t('common.sleepHours')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-primary-500 dark:text-gray-400">{t('common.gpa')}</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-primary-500 dark:text-gray-400">{t('common.riskLevel')}</th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-primary-500 dark:text-gray-400">{t('common.actions')}</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table responsive={true}>
+              <TableHeader>
+                <TableRow>
+                  <TableHead scope="col">{t('common.studentId')}</TableHead>
+                  <TableHead scope="col">{t('common.name')}</TableHead>
+                  <TableHead scope="col">{t('common.grade')}</TableHead>
+                  <TableHead scope="col" align="right">{t('common.finalScore')}</TableHead>
+                  <TableHead scope="col" align="right">{t('common.attendance')}</TableHead>
+                  <TableHead scope="col" align="right">{t('common.studyHours')}</TableHead>
+                  <TableHead scope="col" align="right">{t('common.sleepHours')}</TableHead>
+                  <TableHead scope="col" align="right">{t('common.gpa')}</TableHead>
+                  <TableHead scope="col">{t('common.riskLevel')}</TableHead>
+                  <TableHead scope="col">{t('common.actions')}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {students.map((student, idx) => (
-                  <tr key={student.id} className={idx % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-primary-50/30 dark:bg-gray-800/30'}>
-                    <td className="px-4 py-3 text-sm text-primary-950 dark:text-gray-100">{student.student_id}</td>
-                    <td className="px-4 py-3 text-sm font-medium text-primary-950 dark:text-gray-100">{student.name || '-'}</td>
-                    <td className="px-4 py-3 text-sm">
-                      <Badge className={gradeColor(student.grade)}>{student.grade}</Badge>
-                    </td>
-                    <td className="px-4 py-3 text-sm font-mono text-primary-950 dark:text-gray-100">{student.final_score}</td>
-                    <td className="px-4 py-3 text-sm font-mono text-primary-950 dark:text-gray-100">{student.attendance_percent}%</td>
-                    <td className="px-4 py-3 text-sm font-mono text-primary-950 dark:text-gray-100">{student.study_hours_per_day}h</td>
-                    <td className="px-4 py-3 text-sm font-mono text-primary-950 dark:text-gray-100">{student.sleep_hours}h</td>
-                    <td className="px-4 py-3 text-sm font-mono text-primary-950 dark:text-gray-100">{student.previous_gpa}</td>
-                    <td className="px-4 py-3 text-sm">
+                  <TableRow key={student.id}>
+                    <TableCell className="font-mono text-primary-950 dark:text-gray-100">{student.student_id}</TableCell>
+                    <TableCell className="font-medium text-primary-950 dark:text-gray-100">{student.name || '-'}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`${getGradeBadge(student.grade).bg} ${getGradeBadge(student.grade).text} border-2 ${getGradeBadge(student.grade).border}`}>
+                        {student.grade}
+                      </Badge>
+                    </TableCell>
+                    <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{student.final_score}</TableCell>
+                    <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{student.attendance_percent}%</TableCell>
+                    <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{student.study_hours_per_day}h</TableCell>
+                    <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{student.sleep_hours}h</TableCell>
+                    <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{student.previous_gpa}</TableCell>
+                    <TableCell>
                       {atRiskStudents.find(s => s.id === student.id) && (
-                        <Badge className={riskLevelColors[atRiskStudents.find(s => s.id === student.id)?.risk_level]}>
+                        <Badge className={`${getRiskBadge(atRiskStudents.find(s => s.id === student.id)?.risk_level).bg} ${getRiskBadge(atRiskStudents.find(s => s.id === student.id)?.risk_level).text}`}>
                           {t(`common.risk${atRiskStudents.find(s => s.id === student.id)?.risk_level}`)}
                         </Badge>
                       )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
+                    </TableCell>
+                    <TableCell align="right">
                       <div className="flex items-center justify-end gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => handleCounsel(student.id)}>
-                          {renderIcon('MessageSquare', { className: "w-4 h-4" })}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleCounsel(student)}
+                          aria-label={t('teacher.aiCounselAria', { name: student.name })}
+                        >
+                          <MessageSquare className="w-4 h-4" aria-hidden="true" />
+                          <span className="hidden sm:inline ml-1">{t('teacher.aiCounsel')}</span>
                         </Button>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
                 {students.length === 0 && (
-                  <tr>
-                    <td colSpan={10} className="px-4 py-8 text-center text-primary-400 dark:text-gray-500">
+                  <TableRow>
+                    <TableCell align="center" className="px-4 py-8 text-primary-400 dark:text-gray-500" colSpan={10}>
                       {t('common.noStudents')}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )}
-              </tbody>
+              </TableBody>
             </Table>
 
             {/* Pagination */}
             {pagination.totalPages > 1 && (
               <div className="px-4 py-3 border-t border-primary-200 dark:border-gray-700 flex items-center justify-between">
-                <p className="text-sm text-primary-500 dark:text-gray-400">
+                <p className="text-sm text-primary-600 dark:text-gray-400" aria-live="polite">
                   {t('common.showing', { start: (pagination.page - 1) * pagination.size + 1, end: Math.min(pagination.page * pagination.size, pagination.total), total: pagination.total })}
                 </p>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => handlePageChange(pagination.page - 1)} disabled={pagination.page === 1}>
-                    {t('common.prev')}
+                <div className="flex gap-2" role="navigation" aria-label="Pagination">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(pagination.page - 1)}
+                    disabled={pagination.page === 1}
+                    aria-label="Previous page"
+                    aria-disabled={pagination.page === 1}
+                  >
+                    <ChevronLeft className="w-4 h-4" aria-hidden="true" />
+                    <span className="hidden sm:inline">{t('common.prev')}</span>
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => handlePageChange(pagination.page + 1)} disabled={pagination.page === pagination.totalPages}>
-                    {t('common.next')}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(pagination.page + 1)}
+                    disabled={pagination.page === pagination.totalPages}
+                    aria-label="Next page"
+                    aria-disabled={pagination.page === pagination.totalPages}
+                  >
+                    <span className="hidden sm:inline">{t('common.next')}</span>
+                    <ChevronRight className="w-4 h-4" aria-hidden="true" />
                   </Button>
                 </div>
               </div>
@@ -542,7 +572,7 @@ export default function TeacherDashboard() {
 
       {/* At-Risk Tab */}
       {activeTab === 'at-risk' && (
-        <div className="space-y-6">
+        <div id="panel-at-risk" role="tabpanel" aria-labelledby="tab-at-risk" className="space-y-6 animate-slide-up">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold text-primary-950 dark:text-gray-100">
               {t('teacher.atRiskStudents', { count: atRiskStudents.length })}
@@ -551,77 +581,92 @@ export default function TeacherDashboard() {
 
           {atRiskStudents.length > 0 ? (
             <Card className="p-0 overflow-hidden">
-              <Table>
-                <thead>
-                  <tr className="bg-primary-50 dark:bg-gray-800/50">
-                    <th className="px-4 py-3 text-left text-sm font-medium text-primary-500 dark:text-gray-400">{t('common.studentId')}</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-primary-500 dark:text-gray-400">{t('common.name')}</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-primary-500 dark:text-gray-400">{t('common.riskLevel')}</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-primary-500 dark:text-gray-400">{t('common.riskScore')}</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-primary-500 dark:text-gray-400">{t('common.riskFactors')}</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-primary-500 dark:text-gray-400">{t('common.grade')}</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-primary-500 dark:text-gray-400">{t('common.finalScore')}</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-primary-500 dark:text-gray-400">{t('common.attendance')}</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-primary-500 dark:text-gray-400">{t('common.studyHours')}</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-primary-500 dark:text-gray-400">{t('common.gpa')}</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-primary-500 dark:text-gray-400">{t('common.sleep')}</th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-primary-500 dark:text-gray-400">{t('common.actions')}</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table responsive={true}>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead scope="col">{t('common.studentId')}</TableHead>
+                    <TableHead scope="col">{t('common.name')}</TableHead>
+                    <TableHead scope="col">{t('common.riskLevel')}</TableHead>
+                    <TableHead scope="col" align="right">{t('common.riskScore')}</TableHead>
+                    <TableHead scope="col">{t('common.riskFactors')}</TableHead>
+                    <TableHead scope="col">{t('common.grade')}</TableHead>
+                    <TableHead scope="col" align="right">{t('common.finalScore')}</TableHead>
+                    <TableHead scope="col" align="right">{t('common.attendance')}</TableHead>
+                    <TableHead scope="col" align="right">{t('common.studyHours')}</TableHead>
+                    <TableHead scope="col" align="right">{t('common.gpa')}</TableHead>
+                    <TableHead scope="col" align="right">{t('common.sleep')}</TableHead>
+                    <TableHead scope="col">{t('common.actions')}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {atRiskStudents.map((student, idx) => (
-                    <tr key={student.id} className={idx % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-primary-50/30 dark:bg-gray-800/30'}>
-                      <td className="px-4 py-3 text-sm text-primary-950 dark:text-gray-100">{student.student_id}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-primary-950 dark:text-gray-100">{student.name || '-'}</td>
-                      <td className="px-4 py-3 text-sm">
-                        <Badge className={riskLevelColors[student.risk_level]}>
+                    <TableRow key={student.id}>
+                      <TableCell className="font-mono text-primary-950 dark:text-gray-100">{student.student_id}</TableCell>
+                      <TableCell className="font-medium text-primary-950 dark:text-gray-100">{student.name || '-'}</TableCell>
+                      <TableCell>
+                        <Badge className={`${getRiskBadge(student.risk_level).bg} ${getRiskBadge(student.risk_level).text}`}>
                           {t(`common.risk${student.risk_level}`)}
                         </Badge>
-                      </td>
-                      <td className="px-4 py-3 text-sm font-bold font-mono text-primary-950 dark:text-gray-100">{student.risk_score}</td>
-                      <td className="px-4 py-3 text-sm">
-                        <div className="flex flex-wrap gap-1">
+                      </TableCell>
+                      <TableCell align="right" className="font-bold font-mono tabular-nums text-primary-950 dark:text-gray-100">{student.risk_score}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1" role="list" aria-label="Risk factors">
                           {student.risk_factors?.map((factor, fi) => {
+                              const factorColors = {
+                                attendance: { border: 'border-danger-500', text: 'text-danger-600 dark:text-danger-400' },
+                                study_hours: { border: 'border-warning-500', text: 'text-warning-600 dark:text-warning-400' },
+                                gpa: { border: 'border-danger-500', text: 'text-danger-600 dark:text-danger-400' },
+                                sleep: { border: 'border-sky-500', text: 'text-sky-600 dark:text-sky-400' },
+                              };
+                              const colors = factorColors[factor.field] || { border: 'border-sky-500', text: 'text-sky-600 dark:text-sky-400' };
                               const labelKey = `common.riskFactor.${factor.field}`;
                               return (
-                                <Badge key={fi} variant="outline" size="sm" className={
-                                  factor.field === 'attendance' ? 'border-danger-500 text-danger-600' :
-                                  factor.field === 'study_hours' ? 'border-warning-500 text-warning-600' :
-                                  factor.field === 'gpa' ? 'border-danger-500 text-danger-600' :
-                                  'border-sky-500 text-sky-600'
-                                }>
-                                  {`${t(labelKey)}: ${factor.value} < ${factor.threshold}`}
+                                <Badge
+                                  key={fi}
+                                  variant="outline"
+                                  size="sm"
+                                  className={`${colors.border} ${colors.text}`}
+                                  role="listitem"
+                                >
+                                  {t(labelKey)}: {factor.value} {'<'} {factor.threshold}
                                 </Badge>
                               );
                             })}
                         </div>
-                      </td>
-                      <td className="px-4 py-3 text-sm">
-                        <Badge className={gradeColor(student.grade)}>{student.grade}</Badge>
-                      </td>
-                      <td className="px-4 py-3 text-sm font-mono text-primary-950 dark:text-gray-100">{student.final_score}</td>
-                      <td className="px-4 py-3 text-sm font-mono text-primary-950 dark:text-gray-100">{student.attendance_percent}%</td>
-                      <td className="px-4 py-3 text-sm font-mono text-primary-950 dark:text-gray-100">{student.study_hours_per_day}h</td>
-                      <td className="px-4 py-3 text-sm font-mono text-primary-950 dark:text-gray-100">{student.previous_gpa}</td>
-                      <td className="px-4 py-3 text-sm font-mono text-primary-950 dark:text-gray-100">{student.sleep_hours}h</td>
-                      <td className="px-4 py-3 text-right">
-                        <Button variant="ghost" size="sm" onClick={() => handleCounsel(student.id)}>
-                          {renderIcon('MessageSquare', { className: "w-4 h-4" })}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={`${getGradeBadge(student.grade).bg} ${getGradeBadge(student.grade).text} border-2 ${getGradeBadge(student.grade).border}`}>
+                          {student.grade}
+                        </Badge>
+                      </TableCell>
+                      <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{student.final_score}</TableCell>
+                      <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{student.attendance_percent}%</TableCell>
+                      <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{student.study_hours_per_day}h</TableCell>
+                      <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{student.previous_gpa}</TableCell>
+                      <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{student.sleep_hours}h</TableCell>
+                      <TableCell align="right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleCounsel(student)}
+                          aria-label={t('teacher.aiCounselAria', { name: student.name })}
+                        >
+                          <MessageSquare className="w-4 h-4" aria-hidden="true" />
                           <span className="hidden sm:inline ml-1">{t('teacher.aiCounsel')}</span>
                         </Button>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
+                </TableBody>
               </Table>
             </Card>
           ) : (
             <Card className="p-12 text-center">
-              {renderIcon('CheckCircle', { className: "w-16 h-16 text-success-500 mx-auto mb-4" })}
+              <CheckCircle className="w-16 h-16 text-success-500 mx-auto mb-4" aria-hidden="true" />
               <h3 className="text-lg font-medium text-primary-950 dark:text-gray-100 mb-2">
                 {t('teacher.noAtRiskStudents')}
               </h3>
-              <p className="text-primary-500 dark:text-gray-400">
+              <p className="text-primary-600 dark:text-gray-400">
                 {t('teacher.noAtRiskStudentsDesc')}
               </p>
             </Card>
@@ -636,18 +681,27 @@ export default function TeacherDashboard() {
           onClose={() => setShowCounselModal(false)}
           title={t('teacher.aiCounselModalTitle', { name: selectedStudent.name })}
           size="lg"
+          ariaDescribedBy="counsel-modal-desc"
         >
           <div className="space-y-4">
-            <p className="text-primary-500 dark:text-gray-400">
+            <p id="counsel-modal-desc" className="text-primary-600 dark:text-gray-400">
               {t('teacher.aiCounselModalDesc')}
             </p>
-            <textarea
-              value={counselPrompt}
-              onChange={(e) => setCounselPrompt(e.target.value)}
-              placeholder={t('teacher.customPromptPlaceholder')}
-              rows={4}
-              className="input"
-            />
+            <div>
+              <label htmlFor="counsel-prompt" className="label">
+                {t('teacher.customPromptLabel')}
+              </label>
+              <textarea
+                id="counsel-prompt"
+                value={counselPrompt}
+                onChange={(e) => setCounselPrompt(e.target.value)}
+                placeholder={t('teacher.customPromptPlaceholder')}
+                rows={4}
+                className="input"
+                aria-describedby="counsel-hint"
+              />
+              <span id="counsel-hint" className="sr-only">{t('teacher.customPromptPlaceholder')}</span>
+            </div>
             <div className="flex justify-end gap-3 pt-4 border-t border-primary-200 dark:border-gray-700">
               <Button variant="outline" onClick={() => setShowCounselModal(false)}>
                 {t('common.cancel')}

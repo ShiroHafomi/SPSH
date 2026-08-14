@@ -299,36 +299,46 @@ export default function AdminDashboard() {
     return `Grade ${ctx.label}: ${ctx.raw} (${pct}%)`;
   });
 
-  // ── Attendance vs Final Score (Scatter) ─────────────────────────────────────
+  // ── Attendance Distribution (Doughnut) ────────────────────────────────────────
   const attendanceVsScore = charts.attendanceVsScore || [];
-  const attendanceVsScoreData = {
+  // Bucket attendance into ranges for pie chart
+  const attendanceBuckets = [
+    { label: t('admin.attendanceRange0'), min: 0, max: 59 },
+    { label: t('admin.attendanceRange1'), min: 60, max: 69 },
+    { label: t('admin.attendanceRange2'), min: 70, max: 79 },
+    { label: t('admin.attendanceRange3'), min: 80, max: 89 },
+    { label: t('admin.attendanceRange4'), min: 90, max: 100 },
+  ];
+  const attendanceCounts = attendanceBuckets.map((bucket) => {
+    return attendanceVsScore.filter((p) => p.x >= bucket.min && p.x <= bucket.max).length;
+  });
+  const attendanceDistributionData = {
+    labels: attendanceBuckets.map((b) => b.label),
     datasets: [{
-      label: 'Students',
-      data: attendanceVsScore.map((p) => ({ x: p.x, y: p.y })),
-      backgroundColor: 'rgba(99, 102, 241, 0.6)',
-      borderColor: 'rgb(99, 102, 241)',
+      data: attendanceCounts,
+      backgroundColor: [
+        'rgba(239, 68, 68, 0.8)',   // 0-59% - Red
+        'rgba(249, 115, 22, 0.8)',  // 60-69% - Orange
+        'rgba(234, 179, 8, 0.8)',   // 70-79% - Yellow
+        'rgba(34, 197, 94, 0.8)',   // 80-89% - Green
+        'rgba(16, 185, 129, 0.8)',  // 90-100% - Emerald
+      ],
+      borderColor: [
+        'rgb(239, 68, 68)',
+        'rgb(249, 115, 22)',
+        'rgb(234, 179, 8)',
+        'rgb(34, 197, 94)',
+        'rgb(16, 185, 129)',
+      ],
       borderWidth: 1,
-      pointRadius: 6,
-      pointHoverRadius: 8,
+      hoverOffset: 8,
     }],
   };
-  const scatterBase = getScatterOptions(isDark, `${t('admin.attendance')} (%)`, t('admin.finalScore'));
-  const attendanceVsScoreOptions = {
-    ...scatterBase,
-    scales: {
-      x: { ...scatterBase.scales.x, min: 0, max: 100 },
-      y: { ...scatterBase.scales.y, min: 0, max: 100 },
-    },
-    plugins: {
-      ...scatterBase.plugins,
-      tooltip: {
-        ...scatterBase.plugins.tooltip,
-        callbacks: {
-          label: (ctx) => `${t('admin.attendance')}: ${ctx.raw.x}%, ${t('admin.finalScore')}: ${ctx.raw.y}`,
-        },
-      },
-    },
-  };
+  const attendanceDistributionOptions = getDoughnutOptions(isDark, (ctx) => {
+    const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+    const pct = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0;
+    return `${ctx.label}: ${ctx.raw} (${pct}%)`;
+  });
 
   // ── Part-Time Job Impact (Bar, vertical) ───────────────────────────────────
   const partTimeJob = charts.partTimeJobImpact || [];
@@ -435,9 +445,9 @@ export default function AdminDashboard() {
             ? <Doughnut data={gradeDistributionData} options={gradeDistributionOptions} />
             : <ChartEmpty message={t('admin.noDataAvailable')} />}
         </ChartWrapper>
-        <ChartWrapper title={t('admin.attendanceVsScore')}>
+        <ChartWrapper title={t('admin.attendanceDistribution')}>
           {attendanceVsScore.length > 0
-            ? <Scatter data={attendanceVsScoreData} options={attendanceVsScoreOptions} />
+            ? <Doughnut data={attendanceDistributionData} options={attendanceDistributionOptions} />
             : <ChartEmpty message={t('admin.noDataAvailable')} />}
         </ChartWrapper>
         <ChartWrapper title={t('admin.partTimeJobImpact')}>
