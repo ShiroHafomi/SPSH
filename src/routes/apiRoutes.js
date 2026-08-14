@@ -71,6 +71,7 @@ const {
   apiStudentProfile,
   apiStudentSimulate,
   apiStudentAdvisor,
+  apiStudentUpdateProfile,
 } = require('../controllers/studentController');
 
 const router = express.Router();
@@ -168,6 +169,7 @@ studentRouter.use(requireAuth, requireRole('student'));
 
 // Profile
 studentRouter.get('/me/profile', apiStudentProfile);
+studentRouter.put('/me/profile', apiStudentUpdateProfile);
 
 // What-If Simulator
 studentRouter.post(

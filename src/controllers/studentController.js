@@ -251,8 +251,186 @@ function gradeToNumber(grade) {
   return map[grade] || 99;
 }
 
+/**
+ * PUT /api/student/me/profile
+ * Update own profile (editable fields only).
+ */
+async function apiStudentUpdateProfile(req, res) {
+  try {
+    const studentId = req.user.studentId;
+
+    if (!studentId) {
+      return res.status(400).json({ error: 'No student record linked to this account.' });
+    }
+
+    const student = await studentService.findById(studentId);
+    if (!student) {
+      return res.status(404).json({ error: 'Student record not found.' });
+    }
+
+    const body = req.body || {};
+    const { getDisplayColumns } = require('../utils/schemaMap');
+    const displayCols = getDisplayColumns();
+
+    // Define editable fields for students (exclude calculated/system fields)
+    const editableFields = new Set([
+      'gender',
+      'age',
+      'study_hours_per_day',
+      'attendance_percent',
+      'sleep_hours',
+      'previous_gpa',
+      'parental_education',
+      'internet_access',
+      'extracurricular',
+      'part_time_job',
+      'notes',
+    ]);
+
+    // Also check against schema to ensure field exists and is valid
+    const validEditableFields = new Set(
+      displayCols.filter(c => editableFields.has(c.name)).map(c => c.name)
+    );
+
+    // Filter and validate input
+    const updateData = {};
+    const errors = [];
+
+    for (const [key, value] of Object.entries(body)) {
+      if (!validEditableFields.has(key)) {
+        continue; // silently ignore non-editable fields
+      }
+
+      const col = displayCols.find(c => c.name === key);
+      if (!col) continue;
+
+      // Validation based on inferred type
+      if (value === '' || value === null || value === undefined) {
+        updateData[key] = null; // allow clearing
+        continue;
+      }
+
+      switch (col.inferredType) {
+        case 'int':
+        case 'bigint': {
+          const n = parseInt(value, 10);
+          if (isNaN(n)) {
+            errors.push(`${col.displayLabel || key} must be a valid integer.`);
+          } else {
+            // Additional range checks for specific fields
+            if (key === 'attendance_percent' && (n < 0 || n > 100)) {
+              errors.push(`${col.displayLabel || key} must be between 0 and 100.`);
+            } else if (key === 'age' && (n < 15 || n > 30)) {
+              errors.push(`${col.displayLabel || key} must be between 15 and 30.`);
+            } else {
+              updateData[key] = n;
+            }
+          }
+          break;
+        }
+        case 'decimal': {
+          const n = parseFloat(value);
+          if (isNaN(n)) {
+            errors.push(`${col.displayLabel || key} must be a valid number.`);
+          } else {
+            if (key === 'study_hours_per_day' && (n < 0 || n > 24)) {
+              errors.push(`${col.displayLabel || key} must be between 0 and 24.`);
+            } else if (key === 'sleep_hours' && (n < 0 || n > 24)) {
+              errors.push(`${col.displayLabel || key} must be between 0 and 24.`);
+            } else if (key === 'previous_gpa' && (n < 0 || n > 4.0)) {
+              errors.push(`${col.displayLabel || key} must be between 0.0 and 4.0.`);
+            } else {
+              updateData[key] = n;
+            }
+          }
+          break;
+        }
+        case 'boolean': {
+          const s = String(value).toLowerCase();
+          if (['1', 'true', 'on', 'yes', 'y'].includes(s)) {
+            updateData[key] = 1;
+          } else if (['0', 'false', 'off', 'no', 'n'].includes(s)) {
+            updateData[key] = 0;
+          } else {
+            errors.push(`${col.displayLabel || key} must be a valid boolean (Yes/No).`);
+          }
+          break;
+        }
+        case 'category': {
+          const str = String(value).trim();
+          if (!str) {
+            errors.push(`${col.displayLabel || key} cannot be empty.`);
+          } else {
+            // Validate against known categories for specific fields
+            if (key === 'gender' && !['Male', 'Female'].includes(str)) {
+              errors.push(`${col.displayLabel || key} must be either 'Male' or 'Female'.`);
+            } else if (key === 'parental_education' && !['High School', 'Bachelor', 'Master', 'PhD'].includes(str)) {
+              errors.push(`${col.displayLabel || key} has an invalid value.`);
+            } else {
+              updateData[key] = str;
+            }
+          }
+          break;
+        }
+        case 'text': {
+          const str = String(value).trim();
+          if (str.length > 500) {
+            errors.push(`${col.displayLabel || key} cannot exceed 500 characters.`);
+          } else {
+            updateData[key] = str;
+          }
+          break;
+        }
+        default: {
+          const str = String(value).trim();
+          updateData[key] = str;
+        }
+      }
+    }
+
+    if (errors.length) {
+      return res.status(400).json({ error: errors[0], errors });
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update.' });
+    }
+
+    // Update student record
+    const success = await studentService.updateStudent(studentId, updateData);
+    if (!success) {
+      return res.status(404).json({ error: 'Student record not found or no changes made.' });
+    }
+
+    // Log audit event
+    await logAuditEvent({
+      userId: req.user.id,
+      action: 'UPDATE_PROFILE',
+      resourceType: 'student',
+      resourceId: student.id,
+      metadata: {
+        studentId: student.student_id,
+        updatedFields: Object.keys(updateData),
+      },
+      ipAddress: req.ip || req.headers['x-forwarded-for'] || 'unknown',
+      userAgent: req.headers['user-agent'],
+    });
+
+    // Return updated student
+    const updatedStudent = await studentService.findById(studentId);
+    res.json({
+      student: updatedStudent,
+      message: 'Profile updated successfully.',
+    });
+  } catch (err) {
+    console.error('[apiStudentUpdateProfile]', err);
+    res.status(500).json({ error: 'Failed to update profile.' });
+  }
+}
+
 module.exports = {
   apiStudentProfile,
   apiStudentSimulate,
   apiStudentAdvisor,
+  apiStudentUpdateProfile,
 };

@@ -26,6 +26,8 @@ export default function StudentDashboard() {
     sleep_hours: 0,
     attendance_percent: 0,
   });
+  const [profileForm, setProfileForm] = useState({});
+  const [profileSaving, setProfileSaving] = useState(false);
 
   // Fetch profile on mount
   useEffect(() => {
@@ -46,6 +48,20 @@ export default function StudentDashboard() {
           study_hours_per_day: res.student.study_hours_per_day || 0,
           sleep_hours: res.student.sleep_hours || 0,
           attendance_percent: res.student.attendance_percent || 0,
+        });
+        // Initialize profile form
+        setProfileForm({
+          gender: res.student.gender || '',
+          age: res.student.age || '',
+          study_hours_per_day: res.student.study_hours_per_day || '',
+          attendance_percent: res.student.attendance_percent || '',
+          sleep_hours: res.student.sleep_hours || '',
+          previous_gpa: res.student.previous_gpa || '',
+          parental_education: res.student.parental_education || '',
+          internet_access: res.student.internet_access ? 'Yes' : 'No',
+          extracurricular: res.student.extracurricular ? 'Yes' : 'No',
+          part_time_job: res.student.part_time_job ? 'Yes' : 'No',
+          notes: res.student.notes || '',
         });
       }
       // Get baseline prediction
@@ -83,6 +99,38 @@ export default function StudentDashboard() {
 
   const handleInputChange = (field, value) => {
     setSimInputs(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleProfileChange = (field, value) => {
+    setProfileForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveProfile = async () => {
+    try {
+      setProfileSaving(true);
+      const res = await api.put('/student/me/profile', profileForm);
+      setProfile(res.student);
+      // Re-initialize form with updated data
+      setProfileForm({
+        gender: res.student.gender || '',
+        age: res.student.age || '',
+        study_hours_per_day: res.student.study_hours_per_day || '',
+        attendance_percent: res.student.attendance_percent || '',
+        sleep_hours: res.student.sleep_hours || '',
+        previous_gpa: res.student.previous_gpa || '',
+        parental_education: res.student.parental_education || '',
+        internet_access: res.student.internet_access ? 'Yes' : 'No',
+        extracurricular: res.student.extracurricular ? 'Yes' : 'No',
+        part_time_job: res.student.part_time_job ? 'Yes' : 'No',
+        notes: res.student.notes || '',
+      });
+      addFlash(t('student.profileSaved'), 'success');
+    } catch (err) {
+      console.error('Failed to save profile:', err);
+      addFlash(t('student.profileSaveFailed'), 'error');
+    } finally {
+      setProfileSaving(false);
+    }
   };
 
   if (loading) {
@@ -172,6 +220,7 @@ export default function StudentDashboard() {
             { id: 'overview', label: t('student.tabOverview'), icon: renderIcon('LayoutDashboard', { className: "w-5 h-5" }) },
             { id: 'simulator', label: t('student.tabSimulator'), icon: renderIcon('Sliders', { className: "w-5 h-5" }) },
             { id: 'advisor', label: t('student.tabAdvisor'), icon: renderIcon('MessageSquare', { className: "w-5 h-5" }) },
+            { id: 'editProfile', label: t('student.tabEditProfile'), icon: renderIcon('UserPen', { className: "w-5 h-5" }) },
           ].map(tab => (
             <button
               key={tab.id}
@@ -488,6 +537,187 @@ export default function StudentDashboard() {
                 <p>{t('student.loadingAdvice')}</p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Edit Profile Tab */}
+        {activeTab === 'editProfile' && (
+          <div className="card p-6 max-w-2xl">
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-2">
+                {t('student.editProfileTitle')}
+              </h3>
+              <p className="text-primary-500 dark:text-gray-400">{t('student.editProfileSubtitle')}</p>
+            </div>
+
+            <form onSubmit={(e) => { e.preventDefault(); handleSaveProfile(); }} className="space-y-5">
+              <div className="grid gap-5 md:grid-cols-2">
+                {/* Gender */}
+                <div>
+                  <label className="label">{t('student.gender')} <span className="text-danger-500">*</span></label>
+                  <select
+                    value={profileForm.gender}
+                    onChange={(e) => handleProfileChange('gender', e.target.value)}
+                    className="input mt-1"
+                    required
+                  >
+                    <option value="">{t('common.select')}</option>
+                    <option value="Male">{t('student.male')}</option>
+                    <option value="Female">{t('student.female')}</option>
+                  </select>
+                </div>
+
+                {/* Age */}
+                <div>
+                  <label className="label">{t('student.age')} <span className="text-danger-500">*</span></label>
+                  <input
+                    type="number"
+                    min="15"
+                    max="30"
+                    value={profileForm.age}
+                    onChange={(e) => handleProfileChange('age', e.target.value)}
+                    className="input mt-1"
+                    required
+                  />
+                </div>
+
+                {/* Study Hours Per Day */}
+                <div>
+                  <label className="label">{t('student.studyHoursPerDay')}</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="24"
+                    step="0.5"
+                    value={profileForm.study_hours_per_day}
+                    onChange={(e) => handleProfileChange('study_hours_per_day', e.target.value)}
+                    className="input mt-1"
+                  />
+                </div>
+
+                {/* Attendance Percent */}
+                <div>
+                  <label className="label">{t('student.attendancePercent')}</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={profileForm.attendance_percent}
+                    onChange={(e) => handleProfileChange('attendance_percent', e.target.value)}
+                    className="input mt-1"
+                  />
+                </div>
+
+                {/* Sleep Hours */}
+                <div>
+                  <label className="label">{t('student.sleepHours')}</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="24"
+                    step="0.5"
+                    value={profileForm.sleep_hours}
+                    onChange={(e) => handleProfileChange('sleep_hours', e.target.value)}
+                    className="input mt-1"
+                  />
+                </div>
+
+                {/* Previous GPA */}
+                <div>
+                  <label className="label">{t('student.previousGPA')}</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="4"
+                    step="0.1"
+                    value={profileForm.previous_gpa}
+                    onChange={(e) => handleProfileChange('previous_gpa', e.target.value)}
+                    className="input mt-1"
+                  />
+                </div>
+
+                {/* Parental Education */}
+                <div>
+                  <label className="label">{t('student.parentalEducation')}</label>
+                  <select
+                    value={profileForm.parental_education}
+                    onChange={(e) => handleProfileChange('parental_education', e.target.value)}
+                    className="input mt-1"
+                  >
+                    <option value="">{t('common.select')}</option>
+                    <option value="High School">{t('student.highSchool')}</option>
+                    <option value="Bachelor">{t('student.bachelors')}</option>
+                    <option value="Master">{t('student.masters')}</option>
+                    <option value="PhD">{t('student.phd')}</option>
+                  </select>
+                </div>
+
+                {/* Internet Access */}
+                <div>
+                  <label className="label">{t('student.internetAccess')}</label>
+                  <select
+                    value={profileForm.internet_access}
+                    onChange={(e) => handleProfileChange('internet_access', e.target.value)}
+                    className="input mt-1"
+                  >
+                    <option value="">{t('common.select')}</option>
+                    <option value="Yes">{t('student.yes')}</option>
+                    <option value="No">{t('student.no')}</option>
+                  </select>
+                </div>
+
+                {/* Extracurricular */}
+                <div>
+                  <label className="label">{t('student.extracurricular')}</label>
+                  <select
+                    value={profileForm.extracurricular}
+                    onChange={(e) => handleProfileChange('extracurricular', e.target.value)}
+                    className="input mt-1"
+                  >
+                    <option value="">{t('common.select')}</option>
+                    <option value="Yes">{t('student.yes')}</option>
+                    <option value="No">{t('student.no')}</option>
+                  </select>
+                </div>
+
+                {/* Part-Time Job */}
+                <div>
+                  <label className="label">{t('student.partTimeJob')}</label>
+                  <select
+                    value={profileForm.part_time_job}
+                    onChange={(e) => handleProfileChange('part_time_job', e.target.value)}
+                    className="input mt-1"
+                  >
+                    <option value="">{t('common.select')}</option>
+                    <option value="Yes">{t('student.yes')}</option>
+                    <option value="No">{t('student.no')}</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="label">{t('student.notes')}</label>
+                <textarea
+                  value={profileForm.notes}
+                  onChange={(e) => handleProfileChange('notes', e.target.value)}
+                  rows={3}
+                  className="input mt-1"
+                  placeholder="Add any additional notes..."
+                />
+              </div>
+
+              {/* Save Button */}
+              <div className="flex justify-end pt-4 border-t border-primary-200 dark:border-gray-700">
+                <button
+                  type="submit"
+                  className="btn-primary px-8 py-2.5"
+                  disabled={profileSaving}
+                >
+                  {profileSaving ? t('student.saving') : t('student.saveProfile')}
+                </button>
+              </div>
+            </form>
           </div>
         )}
       </div>
