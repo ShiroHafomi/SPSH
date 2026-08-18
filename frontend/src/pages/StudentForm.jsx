@@ -1,11 +1,26 @@
+/**
+ * Student Form Page - Dynamic create/edit form using new UI components
+ */
+
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { api, ApiError } from '../api';
-import { useFlash } from '../components/FlashProvider';
-import { SkeletonCard } from '../components/Skeleton';
+import { useLanguage } from '../hooks/useLanguage';
+import {
+  Card,
+  Button,
+  Input,
+  Textarea,
+  Select,
+  RadioGroup,
+  Badge,
+  Flex,
+  SkeletonCard,
+} from '../components/ui';
+import { useFlash } from '../components/ui/Toast';
 
 function createFieldSchema(col) {
   let schema;
@@ -30,7 +45,7 @@ function createFieldSchema(col) {
       schema = z.string();
   }
   if (!col.nullable) {
-    schema = schema.min(1, `"${col.displayLabel}" is required`);
+    schema = schema.min(1, '"{col.displayLabel}" is required');
   } else {
     schema = schema.optional().or(z.literal(''));
   }
@@ -38,6 +53,7 @@ function createFieldSchema(col) {
 }
 
 export default function StudentForm() {
+  const { t } = useLanguage();
   const { id } = useParams();
   const isEdit = !!id;
   const navigate = useNavigate();
@@ -70,20 +86,6 @@ export default function StudentForm() {
           }
         });
         setFieldSchemas(schemas);
-
-        // Set default values for create
-        if (!isEdit) {
-          const defaults = {};
-          data.columns.forEach((col) => {
-            if (col.name !== 'id' && col.name !== 'created_at' && col.name !== 'updated_at') {
-              defaults[col.name] = '';
-            }
-          });
-          // Trigger form reset with defaults
-          if (mounted) {
-            // Form will use defaultValues
-          }
-        }
       } catch (err) {
         if (mounted) addFlash(err.message, 'error');
       } finally {
@@ -103,6 +105,7 @@ export default function StudentForm() {
     setValue,
     formState: { errors, isSubmitting },
     reset,
+    watch,
   } = useForm({
     resolver: zodResolver(formSchema),
     defaultValues: initialValues,
@@ -121,18 +124,16 @@ export default function StudentForm() {
     try {
       if (isEdit) {
         await api.post(`/students/${id}`, data);
-        addFlash('Student updated successfully!', 'success');
+        addFlash(t('studentForm.updated'), 'success');
       } else {
         await api.post('/students', data);
-        addFlash('Student created successfully!', 'success');
+        addFlash(t('studentForm.created'), 'success');
       }
       navigate('/students');
     } catch (err) {
       if (err instanceof ApiError && err.errors) {
-        // Set server-side validation errors
-        err.errors.forEach((e, idx) => {
-          // This is a simplified error handling
-        });
+        // Server-side validation errors could be set here
+        console.error('Validation errors:', err.errors);
       }
       addFlash(err.message, 'error');
     } finally {
@@ -152,153 +153,178 @@ export default function StudentForm() {
     (c) => c.name !== 'id' && c.name !== 'created_at' && c.name !== 'updated_at'
   );
 
-  const renderField = (col) => {
+  const getFieldConfig = (col) => {
     const error = errors[col.name];
     const required = !col.nullable;
-    const fieldProps = register(col.name);
+    const isStudentId = col.name === 'student_id';
 
     if (col.inferredType === 'boolean') {
-      return (
-        <div className="grid gap-2">
-          <label className="label">{col.displayLabel} {required && <span className="text-danger-500">*</span>}</label>
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                value="1"
-                {...fieldProps}
-                className="h-4 w-4 text-primary-600 border-gray-300 focus:ring-primary-500"
-              />
-              <span className="text-sm text-primary-700 dark:text-gray-300">Yes</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                value="0"
-                {...fieldProps}
-                className="h-4 w-4 text-primary-600 border-gray-300 focus:ring-primary-500"
-              />
-              <span className="text-sm text-primary-700 dark:text-gray-300">No</span>
-            </label>
-          </div>
-          {col.nullable && <p className="text-xs text-gray-500 mt-1">Optional</p>}
-        </div>
-      );
+      return {
+        type: 'radio',
+        options: [
+          { value: '1', label: t('common.yes') },
+          { value: '0', label: t('common.no') },
+        ],
+        required,
+        disabled: isStudentId,
+      };
     }
 
     if (col.inferredType === 'category' && col.stats?.distinctCount <= 12 && col.stats?.distinctCount > 1) {
       const uniqueVals = [...new Set(col.stats.sampleValues || [])];
-      return (
-        <div className="grid gap-2">
-          <label htmlFor={col.name} className="label">
-            {col.displayLabel} {required && <span className="text-danger-500">*</span>}
-          </label>
-          <select
-            id={col.name}
-            {...fieldProps}
-            className="input cursor-pointer"
-            disabled={col.name === 'student_id'}
-          >
-            {col.nullable && <option value="">-- Select --</option>}
-            {uniqueVals.map((v) => (
-              <option key={v} value={String(v)}>{String(v)}</option>
-            ))}
-          </select>
-          {col.nullable && <p className="text-xs text-gray-500 mt-1">Optional</p>}
-        </div>
-      );
+      return {
+        type: 'select',
+        options: uniqueVals.map((v) => ({ value: String(v), label: String(v) })),
+        placeholder: t('common.select'),
+        required,
+        disabled: isStudentId,
+      };
     }
 
     if (col.inferredType === 'date') {
-      return (
-        <div className="grid gap-2">
-          <label htmlFor={col.name} className="label">
-            {col.displayLabel} {required && <span className="text-danger-500">*</span>}
-          </label>
-          <input
-            type="date"
-            id={col.name}
-            {...fieldProps}
-            className="input"
-            min="1900-01-01"
-            max="2100-12-31"
-          />
-          {error && <p className="text-sm text-danger-600" role="alert">{error.message}</p>}
-          {col.nullable && <p className="text-xs text-gray-500 mt-1">Optional</p>}
-        </div>
-      );
+      return {
+        type: 'date',
+        min: '1900-01-01',
+        max: '2100-12-31',
+        required,
+      };
     }
 
     if (col.inferredType === 'int' || col.inferredType === 'bigint' || col.inferredType === 'decimal') {
-      return (
-        <div className="grid gap-2">
-          <label htmlFor={col.name} className="label">
-            {col.displayLabel} {required && <span className="text-danger-500">*</span>}
-          </label>
-          <input
-            type="number"
-            id={col.name}
-            {...fieldProps}
-            step={col.inferredType === 'decimal' ? '0.01' : '1'}
-            className="input"
-            disabled={col.name === 'student_id'}
-          />
-          {error && <p className="text-sm text-danger-600" role="alert">{error.message}</p>}
-          {col.nullable && <p className="text-xs text-gray-500 mt-1">Optional</p>}
-        </div>
-      );
+      return {
+        type: 'number',
+        step: col.inferredType === 'decimal' ? '0.01' : '1',
+        required,
+        disabled: isStudentId,
+      };
     }
 
     if (col.inferredType === 'text') {
-      return (
-        <div className="grid gap-2">
-          <label htmlFor={col.name} className="label">
-            {col.displayLabel} {required && <span className="text-danger-500">*</span>}
-          </label>
-          <textarea
-            id={col.name}
-            {...fieldProps}
-            rows={3}
-            className="input"
-          />
-          {error && <p className="text-sm text-danger-600" role="alert">{error.message}</p>}
-          {col.nullable && <p className="text-xs text-gray-500 mt-1">Optional</p>}
-        </div>
-      );
+      return {
+        type: 'textarea',
+        rows: 3,
+        required,
+      };
     }
 
     // Default: text input
-    return (
-      <div className="grid gap-2">
-        <label htmlFor={col.name} className="label">
-          {col.displayLabel} {required && <span className="text-danger-500">*</span>}
-        </label>
-        <input
-          type="text"
-          id={col.name}
-          {...fieldProps}
-          className="input"
+    return {
+      type: 'text',
+      required,
+    };
+  };
+
+  const renderField = (col) => {
+    const config = getFieldConfig(col);
+    const error = errors[col.name];
+    const required = !col.nullable;
+    const fieldProps = register(col.name);
+
+    // Check if value exists and is truthy for conditional rendering
+    const showOptionalHint = col.nullable && !isEdit;
+
+    if (config.type === 'radio') {
+      return (
+        <RadioGroup
+          name={col.name}
+          label={col.displayLabel}
+          error={error?.message}
+          required={required}
+          options={config.options}
+          disabled={config.disabled}
+          inline
         />
-        {error && <p className="text-sm text-danger-600" role="alert">{error.message}</p>}
-        {col.nullable && <p className="text-xs text-gray-500 mt-1">Optional</p>}
-      </div>
+      );
+    }
+
+    if (config.type === 'select') {
+      return (
+        <Select
+          name={col.name}
+          label={col.displayLabel}
+          error={error?.message}
+          required={required}
+          options={config.options}
+          placeholder={config.placeholder}
+          disabled={config.disabled}
+          {...fieldProps}
+        />
+      );
+    }
+
+    if (config.type === 'date') {
+      return (
+        <Input
+          type="date"
+          name={col.name}
+          label={col.displayLabel}
+          error={error?.message}
+          required={required}
+          min={config.min}
+          max={config.max}
+          {...fieldProps}
+        />
+      );
+    }
+
+    if (config.type === 'number') {
+      return (
+        <Input
+          type="number"
+          name={col.name}
+          label={col.displayLabel}
+          error={error?.message}
+          required={required}
+          step={config.step}
+          disabled={config.disabled}
+          {...fieldProps}
+        />
+      );
+    }
+
+    if (config.type === 'textarea') {
+      return (
+        <Textarea
+          name={col.name}
+          label={col.displayLabel}
+          error={error?.message}
+          required={required}
+          rows={config.rows}
+          {...fieldProps}
+        />
+      );
+    }
+
+    // Default text input
+    return (
+      <Input
+        name={col.name}
+        label={col.displayLabel}
+        error={error?.message}
+        required={required}
+        {...fieldProps}
+      />
     );
   };
 
   return (
     <div className="max-w-3xl mx-auto">
-      <div className="card p-6">
-        <div className="flex items-center justify-between mb-6">
+      <Card padding="lg">
+        <Flex direction="col" gap={4} className="sm:flex-row sm:items-center sm:justify-between mb-8">
           <h2 className="text-xl font-bold text-primary-950 dark:text-gray-100">
-            {isEdit ? 'Edit Student' : 'Add New Student'}
+            {isEdit ? t('studentForm.editTitle') : t('studentForm.createTitle')}
           </h2>
-          <Link to="/students" className="text-sm text-primary-400 dark:text-gray-500 hover:text-primary-700 dark:hover:text-gray-300 transition-colors">
-            ← Back to list
+          <Link to="/students" className="text-sm text-primary-400 dark:text-gray-500 hover:text-primary-700 dark:hover:text-gray-300 transition-colors flex items-center gap-1">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+            {t('common.backToList')}
           </Link>
-        </div>
+        </Flex>
 
         {Object.keys(errors).length > 0 && (
-          <div className="mb-6 p-4 bg-danger-50 border border-danger-200 text-danger-700 rounded-lg" role="alert">
+          <div className="mb-6 p-4 bg-danger-50 border border-danger-200 text-danger-700 dark:bg-danger-950/30 dark:border-danger-900/50 dark:text-danger-300 rounded-xl" role="alert">
+            <p className="font-medium mb-2">{t('studentForm.validationErrors')}</p>
             <ul className="list-disc list-inside text-sm space-y-1">
               {Object.entries(errors).map(([key, err]) => (
                 <li key={key}>{err.message || String(err)}</li>
@@ -313,15 +339,28 @@ export default function StudentForm() {
           ))}
 
           <div className="flex justify-end gap-3 pt-4 border-t border-primary-100 dark:border-gray-800">
-            <Link to="/students" className="btn-secondary">
-              Cancel
+            <Link to="/students">
+              <Button variant="secondary" type="button">
+                {t('common.cancel')}
+              </Button>
             </Link>
-            <button type="submit" disabled={isSubmitting || loading} className={isEdit ? 'btn-primary' : 'btn-success'}>
-              {isSubmitting || loading ? (isEdit ? 'Saving...' : 'Creating...') : (isEdit ? 'Save Changes' : 'Create Student')}
-            </button>
+            <Button
+              type="submit"
+              variant={isEdit ? 'primary' : 'success'}
+              size="lg"
+              disabled={isSubmitting || loading}
+              loading={isSubmitting || loading}
+              leftIcon={isSubmitting || loading ? undefined : (isEdit ? 'save' : 'plus')}
+            >
+              {isSubmitting || loading
+                ? t('common.saving')
+                : isEdit
+                ? t('common.saveChanges')
+                : t('common.create')}
+            </Button>
           </div>
         </form>
-      </div>
+      </Card>
     </div>
   );
 }

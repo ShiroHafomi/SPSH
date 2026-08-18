@@ -1,0 +1,74 @@
+2026-08-18 09:27:06 | INFO     | train | 
+============================================================
+2026-08-18 09:27:06 | INFO     | train | STUDENT PERFORMANCE MODEL TRAINING
+2026-08-18 09:27:06 | INFO     | train | ============================================================
+2026-08-18 09:27:06 | INFO     | train | Log file: d:\Student Performance & Study Habits\ml\logs\train_20260818_092706.log
+2026-08-18 09:27:06 | INFO     | train | Project root: d:\Student Performance & Study Habits
+2026-08-18 09:27:06 | INFO     | train | Data path: d:\Student Performance & Study Habits\ml\data\students.csv
+2026-08-18 09:27:06 | INFO     | train | Models dir: d:\Student Performance & Study Habits\ml\models
+2026-08-18 09:27:06 | INFO     | train | Output dir: d:\Student Performance & Study Habits\ml\output
+2026-08-18 09:27:06 | INFO     | train | Loading data from d:\Student Performance & Study Habits\ml\data\students.csv
+2026-08-18 09:27:06 | INFO     | train | Data loaded in 0.018s: shape=(101, 12), columns=['gender', 'age', 'study_hours_per_day', 'attendance_percent', 'sleep_hours', 'previous_gpa', 'parental_education', 'internet_access', 'extracurricular', 'part_time_job', 'final_score', 'grade']
+2026-08-18 09:27:06 | DEBUG    | train | Data types:
+gender                  object
+age                      int64
+study_hours_per_day    float64
+attendance_percent       int64
+sleep_hours            float64
+previous_gpa           float64
+parental_education      object
+internet_access          int64
+extracurricular          int64
+part_time_job            int64
+final_score              int64
+grade                   object
+2026-08-18 09:27:06 | DEBUG    | train | Numeric summary:
+              age  study_hours_per_day  attendance_percent  sleep_hours  previous_gpa  internet_access  extracurricular  part_time_job  final_score
+count  101.000000           101.000000          101.000000   101.000000    101.000000       101.000000       101.000000     101.000000   101.000000
+mean    18.534653             3.265347           84.178218     7.097030      3.094059         0.742574         0.584158       0.356436    75.891089
+std      0.995634             1.176557           11.498170     1.058155      0.611690         0.439397         0.495325       0.481335    18.536937
+min     17.000000             1.000000           55.000000     5.000000      1.800000         0.000000         0.000000       0.000000    38.000000
+25%     18.000000             2.200000           78.000000     6.200000      2.700000         0.000000         0.000000       0.000000    62.000000
+50%     18.000000             3.200000           88.000000     7.000000      3.200000         1.000000         1.000000       0.000000    81.000000
+75%     19.000000             4.200000           93.000000     8.000000      3.600000         1.000000         1.000000       1.000000    92.000000
+max     20.000000             5.500000           99.000000     9.000000      4.000000         1.000000         1.000000       1.000000    99.000000
+2026-08-18 09:27:06 | DEBUG    | train | Missing values:
+gender                 0
+age                    0
+study_hours_per_day    0
+attendance_percent     0
+sleep_hours            0
+previous_gpa           0
+parental_education     0
+internet_access        0
+extracurricular        0
+part_time_job          0
+final_score            0
+grade                  0
+2026-08-18 09:27:06 | DEBUG    | train | Feature types: numeric=['age', 'study_hours_per_day', 'attendance_percent', 'sleep_hours', 'previous_gpa'], categorical=['gender', 'parental_education'], binary=['internet_access', 'extracurricular', 'part_time_job']
+2026-08-18 09:27:06 | INFO     | train | Numeric features: ['age', 'study_hours_per_day', 'attendance_percent', 'sleep_hours', 'previous_gpa']
+2026-08-18 09:27:06 | INFO     | train | Categorical features: ['gender', 'parental_education']
+2026-08-18 09:27:06 | INFO     | train | Binary features: ['internet_access', 'extracurricular', 'part_time_job']
+2026-08-18 09:27:06 | INFO     | train | Created interaction features: ['study_attendance_interaction', 'study_gpa_interaction', 'sleep_attendance_interaction', 'attendance_gpa_interaction']
+2026-08-18 09:27:06 | INFO     | train | Target regression range: [38, 99], mean=75.89
+2026-08-18 09:27:06 | INFO     | train | Target classification distribution: {np.int64(0): np.int64(20), np.int64(1): np.int64(12), np.int64(2): np.int64(16), np.int64(3): np.int64(10), np.int64(4): np.int64(43)}
+2026-08-18 09:27:06 | DEBUG    | train | Enhanced preprocessor (with PolynomialFeatures): ['num', 'cat', 'bin']
+2026-08-18 09:27:06 | INFO     | train | Transformed feature shape: (101, 62) (with interactions + poly)
+2026-08-18 09:27:06 | DEBUG    | train | Final feature names (62): ['age', 'study_hours_per_day', 'attendance_percent', 'sleep_hours', 'previous_gpa', 'study_attendance_interaction', 'study_gpa_interaction', 'sleep_attendance_interaction', 'attendance_gpa_interaction', 'age^2', 'age study_hours_per_day', 'age attendance_percent', 'age sleep_hours', 'age previous_gpa', 'age study_attendance_interaction', 'age study_gpa_interaction', 'age sleep_attendance_interaction', 'age attendance_gpa_interaction', 'study_hours_per_day^2', 'study_hours_per_day attendance_percent', 'study_hours_per_day sleep_hours', 'study_hours_per_day previous_gpa', 'study_hours_per_day study_attendance_interaction', 'study_hours_per_day study_gpa_interaction', 'study_hours_per_day sleep_attendance_interaction', 'study_hours_per_day attendance_gpa_interaction', 'attendance_percent^2', 'attendance_percent sleep_hours', 'attendance_percent previous_gpa', 'attendance_percent study_attendance_interaction', 'attendance_percent study_gpa_interaction', 'attendance_percent sleep_attendance_interaction', 'attendance_percent attendance_gpa_interaction', 'sleep_hours^2', 'sleep_hours previous_gpa', 'sleep_hours study_attendance_interaction', 'sleep_hours study_gpa_interaction', 'sleep_hours sleep_attendance_interaction', 'sleep_hours attendance_gpa_interaction', 'previous_gpa^2', 'previous_gpa study_attendance_interaction', 'previous_gpa study_gpa_interaction', 'previous_gpa sleep_attendance_interaction', 'previous_gpa attendance_gpa_interaction', 'study_attendance_interaction^2', 'study_attendance_interaction study_gpa_interaction', 'study_attendance_interaction sleep_attendance_interaction', 'study_attendance_interaction attendance_gpa_interaction', 'study_gpa_interaction^2', 'study_gpa_interaction sleep_attendance_interaction', 'study_gpa_interaction attendance_gpa_interaction', 'sleep_attendance_interaction^2', 'sleep_attendance_interaction attendance_gpa_interaction', 'attendance_gpa_interaction^2', 'gender_Male', 'gender_Test', 'parental_education_High School', 'parental_education_Master', 'parental_education_PhD', 'internet_access', 'extracurricular', 'part_time_job']
+2026-08-18 09:27:06 | INFO     | train | Regression CV strategy: RepeatedKFold(n_splits=5, n_repeats=3) = 15 folds
+2026-08-18 09:27:06 | INFO     | train | Classification CV strategy: RepeatedStratifiedKFold(n_splits=5, n_repeats=3) = 15 folds
+2026-08-18 09:27:06 | INFO     | train | 
+============================================================
+2026-08-18 09:27:06 | INFO     | train | REGRESSION: Predicting Final_Score
+2026-08-18 09:27:06 | INFO     | train | ============================================================
+2026-08-18 09:27:06 | INFO     | train | 
+--- Model: RidgeCV ---
+2026-08-18 09:27:06 | INFO     | train | Evaluating RidgeCV (regression)...
+2026-08-18 09:27:09 | INFO     | train |   CV completed in 2.65s
+2026-08-18 09:27:09 | INFO     | train |   R²:     0.9931 (±0.0027) [train: 0.9964]
+2026-08-18 09:27:09 | INFO     | train |   MAE:    1.1145 (±0.2162)
+2026-08-18 09:27:09 | INFO     | train |   RMSE:   1.4514 (±0.2203)
+2026-08-18 09:27:09 | INFO     | train |   MSE:    2.1551
+2026-08-18 09:27:09 | INFO     | train | 
+--- Model: RandomForest ---
+2026-08-18 09:27:09 | INFO     | train | Tuning hyperparameters (GridSearchCV) for RandomForest...

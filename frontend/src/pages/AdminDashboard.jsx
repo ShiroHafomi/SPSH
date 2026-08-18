@@ -1,4 +1,8 @@
-import { useEffect, useState } from 'react';
+/**
+ * Admin Dashboard - Analytics and insights using new UI components
+ */
+
+import { useEffect, useState, useMemo } from 'react';
 import { api, ApiError } from '../api';
 import { useLanguage } from '../hooks/useLanguage';
 import { useTheme } from '../hooks/useTheme';
@@ -16,20 +20,20 @@ import {
   Legend,
   Filler,
 } from 'chart.js';
+import { GRADE_COLORS, getChartOptions, getDoughnutOptions } from '../utils/chartTheme';
 import {
-  Users,
-  GraduationCap,
-  TrendingUp,
-  AlertTriangle,
-  AlertCircle,
-  RefreshCw,
-} from 'lucide-react';
-import {
-  GRADE_COLORS,
-  getChartOptions,
-  getDoughnutOptions,
-  getScatterOptions,
-} from '../utils/chartTheme';
+  Card,
+  KPICard,
+  Button,
+  Badge,
+  Icon,
+  getIcon,
+  Flex,
+  Grid2,
+  SkeletonCard,
+  SkeletonChart,
+} from '../components/ui';
+import { useFlash } from '../components/ui/Toast';
 
 ChartJS.register(
   CategoryScale,
@@ -44,166 +48,10 @@ ChartJS.register(
   Filler
 );
 
-// Per-card semantic border accents — utility classes, design-token backed, dark-mode aware.
-const KPI_CARD_COLORS = {
-  green: 'border-emerald-200 dark:border-emerald-800/30',
-  blue: 'border-primary-200 dark:border-primary-800/30',
-  purple: 'border-violet-200 dark:border-violet-800/30',
-  orange: 'border-amber-200 dark:border-amber-800/30',
-};
-
-function KPICard({ title, value, icon: Icon, colorClass }) {
-  return (
-    <div className={`card-clay p-6 hover:shadow-clay-md ${colorClass}`}>
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm font-medium text-primary-500 dark:text-primary-400 mb-1">{title}</p>
-          <p className="text-3xl font-bold text-primary-950 dark:text-gray-100 tabular-nums font-mono">{value}</p>
-        </div>
-        <div className="w-12 h-12 rounded-xl bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
-          <Icon className="w-6 h-6 text-primary-600 dark:text-primary-400" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ChartWrapper({ title, children, className = '' }) {
-  return (
-    <div className={`card-clay p-6 ${className}`}>
-      <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-4">{title}</h3>
-      <div className="chart-container">{children}</div>
-    </div>
-  );
-}
-
-// Empty state — shown when an analytics chart has no data yet. Prevents a
-// blank chart canvas (content-jumping + missing loading-state feedback).
-function ChartEmpty({ message }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-12 text-center">
-      <div className="w-12 h-12 rounded-full bg-primary-100 dark:bg-gray-800 flex items-center justify-center mb-3">
-        <AlertCircle className="w-6 h-6 text-primary-400 dark:text-gray-500" />
-      </div>
-      <p className="text-sm text-primary-500 dark:text-gray-400">{message}</p>
-    </div>
-  );
-}
-
-// Key Insights — data-derived actionable takeaways from kpis + charts.
-// Renders up to 3 insight cards with semantic accent borders.
-function KeyInsights({ kpis, charts, t }) {
-  const insights = [];
-
-  // 1. Pass rate health check
-  const passRate = Number(kpis.passRate || 0);
-  if (passRate > 0) {
-    if (passRate < 70) {
-      insights.push({
-        key: 'passRateLow',
-        icon: AlertTriangle,
-        accent: 'border-danger-200 dark:border-danger-800/30',
-        message: t('admin.insightPassRateLow', { rate: passRate.toFixed(1) }),
-      });
-    } else {
-      insights.push({
-        key: 'passRateHealthy',
-        icon: TrendingUp,
-        accent: 'border-emerald-200 dark:border-emerald-800/30',
-        message: t('admin.insightPassRateHealthy', { rate: passRate.toFixed(1) }),
-      });
-    }
-  }
-
-  // 2. At-risk cohort signal
-  const atRiskCount = Number(kpis.atRiskCount || 0);
-  if (atRiskCount > 0) {
-    insights.push({
-      key: 'atRisk',
-      icon: AlertCircle,
-      accent: 'border-amber-200 dark:border-amber-800/30',
-      message: t('admin.insightAtRisk', { count: atRiskCount.toLocaleString() }),
-    });
-  }
-
-  // 3. Grade distribution skew — F is largest segment
-  const gradeDist = charts.gradeDistribution || [];
-  const totalStudents = gradeDist.reduce((sum, d) => sum + (d.count || 0), 0);
-  const fGrade = gradeDist.find(d => d.grade === 'F');
-  if (fGrade && totalStudents > 0) {
-    const otherGrades = gradeDist.filter(d => d.grade !== 'F');
-    const maxOtherCount = otherGrades.reduce((max, d) => Math.max(max, d.count || 0), 0);
-    if (fGrade.count > maxOtherCount && fGrade.count > totalStudents * 0.25) {
-      insights.push({
-        key: 'gradeSkew',
-        icon: AlertTriangle,
-        accent: 'border-danger-200 dark:border-danger-800/30',
-        message: t('admin.insightGradeSkew'),
-      });
-    }
-  }
-
-  // 4. Part-time job impact gap
-  const partTimeJob = charts.partTimeJobImpact || [];
-  if (partTimeJob.length === 2) {
-    const noJob = partTimeJob.find(d => d.category === 'No' || d.category === 'No ' || d.category.toLowerCase().includes('no'));
-    const hasJob = partTimeJob.find(d => d.category === 'Yes' || d.category === 'Yes ' || d.category.toLowerCase().includes('yes'));
-    if (noJob && hasJob && typeof noJob.avgScore === 'number' && typeof hasJob.avgScore === 'number') {
-      const gap = (noJob.avgScore - hasJob.avgScore).toFixed(1);
-      if (gap > 3) { // only flag if meaningful gap (>3 points)
-        insights.push({
-          key: 'partTimeJob',
-          icon: GraduationCap,
-          accent: 'border-primary-200 dark:border-primary-800/30',
-          message: t('admin.insightPartTimeJob', { gap }),
-        });
-      }
-    }
-  }
-
-  // Show max 3 insights, prioritized by actionability
-  const displayInsights = insights.slice(0, 3);
-
-  if (displayInsights.length === 0) {
-    return (
-      <div className="card-clay p-6">
-        <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-3 flex items-center gap-2">
-          <TrendingUp className="w-5 h-5 text-primary-500" />
-          {t('admin.insightsTitle')}
-        </h3>
-        <div className="flex flex-col items-center justify-center py-8 text-center">
-          <div className="w-12 h-12 rounded-full bg-primary-100 dark:bg-gray-800 flex items-center justify-center mb-3">
-            <TrendingUp className="w-6 h-6 text-primary-400 dark:text-gray-500" />
-          </div>
-          <p className="text-sm text-primary-500 dark:text-gray-400">{t('admin.insightNoData')}</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="card-clay p-6">
-      <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-4 flex items-center gap-2">
-        <TrendingUp className="w-5 h-5 text-primary-500" />
-        {t('admin.insightsTitle')}
-      </h3>
-      <div className="space-y-3">
-        {displayInsights.map((insight, idx) => (
-          <div key={insight.key} className={`flex items-start gap-4 p-4 rounded-xl ${insight.accent} bg-primary-50 dark:bg-primary-900/20`}>
-            <div className="w-8 h-8 rounded-lg bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <insight.icon className="w-5 h-5 text-primary-600 dark:text-primary-400" />
-            </div>
-            <p className="text-sm text-primary-950 dark:text-gray-100 leading-relaxed">{insight.message}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export default function AdminDashboard() {
   const { t } = useLanguage();
   const { isDark } = useTheme();
+  const { addFlash } = useFlash();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [analytics, setAnalytics] = useState(null);
@@ -235,21 +83,11 @@ export default function AdminDashboard() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="card-clay p-6">
-              <div className="skeleton h-4 w-3/4 mb-4" />
-              <div className="skeleton h-8 w-1/2" />
-            </div>
-          ))}
+        <div className="bento-grid-4">
+          {[...Array(4)].map((_, i) => <SkeletonCard key={i} padding="lg" />)}
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="card-clay p-6">
-              <div className="skeleton h-6 w-1/3 mb-6" />
-              <div className="skeleton" style={{ height: '260px' }} />
-            </div>
-          ))}
+        <div className="bento-grid-2">
+          {[...Array(6)].map((_, i) => <SkeletonChart key={i} />)}
         </div>
       </div>
     );
@@ -257,23 +95,22 @@ export default function AdminDashboard() {
 
   if (error) {
     return (
-      <div className="text-center py-12">
-        <AlertTriangle className="w-12 h-12 text-danger-500 mx-auto mb-4" />
+      <Card padding="lg" className="text-center py-12">
+        <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-danger-100 dark:bg-danger-900/40 text-danger-600 dark:text-danger-400 flex items-center justify-center">
+          <Icon name="alertTriangle" className="w-6 h-6" />
+        </div>
         <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-2">{t('admin.failedToLoad')}</h3>
         <p className="text-primary-500 dark:text-gray-400 mb-4">{error}</p>
-        <button onClick={fetchAnalytics} className="btn-primary">
-          <RefreshCw className="w-4 h-4 mr-2" /> {t('common.tryAgain')}
-        </button>
-      </div>
+        <Button variant="primary" leftIcon={<Icon name="refreshCw" className="w-4 h-4" />} onClick={() => { setRefreshing(true); fetchAnalytics(); }} disabled={refreshing} loading={refreshing}>
+          {t('common.tryAgain')}
+        </Button>
+      </Card>
     );
   }
 
   if (!analytics) return null;
 
-  // Null-safe: `?? {}` catches both undefined AND null (the `= {}` destructure
-  // default only fires on undefined). Guards against a backend payload that
-  // sends `kpis: null` or `charts: null` — the original "reads gradeDistribution
-  // of undefined" crash class.
+  // Null-safe: `?? {}` catches both undefined AND null
   const kpis = analytics.kpis ?? {};
   const charts = analytics.charts ?? {};
 
@@ -283,7 +120,7 @@ export default function AdminDashboard() {
     .map((g) => (charts.gradeDistribution || []).find((d) => d.grade === g))
     .filter(Boolean);
 
-  const gradeDistributionData = {
+  const gradeDistributionData = useMemo(() => ({
     labels: sortedGradeDist.map((d) => d.grade),
     datasets: [{
       data: sortedGradeDist.map((d) => d.count),
@@ -292,16 +129,16 @@ export default function AdminDashboard() {
       borderWidth: 1,
       hoverOffset: 8,
     }],
-  };
-  const gradeDistributionOptions = getDoughnutOptions(isDark, (ctx) => {
+  }), [sortedGradeDist]);
+
+  const gradeDistributionOptions = useMemo(() => getDoughnutOptions(isDark, (ctx) => {
     const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
     const pct = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0;
     return `Grade ${ctx.label}: ${ctx.raw} (${pct}%)`;
-  });
+  }), [isDark]);
 
   // ── Attendance Distribution (Doughnut) ────────────────────────────────────────
   const attendanceVsScore = charts.attendanceVsScore || [];
-  // Bucket attendance into ranges for pie chart
   const attendanceBuckets = [
     { label: t('admin.attendanceRange0'), min: 0, max: 59 },
     { label: t('admin.attendanceRange1'), min: 60, max: 69 },
@@ -309,19 +146,19 @@ export default function AdminDashboard() {
     { label: t('admin.attendanceRange3'), min: 80, max: 89 },
     { label: t('admin.attendanceRange4'), min: 90, max: 100 },
   ];
-  const attendanceCounts = attendanceBuckets.map((bucket) => {
-    return attendanceVsScore.filter((p) => p.x >= bucket.min && p.x <= bucket.max).length;
-  });
-  const attendanceDistributionData = {
+  const attendanceCounts = attendanceBuckets.map((bucket) =>
+    attendanceVsScore.filter((p) => p.x >= bucket.min && p.x <= bucket.max).length
+  );
+  const attendanceDistributionData = useMemo(() => ({
     labels: attendanceBuckets.map((b) => b.label),
     datasets: [{
       data: attendanceCounts,
       backgroundColor: [
-        'rgba(239, 68, 68, 0.8)',   // 0-59% - Red
-        'rgba(249, 115, 22, 0.8)',  // 60-69% - Orange
-        'rgba(234, 179, 8, 0.8)',   // 70-79% - Yellow
-        'rgba(34, 197, 94, 0.8)',   // 80-89% - Green
-        'rgba(16, 185, 129, 0.8)',  // 90-100% - Emerald
+        'rgba(239, 68, 68, 0.8)',
+        'rgba(249, 115, 22, 0.8)',
+        'rgba(234, 179, 8, 0.8)',
+        'rgba(34, 197, 94, 0.8)',
+        'rgba(16, 185, 129, 0.8)',
       ],
       borderColor: [
         'rgb(239, 68, 68)',
@@ -333,16 +170,17 @@ export default function AdminDashboard() {
       borderWidth: 1,
       hoverOffset: 8,
     }],
-  };
-  const attendanceDistributionOptions = getDoughnutOptions(isDark, (ctx) => {
+  }), [attendanceCounts]);
+
+  const attendanceDistributionOptions = useMemo(() => getDoughnutOptions(isDark, (ctx) => {
     const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
     const pct = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0;
     return `${ctx.label}: ${ctx.raw} (${pct}%)`;
-  });
+  }), [isDark]);
 
   // ── Part-Time Job Impact (Bar, vertical) ───────────────────────────────────
   const partTimeJob = charts.partTimeJobImpact || [];
-  const partTimeJobData = {
+  const partTimeJobData = useMemo(() => ({
     labels: partTimeJob.map((d) => d.category),
     datasets: [{
       label: `Average ${t('admin.finalScore')}`,
@@ -351,11 +189,11 @@ export default function AdminDashboard() {
       borderRadius: 8,
       borderSkipped: false,
     }],
-  };
+  }), [partTimeJob, t]);
 
   // ── Sleep Impact (Bar, vertical) ────────────────────────────────────────────
   const sleepImpact = charts.sleepImpact || [];
-  const sleepImpactData = {
+  const sleepImpactData = useMemo(() => ({
     labels: sleepImpact.map((d) => d.sleepBucket),
     datasets: [{
       label: `Average ${t('admin.finalScore')}`,
@@ -364,11 +202,11 @@ export default function AdminDashboard() {
       borderRadius: 8,
       borderSkipped: false,
     }],
-  };
+  }), [sleepImpact, t]);
 
   // ── Gender Distribution (Bar, vertical) ─────────────────────────────────────
   const genderDist = charts.genderDistribution || [];
-  const genderData = {
+  const genderData = useMemo(() => ({
     labels: genderDist.map((d) => d.gender),
     datasets: [{
       label: 'Count',
@@ -377,11 +215,11 @@ export default function AdminDashboard() {
       borderRadius: 8,
       borderSkipped: false,
     }],
-  };
+  }), [genderDist]);
 
   // ── Parental Education Distribution (Bar, vertical) ──────────────────────────
   const parentalEduDist = charts.parentalEduDistribution || [];
-  const parentalEduData = {
+  const parentalEduData = useMemo(() => ({
     labels: parentalEduDist.map((d) => d.education),
     datasets: [{
       label: 'Count',
@@ -390,11 +228,10 @@ export default function AdminDashboard() {
       borderRadius: 8,
       borderSkipped: false,
     }],
-  };
+  }), [parentalEduDist]);
 
-  // Shared vertical-bar options (legend hidden). part-time & sleep cap y at 100 (avg scores);
-  // gender & parental are raw counts → no cap.
-  const baseBar = getChartOptions(isDark);
+  // Shared chart options
+  const baseBar = useMemo(() => getChartOptions(isDark), [isDark]);
   const noLegendPlugins = { ...baseBar.plugins, legend: { ...baseBar.plugins.legend, display: false } };
   const partTimeJobOptions = {
     ...baseBar,
@@ -409,67 +246,216 @@ export default function AdminDashboard() {
   const genderOptions = { ...baseBar, plugins: noLegendPlugins };
   const parentalEduOptions = { ...baseBar, plugins: noLegendPlugins };
 
+  // KPI Cards configuration
+  const kpiCards = [
+    { key: 'totalStudents', label: t('admin.totalStudents'), value: kpis.totalStudents?.toLocaleString() || '0', icon: 'users', variant: 'primary' },
+    { key: 'avgGpa', label: t('admin.averageGPA'), value: kpis.avgGpa?.toFixed(2) || '0.00', icon: 'award', variant: 'success' },
+    { key: 'passRate', label: t('admin.passRate'), value: `${(kpis.passRate || 0).toFixed(1)}%`, icon: 'trendingUp', variant: 'accent' },
+    { key: 'atRiskCount', label: t('admin.atRiskCount'), value: kpis.atRiskCount?.toLocaleString() || '0', icon: 'alertTriangle', variant: 'warning' },
+  ];
+
+  // Key Insights computation
+  const insights = useMemo(() => {
+    const list = [];
+
+    // 1. Pass rate health check
+    const passRate = Number(kpis.passRate || 0);
+    if (passRate > 0) {
+      if (passRate < 70) {
+        list.push({
+          key: 'passRateLow',
+          icon: 'alertTriangle',
+          variant: 'danger',
+          message: t('admin.insightPassRateLow', { rate: passRate.toFixed(1) }),
+        });
+      } else {
+        list.push({
+          key: 'passRateHealthy',
+          icon: 'trendingUp',
+          variant: 'success',
+          message: t('admin.insightPassRateHealthy', { rate: passRate.toFixed(1) }),
+        });
+      }
+    }
+
+    // 2. At-risk cohort signal
+    const atRiskCount = Number(kpis.atRiskCount || 0);
+    if (atRiskCount > 0) {
+      list.push({
+        key: 'atRisk',
+        icon: 'alertCircle',
+        variant: 'warning',
+        message: t('admin.insightAtRisk', { count: atRiskCount.toLocaleString() }),
+      });
+    }
+
+    // 3. Grade distribution skew — F is largest segment
+    const gradeDist = charts.gradeDistribution || [];
+    const totalStudents = gradeDist.reduce((sum, d) => sum + (d.count || 0), 0);
+    const fGrade = gradeDist.find(d => d.grade === 'F');
+    if (fGrade && totalStudents > 0) {
+      const otherGrades = gradeDist.filter(d => d.grade !== 'F');
+      const maxOtherCount = otherGrades.reduce((max, d) => Math.max(max, d.count || 0), 0);
+      if (fGrade.count > maxOtherCount && fGrade.count > totalStudents * 0.25) {
+        list.push({
+          key: 'gradeSkew',
+          icon: 'alertTriangle',
+          variant: 'danger',
+          message: t('admin.insightGradeSkew'),
+        });
+      }
+    }
+
+    // 4. Part-time job impact gap
+    if (partTimeJob.length === 2) {
+      const noJob = partTimeJob.find(d => d.category === 'No' || d.category === 'No ' || d.category.toLowerCase().includes('no'));
+      const hasJob = partTimeJob.find(d => d.category === 'Yes' || d.category === 'Yes ' || d.category.toLowerCase().includes('yes'));
+      if (noJob && hasJob && typeof noJob.avgScore === 'number' && typeof hasJob.avgScore === 'number') {
+        const gap = (noJob.avgScore - hasJob.avgScore).toFixed(1);
+        if (gap > 3) {
+          list.push({
+            key: 'partTimeJob',
+            icon: 'award',
+            variant: 'primary',
+            message: t('admin.insightPartTimeJob', { gap }),
+          });
+        }
+      }
+    }
+
+    return list.slice(0, 3);
+  }, [kpis, charts, partTimeJob, t]);
+
+  const EmptyChart = ({ message }) => (
+    <Card padding="lg" className="text-center py-12">
+      <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-primary-100 dark:bg-gray-800 flex items-center justify-center">
+        <Icon name="alertCircle" className="w-6 h-6 text-primary-400 dark:text-gray-500" />
+      </div>
+      <p className="text-sm text-primary-500 dark:text-gray-400">{message}</p>
+    </Card>
+  );
+
+  const InsightCard = ({ icon, variant, message }) => (
+    <Card variant="default" className="bg-primary-50 dark:bg-primary-900/20" padding="md">
+      <Flex gap={4} align="start">
+        <div className="w-8 h-8 rounded-lg bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+          <Icon name={icon} className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+        </div>
+        <p className="text-sm text-primary-950 dark:text-gray-100 leading-relaxed">{message}</p>
+      </Flex>
+    </Card>
+  );
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <Flex direction="col" gap={4} className="sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-primary-950 dark:text-gray-100">{t('nav.adminDashboard')}</h1>
           <p className="text-primary-500 dark:text-gray-400 mt-1">{t('admin.analyticsDesc')}</p>
         </div>
-        <button
+        <Button
+          variant="secondary"
+          leftIcon={<Icon name="refreshCw" className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />}
           onClick={() => { setRefreshing(true); fetchAnalytics(); }}
           disabled={refreshing}
-          className="btn-secondary flex items-center gap-2"
+          loading={refreshing}
         >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
           {t('admin.refresh')}
-        </button>
-      </div>
+        </Button>
+      </Flex>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <KPICard title={t('admin.totalStudents')} value={kpis.totalStudents?.toLocaleString() || '0'} icon={Users} colorClass={KPI_CARD_COLORS.blue} />
-        <KPICard title={t('admin.averageGPA')} value={kpis.avgGpa?.toFixed(2) || '0.00'} icon={GraduationCap} colorClass={KPI_CARD_COLORS.green} />
-        <KPICard title={t('admin.passRate')} value={`${(kpis.passRate || 0).toFixed(1)}%`} icon={TrendingUp} colorClass={KPI_CARD_COLORS.purple} />
-        <KPICard title={t('admin.atRiskCount')} value={kpis.atRiskCount?.toLocaleString() || '0'} icon={AlertTriangle} colorClass={KPI_CARD_COLORS.orange} />
+      <div className="bento-grid-4">
+        {kpiCards.map((kpi) => (
+          <KPICard
+            key={kpi.key}
+            label={kpi.label}
+            value={kpi.value}
+            icon={<Icon name={kpi.icon} className="w-6 h-6" />}
+            variant={kpi.variant}
+            featured={false}
+          />
+        ))}
       </div>
 
-      {/* Key Insights — AI/UX derived actionable takeaways */}
-      <KeyInsights kpis={kpis} charts={charts} t={t} />
+      {/* Key Insights */}
+      <Card padding="lg">
+        <Flex align="center" gap={2} className="mb-4">
+          <Icon name="lightbulb" className="w-5 h-5 text-primary-500" />
+          <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100">{t('admin.insightsTitle')}</h3>
+        </Flex>
+        <div className="space-y-3">
+          {insights.length > 0 ? (
+            insights.map((insight) => (
+              <InsightCard key={insight.key} icon={insight.icon} variant={insight.variant} message={insight.message} />
+            ))
+          ) : (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <div className="w-12 h-12 rounded-full bg-primary-100 dark:bg-gray-800 flex items-center justify-center mb-3">
+                <Icon name="lightbulb" className="w-6 h-6 text-primary-400 dark:text-gray-500" />
+              </div>
+              <p className="text-sm text-primary-500 dark:text-gray-400">{t('admin.insightNoData')}</p>
+            </div>
+          )}
+        </div>
+      </Card>
 
       {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ChartWrapper title={t('admin.gradeDistribution')}>
-          {sortedGradeDist.length > 0
-            ? <Doughnut data={gradeDistributionData} options={gradeDistributionOptions} />
-            : <ChartEmpty message={t('admin.noDataAvailable')} />}
-        </ChartWrapper>
-        <ChartWrapper title={t('admin.attendanceDistribution')}>
-          {attendanceVsScore.length > 0
-            ? <Doughnut data={attendanceDistributionData} options={attendanceDistributionOptions} />
-            : <ChartEmpty message={t('admin.noDataAvailable')} />}
-        </ChartWrapper>
-        <ChartWrapper title={t('admin.partTimeJobImpact')}>
-          {partTimeJob.length > 0
-            ? <Bar data={partTimeJobData} options={partTimeJobOptions} />
-            : <ChartEmpty message={t('admin.noDataAvailable')} />}
-        </ChartWrapper>
-        <ChartWrapper title={t('admin.sleepImpact')}>
-          {sleepImpact.length > 0
-            ? <Bar data={sleepImpactData} options={sleepImpactOptions} />
-            : <ChartEmpty message={t('admin.noDataAvailable')} />}
-        </ChartWrapper>
-        <ChartWrapper title={t('admin.genderDistribution')} className="lg:col-span-2">
-          {genderDist.length > 0
-            ? <Bar data={genderData} options={genderOptions} />
-            : <ChartEmpty message={t('admin.noDataAvailable')} />}
-        </ChartWrapper>
-        <ChartWrapper title={t('admin.parentalEduDistribution')} className="lg:col-span-2">
-          {parentalEduDist.length > 0
-            ? <Bar data={parentalEduData} options={parentalEduOptions} />
-            : <ChartEmpty message={t('admin.noDataAvailable')} />}
-        </ChartWrapper>
+      <div className="bento-grid-2">
+        <Card padding="lg">
+          <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-4">{t('admin.gradeDistribution')}</h3>
+          <div className="chart-container" style={{ height: '300px', position: 'relative' }}>
+            {sortedGradeDist.length > 0
+              ? <Doughnut data={gradeDistributionData} options={gradeDistributionOptions} />
+              : <EmptyChart message={t('admin.noDataAvailable')} />}
+          </div>
+        </Card>
+
+        <Card padding="lg">
+          <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-4">{t('admin.attendanceDistribution')}</h3>
+          <div className="chart-container" style={{ height: '300px', position: 'relative' }}>
+            {attendanceVsScore.length > 0
+              ? <Doughnut data={attendanceDistributionData} options={attendanceDistributionOptions} />
+              : <EmptyChart message={t('admin.noDataAvailable')} />}
+          </div>
+        </Card>
+
+        <Card padding="lg">
+          <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-4">{t('admin.partTimeJobImpact')}</h3>
+          <div className="chart-container" style={{ height: '300px', position: 'relative' }}>
+            {partTimeJob.length > 0
+              ? <Bar data={partTimeJobData} options={partTimeJobOptions} />
+              : <EmptyChart message={t('admin.noDataAvailable')} />}
+          </div>
+        </Card>
+
+        <Card padding="lg">
+          <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-4">{t('admin.sleepImpact')}</h3>
+          <div className="chart-container" style={{ height: '300px', position: 'relative' }}>
+            {sleepImpact.length > 0
+              ? <Bar data={sleepImpactData} options={sleepImpactOptions} />
+              : <EmptyChart message={t('admin.noDataAvailable')} />}
+          </div>
+        </Card>
+
+        <Card padding="lg" className="lg:col-span-2">
+          <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-4">{t('admin.genderDistribution')}</h3>
+          <div className="chart-container" style={{ height: '300px', position: 'relative' }}>
+            {genderDist.length > 0
+              ? <Bar data={genderData} options={genderOptions} />
+              : <EmptyChart message={t('admin.noDataAvailable')} />}
+          </div>
+        </Card>
+
+        <Card padding="lg" className="lg:col-span-2">
+          <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-4">{t('admin.parentalEduDistribution')}</h3>
+          <div className="chart-container" style={{ height: '300px', position: 'relative' }}>
+            {parentalEduDist.length > 0
+              ? <Bar data={parentalEduData} options={parentalEduOptions} />
+              : <EmptyChart message={t('admin.noDataAvailable')} />}
+          </div>
+        </Card>
       </div>
     </div>
   );

@@ -1,17 +1,36 @@
-import { useState, useEffect, useCallback } from 'react';
+/**
+ * Students Page - Searchable, sortable, paginated table with new UI components
+ */
+
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { api, ApiError } from '../api';
-import { useFlash } from '../components/FlashProvider';
-import { ConfirmDialog } from '../components/ConfirmDialog';
-import { SkeletonTableRow } from '../components/Skeleton';
-import { renderIcon } from '../components/IconMap';
+import { api } from '../api';
+import { useLanguage } from '../hooks/useLanguage';
 import { formatLabel, formatColumnLabel } from '../utils/formatLabel';
+import {
+  Table,
+  createColumn,
+  Card,
+  Button,
+  Input,
+  Badge,
+  ConfirmDialog,
+  Link as UILink,
+  Icon,
+  getIcon,
+  SkeletonTableRow,
+  Flex,
+  Tooltip,
+} from '../components/ui';
+import { useFlash } from '../components/ui/Toast';
 
 export default function Students() {
+  const { t } = useLanguage();
   const { addFlash } = useFlash();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const atRisk = searchParams.get('at_risk') === '1';
+
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
   const [columns, setColumns] = useState([]);
@@ -22,6 +41,7 @@ export default function Students() {
   const [sort, setSort] = useState('id');
   const [dir, setDir] = useState('asc');
   const [search, setSearch] = useState('');
+
   const [confirmDialog, setConfirmDialog] = useState({ open: false, id: null, name: '' });
   const [aiEvalModal, setAiEvalModal] = useState({ open: false, student: null });
   const [aiEvalResult, setAiEvalResult] = useState(null);
@@ -40,17 +60,16 @@ export default function Students() {
       if (atRisk) params.set('at_risk', 'true');
       const data = await api.get(`/students?${params}`);
       setRows(data.rows);
+
       // Add "Name Student" column at the beginning
       const columnsWithName = data.columns.map(col => ({
         ...col,
-        // Format display labels: replace underscores with spaces using shared utility
         displayLabel: formatColumnLabel(col.displayLabel, col.name)
       }));
-      // Insert Name Student column if not exists
       if (!columnsWithName.some(c => c.name === 'name')) {
         columnsWithName.unshift({
           name: 'name',
-          displayLabel: 'Name Student',
+          displayLabel: t('students.nameStudent'),
           inferredType: 'text',
           chartRole: 'label',
           semantic: null,
@@ -64,14 +83,13 @@ export default function Students() {
     } finally {
       setLoading(false);
     }
-  }, [search, sort, dir, page, pageSize, atRisk, addFlash]);
+  }, [search, sort, dir, page, pageSize, atRisk, addFlash, t]);
 
   useEffect(() => {
     fetchStudents();
   }, [fetchStudents]);
 
   const handleSort = (col) => {
-    // Handle virtual "name" column - sort by student_id instead
     const sortCol = col === 'name' ? 'student_id' : col;
     if (sort === sortCol) {
       setDir(dir === 'asc' ? 'desc' : 'asc');
@@ -96,7 +114,7 @@ export default function Students() {
     const { id, name } = confirmDialog;
     try {
       await api.post(`/students/${id}/delete`);
-      addFlash(`Student "${name}" deleted successfully.`, 'success');
+      addFlash(t('students.deleted', { name }), 'success');
       fetchStudents();
     } catch (err) {
       addFlash(err.message, 'error');
@@ -110,7 +128,6 @@ export default function Students() {
     setAiEvalLoading(true);
 
     try {
-      // Map student data to the feedback API fields
       const input = {
         gender: student.gender || 'Female',
         age: student.age || 20,
@@ -139,7 +156,7 @@ export default function Students() {
       await api.post(`/students/${aiEvalModal.student.id}`, {
         notes: aiEvalResult.feedback.text,
       });
-      addFlash('AI evaluation applied to notes!', 'success');
+      addFlash(t('students.aiApplied'), 'success');
       setAiEvalModal({ open: false, student: null });
       setAiEvalResult(null);
       fetchStudents();
@@ -148,30 +165,111 @@ export default function Students() {
     }
   };
 
-  const formatCell = (row, col) => {
-    // Handle Name Student column - display "Student #1001" format
-    if (col.name === 'name') {
-      return <span className="font-medium text-primary-950 dark:text-gray-100">Student #{row.student_id || row.id}</span>;
-    }
+  // Transform columns to Table component format
+  const tableColumns = useMemo(() => {
+    return columns.map((col) => {
+      if (col.name === 'name') {
+        return createColumn({
+          key: 'name',
+          header: col.displayLabel,
+          sortable: true,
+          render: (row) => (
+            <span className="font-medium text-primary-950 dark:text-gray-100">
+              {t('students.studentHash', { id: row.student_id || row.id })}
+            </span>
+          ),
+        });
+      }
 
-    const val = row[col.name];
-    if (val === null || val === undefined) {
-      return <span className="text-gray-300 italic">—</span>;
-    }
-    if (col.inferredType === 'boolean') {
-      return val ? (
-        <span className="badge badge-success">Yes</span>
-      ) : (
-        <span className="badge badge-gray">No</span>
-      );
-    }
-    if (col.inferredType === 'date' || col.inferredType === 'datetime') {
-      return new Date(val).toLocaleDateString();
-    }
-    return String(val);
-  };
+      // Special rendering for boolean columns
+      if (col.inferredType === 'boolean') {
+        return createColumn({
+          key: col.name,
+          header: col.displayLabel,
+          sortable: true,
+          render: (row) => {
+            const val = row[col.name];
+            if (val === null || val === undefined) return <span className="text-gray-300 italic">—</span>;
+            return (
+              <Badge variant={val ? 'success' : 'default'} size="sm">
+                {val ? t('common.yes') : t('common.no')}
+              </Badge>
+            );
+          },
+        });
+      }
 
-  const generatePageButtons = () => {
+      // Date columns
+      if (col.inferredType === 'date' || col.inferredType === 'datetime') {
+        return createColumn({
+          key: col.name,
+          header: col.displayLabel,
+          sortable: true,
+          render: (row) => {
+            const val = row[col.name];
+            if (val === null || val === undefined) return <span className="text-gray-300 italic">—</span>;
+            return new Date(val).toLocaleDateString();
+          },
+        });
+      }
+
+      // Default text/number columns
+      return createColumn({
+        key: col.name,
+        header: col.displayLabel,
+        sortable: true,
+        render: (row) => {
+          const val = row[col.name];
+          if (val === null || val === undefined) return <span className="text-gray-300 italic">—</span>;
+          return String(val);
+        },
+      });
+    });
+  }, [columns, t]);
+
+  // Actions column
+  const actionsColumn = createColumn({
+    key: 'actions',
+    header: t('students.actions'),
+    sortable: false,
+    align: 'right',
+    width: 180,
+    render: (row) => (
+      <Flex gap={2} justify="end" className="whitespace-nowrap">
+        <Tooltip content={t('students.aiEvaluate')}>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Icon name="brain" className="w-4 h-4" />}
+            onClick={() => handleAiEval(row)}
+            disabled={aiEvalLoading}
+            aria-label={t('students.aiEvaluate')}
+          />
+        </Tooltip>
+        <UILink
+          to={`/students/${row.id}/edit`}
+          variant="ghost"
+          size="sm"
+          leftIcon={<Icon name="edit" className="w-4 h-4" />}
+        >
+          {t('common.edit')}
+        </UILink>
+        <Tooltip content={t('common.delete')}>
+          <Button
+            variant="danger"
+            size="sm"
+            icon={<Icon name="trash2" className="w-4 h-4" />}
+            onClick={() => handleDelete(row.id, row.student_id || row.id)}
+            aria-label={t('common.delete')}
+          />
+        </Tooltip>
+      </Flex>
+    ),
+  });
+
+  const allColumns = useMemo(() => [...tableColumns, actionsColumn], [tableColumns]);
+
+  const generatePageButtons = useCallback(() => {
     if (totalPages <= 7) {
       return Array.from({ length: totalPages }, (_, i) => i + 1);
     }
@@ -184,221 +282,171 @@ export default function Students() {
       }
     }
     return pages;
-  };
+  }, [totalPages, page]);
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h2 className="text-xl font-bold text-primary-950 dark:text-gray-100">Students</h2>
-        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-          <form onSubmit={handleSearch} className="flex-1 flex gap-2">
-            <input
-              type="search"
+      <Flex direction="col" gap={4} className="sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-xl font-bold text-primary-950 dark:text-gray-100">{t('students.title')}</h2>
+        <Flex gap={3} className="w-full sm:w-auto flex-wrap">
+          <form onSubmit={handleSearch} className="flex-1 flex gap-2 min-w-[280px]">
+            <Input
               name="q"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search students..."
-              className="flex-1 input"
-              aria-label="Search students"
+              placeholder={t('students.searchPlaceholder')}
+              leftIcon="search"
+              aria-label={t('students.searchLabel')}
+              className="flex-1"
             />
-            <button type="submit" className="btn-primary">Search</button>
+            <Button type="submit" variant="primary" size="sm">
+              {t('common.search')}
+            </Button>
             {search && (
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="sm"
                 onClick={() => { setSearch(''); setPage(1); }}
-                className="btn-secondary"
               >
-                Clear
-              </button>
+                {t('common.clear')}
+              </Button>
             )}
           </form>
-          <Link to="/students/new" className="btn-success">
-            + Add Student
-          </Link>
-        </div>
-      </div>
+          <UILink to="/students/new" variant="success" leftIcon={<Icon name="plus" className="w-4 h-4" />}>
+            {t('students.addStudent')}
+          </UILink>
+        </Flex>
+      </Flex>
 
       {/* At-Risk Filter Banner */}
       {atRisk && (
-        <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border border-danger-200 dark:border-danger-900 bg-danger-50/70 dark:bg-danger-950/20">
-          <div className="flex items-center gap-2 text-sm font-medium text-danger-700 dark:text-danger-300">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-            </svg>
-            Showing students at risk — low attendance, study hours, or GPA
-          </div>
-          <Link
-            to="/students"
-            className="text-sm font-semibold text-danger-600 dark:text-danger-400 hover:underline flex-shrink-0"
-          >
-            Clear filter
-          </Link>
-        </div>
+        <Card variant="default" className="border-l-4 border-danger-500 bg-danger-50/30 dark:bg-danger-950/20">
+          <Flex gap={4} wrap className="items-center justify-between">
+            <Flex gap={2} className="flex-1 min-w-[200px]">
+              <div className="flex-shrink-0 w-8 h-8 rounded-xl bg-danger-100 dark:bg-danger-900/40 text-danger-600 dark:text-danger-400 flex items-center justify-center">
+                <Icon name="alertTriangle" className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-danger-700 dark:text-danger-300">
+                  {t('students.atRiskBanner', { count: total })}
+                </p>
+              </div>
+            </Flex>
+            <UILink to="/students" variant="ghost" size="sm" className="text-danger-600 dark:text-danger-400 hover:text-danger-700 dark:hover:text-danger-300">
+              {t('students.clearFilter')}
+            </UILink>
+          </Flex>
+        </Card>
       )}
 
       {/* Table */}
-      <div className="card overflow-hidden">
-        {loading ? (
-          <div className="p-6">
-            <div className="h-8 bg-primary-100 dark:bg-gray-700 rounded-xl w-32 animate-shimmer mb-4" aria-hidden="true" />
-            <table className="w-full">
-              <tbody className="space-y-3">
-                {[...Array(8)].map((_, i) => (
-                  <SkeletonTableRow key={i} columns={columns.length || 5} />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-primary-50/60 dark:bg-gray-900 border-b border-primary-100 dark:border-gray-800">
-                  <tr>
-                    {columns.map((col) => (
-                      <th
-                        key={col.name}
-                        className="table-header-th"
-                        onClick={() => handleSort(col.name)}
-                      >
-                        <span className="flex items-center gap-1">
-                          {col.displayLabel}
-                          {sort === col.name && (
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={dir === 'asc' ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'} />
-                            </svg>
-                          )}
-                        </span>
-                      </th>
-                    ))}
-                    <th className="table-header-th text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-primary-100 dark:divide-gray-800">
-                  {rows.length === 0 ? (
-                    <tr>
-                      <td colSpan={columns.length + 1} className="px-4 py-16 text-center">
-                        <div className="text-primary-300 dark:text-gray-600 mb-2">
-                          <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                          </svg>
-                        </div>
-                        <p className="text-primary-400 dark:text-gray-500 font-medium">
-                          No students found{search ? ' matching your search' : ''}
-                        </p>
-                        <p className="text-sm text-primary-400 dark:text-gray-500 mt-1">
-                          {search ? 'Try different search terms' : 'Add your first student to get started'}
-                        </p>
-                      </td>
-                    </tr>
+      <Card padding="none" className="overflow-hidden">
+        <Table
+          columns={allColumns}
+          data={rows}
+          loading={loading}
+          emptyMessage={search ? t('students.noResults') : t('students.noStudents')}
+          emptyAction={
+            !search && (
+              <UILink to="/students/new" variant="primary" size="sm">
+                {t('students.addFirst')}
+              </UILink>
+            )
+          }
+          rowKey="id"
+          sortColumn={sort === 'student_id' ? 'name' : sort}
+          sortDirection={dir}
+          onSort={handleSort}
+          pagination={{
+            page,
+            pageSize,
+            total,
+            totalPages,
+            onPageChange: setPage,
+            showPageSize: false,
+          }}
+          skeletonRows={8}
+        />
+
+        {totalPages > 1 && (
+          <div className="px-4 py-3 border-t border-primary-100 dark:border-gray-800">
+            <Flex direction="col" gap={3} className="sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-sm text-primary-500 dark:text-gray-400">
+                {t('students.showingPage', { page, totalPages, total })}
+              </span>
+              <nav className="flex items-center gap-2" aria-label={t('students.paginationLabel')}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={page <= 1}
+                  onClick={() => setPage(page - 1)}
+                  leftIcon={<Icon name="chevronLeft" className="w-4 h-4" />}
+                >
+                  {t('common.previous')}
+                </Button>
+
+                {generatePageButtons().map((p) =>
+                  p === '...' ? (
+                    <span key="ellipsis" className="px-2 text-primary-300 dark:text-gray-600">…</span>
                   ) : (
-                    rows.map((row) => (
-                      <tr key={row.id} className="hover:bg-primary-50/50 dark:hover:bg-gray-800/50 transition-colors">
-                        {columns.map((col) => (
-                          <td key={col.name} className="px-4 py-3 text-sm text-primary-950 dark:text-gray-200">
-                            {formatCell(row, col)}
-                          </td>
-                        ))}
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => handleAiEval(row)}
-                              className="btn-ghost text-primary-600 hover:text-primary-700 hover:bg-primary-50 dark:hover:bg-primary-900/30"
-                              title="AI Evaluate"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548-.548A3.374 3.374 0 0014 14.469V17a1 1 0 01-.553.894l-.491.246a1.5 1.5 0 00-.553 1.679l.216.871a2 2 0 01-1.935 2.41H13.5" />
-                              </svg>
-                            </button>
-                            <Link
-                              to={`/students/${row.id}/edit`}
-                              className="btn-ghost"
-                            >
-                              Edit
-                            </Link>
-                            <button
-                              onClick={() => handleDelete(row.id, row.student_id || row.id)}
-                              className="btn-danger"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )))}
-                </tbody>
-              </table>
-            </div>
+                    <Button
+                      key={p}
+                      variant={p === page ? 'primary' : 'ghost'}
+                      size="sm"
+                      onClick={() => setPage(p)}
+                      className="w-10 h-10"
+                    >
+                      {p}
+                    </Button>
+                  )
+                )}
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="p-4 border-t border-primary-100 dark:border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="text-sm text-primary-500 dark:text-gray-400">
-                  Showing page {page} of {totalPages} ({total} total)
-                </div>
-                <nav className="flex items-center gap-2" aria-label="Pagination">
-                  <button
-                    onClick={() => setPage(page - 1)}
-                    disabled={page <= 1}
-                    className="btn-secondary disabled:opacity-50"
-                  >
-                    Previous
-                  </button>
-
-                  {generatePageButtons().map((p) => (
-                    p === '...' ? (
-                      <span key="ellipsis" className="px-2 text-primary-300 dark:text-gray-600">…</span>
-                    ) : (
-                      <button
-                        key={p}
-                        onClick={() => setPage(p)}
-                        className={`px-3 py-1.5 text-sm font-medium rounded-xl transition-colors ${
-                          p === page
-                            ? 'bg-primary-600 text-white shadow-clay-sm'
-                            : 'text-primary-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-primary-200 dark:border-gray-700 hover:bg-primary-50 dark:hover:bg-gray-700'
-                        }`}
-                      >
-                        {p}
-                      </button>
-                    )
-                  ))}
-
-                  <button
-                    onClick={() => setPage(page + 1)}
-                    disabled={page >= totalPages}
-                    className="btn-secondary disabled:opacity-50"
-                  >
-                    Next
-                  </button>
-                </nav>
-              </div>
-            )}
-
-            {totalPages <= 1 && (
-              <div className="p-4 border-t border-primary-100 dark:border-gray-800 text-sm text-primary-500 dark:text-gray-400">
-                {total} student{total !== 1 ? 's' : ''} total
-              </div>
-            )}
-          </>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage(page + 1)}
+                  rightIcon={<Icon name="chevronRight" className="w-4 h-4" />}
+                >
+                  {t('common.next')}
+                </Button>
+              </nav>
+            </Flex>
+          </div>
         )}
-      </div>
+
+        {totalPages <= 1 && (
+          <div className="px-4 py-3 border-t border-primary-100 dark:border-gray-800 text-sm text-primary-500 dark:text-gray-400">
+            {t('students.totalCount', { total })}
+          </div>
+        )}
+      </Card>
 
       {/* AI Eval Modal */}
       {aiEvalModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setAiEvalModal({ open: false, student: null })}>
-          <div className="card max-w-lg w-full max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => setAiEvalModal({ open: false, student: null })}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ai-eval-title"
+        >
+          <div
+            className="card-clay max-w-lg w-full max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between p-4 border-b border-primary-100 dark:border-gray-700">
-              <h3 className="text-lg font-bold text-primary-950 dark:text-gray-100">
-                AI Evaluation — Student #{aiEvalModal.student?.id}
+              <h3 id="ai-eval-title" className="text-lg font-bold text-primary-950 dark:text-gray-100">
+                {t('students.aiEvalTitle', { id: aiEvalModal.student?.id })}
               </h3>
               <button
                 onClick={() => setAiEvalModal({ open: false, student: null })}
                 className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg"
+                aria-label={t('common.close')}
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <Icon name="x" className="w-5 h-5" />
               </button>
             </div>
             <div className="p-4 space-y-4">
@@ -412,50 +460,65 @@ export default function Students() {
               ) : aiEvalResult ? (
                 <>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="p-4 bg-primary-50/60 dark:bg-gray-800 rounded-2xl text-center">
-                      <p className="text-xs font-semibold text-primary-400 dark:text-gray-400 uppercase tracking-wider">Predicted Score</p>
+                    <div className="p-4 bg-primary-50/60 dark:bg-gray-800 rounded-2xl text-center card-clay">
+                      <p className="text-xs font-semibold text-primary-400 dark:text-gray-400 uppercase tracking-wider">
+                        {t('students.predictedScore')}
+                      </p>
                       <p className="text-3xl font-bold text-primary-950 dark:text-gray-100 mt-1">
                         {aiEvalResult.final_score?.toFixed(1)}
                       </p>
                     </div>
-                    <div className="p-4 bg-primary-50/60 dark:bg-gray-800 rounded-2xl text-center">
-                      <p className="text-xs font-semibold text-primary-400 dark:text-gray-400 uppercase tracking-wider">Predicted Grade</p>
-                      <span className={`inline-block mt-1 px-4 py-1 rounded-full text-xl font-bold ${
-                        {A:'bg-green-500 text-white',B:'bg-blue-500 text-white',C:'bg-yellow-500 text-white',D:'bg-orange-500 text-white',F:'bg-red-500 text-white'}[aiEvalResult.grade] || 'bg-gray-400 text-white'
-                      }`}>
+                    <div className="p-4 bg-primary-50/60 dark:bg-gray-800 rounded-2xl text-center card-clay">
+                      <p className="text-xs font-semibold text-primary-400 dark:text-gray-400 uppercase tracking-wider">
+                        {t('students.predictedGrade')}
+                      </p>
+                      <Badge
+                        size="lg"
+                        variant={{
+                          A: 'success',
+                          B: 'primary',
+                          C: 'warning',
+                          D: 'danger',
+                          F: 'destructive',
+                        }[aiEvalResult.grade] || 'default'}
+                        className="text-xl font-bold px-6 py-2"
+                      >
                         {aiEvalResult.grade}
-                      </span>
+                      </Badge>
                     </div>
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-primary-700 dark:text-gray-200 mb-2">Recommendations</p>
+                    <p className="text-sm font-bold text-primary-700 dark:text-gray-200 mb-2">
+                      {t('students.recommendations')}
+                    </p>
                     <div className="space-y-2 max-h-64 overflow-y-auto">
                       {(aiEvalResult.feedback?.recommendations || []).map((rec, i) => (
-                        <div key={i} className={`flex gap-2 p-2.5 border-l-3 rounded-r text-sm ${{
-                          success: 'border-green-500 bg-green-50 dark:bg-green-900/30',
-                          warning: 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/30',
-                          danger: 'border-red-500 bg-red-50 dark:bg-red-900/30',
-                          info: 'border-blue-500 bg-blue-50 dark:bg-blue-900/30',
-                        }[rec.severity] || 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'}`}>
-                          <span className="flex-shrink-0">{renderIcon(rec.icon, { className: 'w-5 h-5' })}</span>
+                        <div
+                          key={i}
+                          className={`flex gap-2 p-2.5 border-l-3 rounded-r text-sm ${
+                            {
+                              success: 'border-success-500 bg-success-50 dark:bg-success-900/30',
+                              warning: 'border-warning-500 bg-warning-50 dark:bg-warning-900/30',
+                              danger: 'border-danger-500 bg-danger-50 dark:bg-danger-900/30',
+                              info: 'border-primary-500 bg-primary-50 dark:bg-primary-900/30',
+                            }[rec.severity] || 'border-primary-500 bg-primary-50 dark:bg-primary-900/30'
+                          }`}
+                        >
+                          <span className="flex-shrink-0">
+                            <Icon name={rec.icon} className="w-5 h-5" />
+                          </span>
                           <span className="text-primary-700 dark:text-gray-300">{rec.text}</span>
                         </div>
                       ))}
                     </div>
                   </div>
                   <div className="flex gap-3 pt-3 border-t border-primary-100 dark:border-gray-700">
-                    <button
-                      onClick={handleApplyToNotes}
-                      className="btn-primary flex-1"
-                    >
-                      Apply to Notes
-                    </button>
-                    <button
-                      onClick={() => setAiEvalModal({ open: false, student: null })}
-                      className="btn-secondary"
-                    >
-                      Close
-                    </button>
+                    <Button variant="primary" fullWidth onClick={handleApplyToNotes}>
+                      {t('students.applyToNotes')}
+                    </Button>
+                    <Button variant="secondary" onClick={() => setAiEvalModal({ open: false, student: null })}>
+                      {t('common.close')}
+                    </Button>
                   </div>
                 </>
               ) : null}
@@ -468,9 +531,9 @@ export default function Students() {
         isOpen={confirmDialog.open}
         onClose={() => setConfirmDialog({ open: false, id: null, name: '' })}
         onConfirm={confirmDelete}
-        title="Delete Student"
-        message={`Are you sure you want to delete student "${confirmDialog.name}"? This cannot be undone.`}
-        confirmText="Delete"
+        title={t('students.deleteConfirmTitle')}
+        message={t('students.deleteConfirmMessage', { name: confirmDialog.name })}
+        confirmText={t('common.delete')}
         variant="danger"
       />
     </div>
