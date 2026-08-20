@@ -3,7 +3,8 @@
  */
 
 import { forwardRef, useMemo, useState } from 'react';
-import { Button, Icon, getIcon } from './Button';
+import { Button } from './Button';
+import { Icon, getIcon } from './Icons';
 import { Badge, GradeBadge } from './Badge';
 
 const Table = forwardRef(
@@ -32,6 +33,8 @@ const Table = forwardRef(
       striped = true,
       hoverable = true,
       bordered = true,
+      children,
+      responsive = true,
     },
     ref
   ) => {
@@ -118,6 +121,16 @@ const Table = forwardRef(
 
       return <span>{value}</span>;
     };
+
+    if (children) {
+      return (
+        <div className={`${responsive ? 'overflow-x-auto' : ''} ${className}`}>
+          <table ref={ref} className="table w-full" role="grid">
+            {children}
+          </table>
+        </div>
+      );
+    }
 
     if (loading) {
       return (
@@ -302,6 +315,26 @@ const Table = forwardRef(
 );
 
 Table.displayName = 'Table';
+
+export const TableHeader = ({ className = '', ...props }) => (
+  <thead className={`table-header ${className}`} {...props} />
+);
+
+export const TableBody = ({ className = '', ...props }) => (
+  <tbody className={`table-body ${className}`} {...props} />
+);
+
+export const TableRow = ({ className = '', ...props }) => (
+  <tr className={`table-row ${className}`} {...props} />
+);
+
+export const TableHead = ({ align, className = '', ...props }) => (
+  <th className={`table-header-th ${align ? `text-${align}` : ''} ${className}`} {...props} />
+);
+
+export const TableCell = ({ align, className = '', ...props }) => (
+  <td className={`table-cell ${align ? `text-${align}` : ''} ${className}`} {...props} />
+);
 
 // Column configuration helper
 export const createColumn = (config) => ({

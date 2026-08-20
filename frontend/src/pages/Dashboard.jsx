@@ -20,7 +20,6 @@ import {
   SkeletonCard,
   SkeletonChart,
   Button,
-  Link as UILink,
 } from '../components/ui';
 
 ChartJS.register(
@@ -304,14 +303,13 @@ export default function Dashboard() {
                 )}
               </div>
             </div>
-            <UILink
+            <Link
               to="/students?at_risk=1"
-              variant="danger"
-              size="sm"
+              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-danger-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-danger-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-500 focus-visible:ring-offset-2"
               aria-label={t('dashboard.viewAtRiskStudents')}
             >
               {t('dashboard.viewStudents')}
-            </UILink>
+            </Link>
           </div>
         </Card>
       )}

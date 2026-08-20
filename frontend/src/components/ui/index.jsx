@@ -3,6 +3,8 @@
  * Reusable, accessible, and consistent UI components
  */
 
+import { useState, useRef, useEffect } from 'react';
+
 // Icons
 export { icons, Icon, getIcon } from './Icons';
 
@@ -22,7 +24,7 @@ export { Badge, GradeBadge, StatusBadge } from './Badge';
 export { Modal, ConfirmDialog } from './Modal';
 
 // Table
-export { Table, createColumn } from './Table';
+export { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, createColumn } from './Table';
 
 // Dropdown
 export { Dropdown, DropdownTrigger } from './Dropdown';
@@ -292,7 +294,7 @@ export const Tooltip = ({ children, content, position = 'top', className = '', .
       {isVisible && (
         <div
           className={`
-            tooltip absolute z-70 px-3 py-1.5 text-xs font-medium text-white
+            tooltip absolute z-[70] px-3 py-1.5 text-xs font-medium text-white
             bg-primary-950 dark:bg-gray-900 rounded-lg shadow-clay-md
             ${positions[position]}
             animate-fade-in

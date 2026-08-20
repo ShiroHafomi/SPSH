@@ -4,7 +4,8 @@
 
 import { useEffect, useRef, useCallback, Fragment } from 'react';
 import { createPortal } from 'react-dom';
-import { Button, Icon, getIcon } from './Button';
+import { Button } from './Button';
+import { Icon, getIcon } from './Icons';
 
 const Modal = ({
   isOpen,

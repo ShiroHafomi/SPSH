@@ -15,7 +15,6 @@ import {
   Input,
   Badge,
   ConfirmDialog,
-  Link as UILink,
   Icon,
   getIcon,
   SkeletonTableRow,
@@ -246,14 +245,13 @@ export default function Students() {
             aria-label={t('students.aiEvaluate')}
           />
         </Tooltip>
-        <UILink
+        <Link
           to={`/students/${row.id}/edit`}
-          variant="ghost"
-          size="sm"
-          leftIcon={<Icon name="edit" className="w-4 h-4" />}
+          className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-primary-700 transition-colors hover:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-primary-300 dark:hover:bg-gray-800"
         >
+          <Icon name="edit" className="w-4 h-4" />
           {t('common.edit')}
-        </UILink>
+        </Link>
         <Tooltip content={t('common.delete')}>
           <Button
             variant="danger"
@@ -314,9 +312,10 @@ export default function Students() {
               </Button>
             )}
           </form>
-          <UILink to="/students/new" variant="success" leftIcon={<Icon name="plus" className="w-4 h-4" />}>
+          <Link to="/students/new" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-success-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-success-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success-500 focus-visible:ring-offset-2">
+            <Icon name="plus" className="w-4 h-4" />
             {t('students.addStudent')}
-          </UILink>
+          </Link>
         </Flex>
       </Flex>
 
@@ -334,9 +333,9 @@ export default function Students() {
                 </p>
               </div>
             </Flex>
-            <UILink to="/students" variant="ghost" size="sm" className="text-danger-600 dark:text-danger-400 hover:text-danger-700 dark:hover:text-danger-300">
+            <Link to="/students" className="inline-flex min-h-11 items-center rounded-xl px-3 py-2 text-sm font-semibold text-danger-600 transition-colors hover:bg-danger-100 hover:text-danger-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-500 dark:text-danger-400 dark:hover:bg-danger-950/40 dark:hover:text-danger-300">
               {t('students.clearFilter')}
-            </UILink>
+            </Link>
           </Flex>
         </Card>
       )}
@@ -350,9 +349,9 @@ export default function Students() {
           emptyMessage={search ? t('students.noResults') : t('students.noStudents')}
           emptyAction={
             !search && (
-              <UILink to="/students/new" variant="primary" size="sm">
+              <Link to="/students/new" className="inline-flex min-h-11 items-center rounded-xl bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2">
                 {t('students.addFirst')}
-              </UILink>
+              </Link>
             )
           }
           rowKey="id"

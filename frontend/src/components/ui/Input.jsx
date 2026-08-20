@@ -328,19 +328,18 @@ Checkbox.displayName = 'Checkbox';
 export { Checkbox };
 
 // Radio Group component
-const RadioGroup = (
-  {
-    label,
-    options = [],
-    error,
-    hint,
-    className = '',
-    name,
-    required = false,
-    disabled = false,
-    value,
-    onChange,
-  } => {
+const RadioGroup = ({
+  label,
+  options = [],
+  error,
+  hint,
+  className = '',
+  name,
+  required = false,
+  disabled = false,
+  value,
+  onChange,
+}) => {
     const errorId = `${name}-error`;
     const hintId = `${name}-hint`;
     const describedBy = [error && errorId, hint && hintId].filter(Boolean).join(' ') || undefined;
@@ -394,8 +393,7 @@ const RadioGroup = (
         )}
       </div>
     );
-  }
-);
+};
 
 RadioGroup.displayName = 'RadioGroup';
 

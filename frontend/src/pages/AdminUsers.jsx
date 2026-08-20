@@ -3,6 +3,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../hooks/useAuth';
 import { useLanguage } from '../hooks/useLanguage';
@@ -10,7 +11,6 @@ import {
   Card,
   Button,
   Badge,
-  Link as UILink,
   Icon,
   SkeletonCard,
   ConfirmDialog,
@@ -117,7 +117,7 @@ export default function AdminUsers() {
                     <td className="px-4 py-3 text-sm text-primary-700 dark:text-gray-300">{u.email}</td>
                     <td className="px-4 py-3 text-sm">
                       <Badge variant={u.role === 'admin' ? 'warning' : 'default'} size="sm">
-                        {t(`nav.role.${u.role}`}
+                        {t(`nav.role.${u.role}`)}
                       </Badge>
                     </td>
                     <td className="px-4 py-3 text-sm text-primary-400 dark:text-gray-500">
@@ -151,9 +151,9 @@ export default function AdminUsers() {
       </Card>
 
       <div className="mt-4">
-        <UILink to="/dashboard" variant="ghost" size="sm">
+        <Link to="/dashboard" className="inline-flex min-h-11 items-center rounded-xl px-3 py-2 text-sm font-semibold text-primary-700 transition-colors hover:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-primary-300 dark:hover:bg-gray-800">
           {t('common.backToDashboard')}
-        </UILink>
+        </Link>
       </div>
 
       <ConfirmDialog

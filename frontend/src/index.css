@@ -327,7 +327,7 @@
 
   /* ── Tooltip ────────────────────────────────────────────────── */
   .tooltip {
-    @apply absolute z-70 px-3 py-1.5 text-xs font-medium text-white bg-primary-950 dark:bg-gray-900 rounded-lg shadow-clay-md animate-fade-in;
+    @apply absolute z-[70] px-3 py-1.5 text-xs font-medium text-white bg-primary-950 dark:bg-gray-900 rounded-lg shadow-clay-md animate-fade-in;
   }
 
   /* ── Avatar ─────────────────────────────────────────────────── */

@@ -4,17 +4,14 @@
 
 import { useAuth, homeForRole } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
-import { useLanguage, LANG_FLAGS } from '../hooks/useLanguage';
+import { useLanguage } from '../hooks/useLanguage';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Button,
-  Link as UILink,
   Avatar,
   Icon,
-  getIcon,
   Badge,
   Dropdown,
-  DropdownTrigger,
 } from '../components/ui';
 
 export function Navbar() {
@@ -105,18 +102,18 @@ export function Navbar() {
   return (
     <nav className="fixed top-4 left-4 right-4 z-50 max-w-7xl mx-auto bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border border-primary-100 dark:border-gray-800 rounded-3xl shadow-clay-sm">
       <div className="flex items-center justify-between px-5 py-3">
-        <UILink to="/dashboard" variant="ghost" className="flex items-center gap-2.5 font-bold text-primary-950 dark:text-gray-100">
+        <Link to="/dashboard" variant="ghost" className="flex items-center gap-2.5 font-bold text-primary-950 dark:text-gray-100">
           <div className="w-8 h-8 rounded-xl bg-primary-600 flex items-center justify-center">
             <Icon name="graduationCap" className="w-4 h-4 text-white" />
           </div>
           <span className="hidden sm:inline text-base">{t('nav.studentPerformance')}</span>
-        </UILink>
+        </Link>
 
         <div className="flex items-center gap-3">
           {/* Navigation Links - Desktop */}
           <div className="hidden md:flex items-center gap-1">
             {navLinks.map(({ path, label }) => (
-              <UILink
+              <Link
                 key={path}
                 to={path}
                 variant={location.pathname === path || location.pathname.startsWith(path + '/') ? 'primary' : 'ghost'}
@@ -124,7 +121,7 @@ export function Navbar() {
                 className="px-3.5 py-2 text-sm font-semibold rounded-xl transition-all duration-200"
               >
                 {label}
-              </UILink>
+              </Link>
             ))}
           </div>
 

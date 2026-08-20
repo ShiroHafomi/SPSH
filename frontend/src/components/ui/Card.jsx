@@ -159,11 +159,9 @@ const KPICard = ({
 
   const Component = to ? 'a' : onClick ? 'button' : 'div';
 
-  const featured = featured
+  const variantClass = featured
     ? featuredVariants[variant] || featuredVariants.primary
     : defaultVariantStyles[variant] || defaultVariantStyles.default;
-
-  const featuredTextClass = featured ? 'text-white' : 'text-primary-950 dark:text-white';
 
   const iconColors = {
     primary: 'bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-400',
@@ -177,7 +175,7 @@ const KPICard = ({
     <Component
       className={`
         kpi-card group relative overflow-hidden rounded-2xl transition-all duration-300
-        ${featured}
+        ${variantClass}
         ${onClick || to ? 'cursor-pointer' : ''}
         ${className}
       `}

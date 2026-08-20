@@ -354,7 +354,7 @@ const vi = {
     parentalEducation: 'Học Vấn Phụ Huynh',
     internetAccess: 'Truy Cập Internet',
     extracurricular: 'Hoạt Động Ngoại Khóa',
-    partTimeJob: 'Vi��c Làm Thêm',
+    partTimeJob: 'Việc Làm Thêm',
     notes: 'Ghi Chú',
     male: 'Nam',
     female: 'Nữ',
