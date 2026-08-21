@@ -1,0 +1,14 @@
+
+> student-performance-study-habits@1.0.0 dev
+> node "node_modules/nodemon/bin/nodemon.js" src/server.js
+
+[33m[nodemon] 3.1.14[39m
+[33m[nodemon] to restart at any time, enter `rs`[39m
+[33m[nodemon] watching path(s): src\**\*[39m
+[33m[nodemon] watching extensions: js,mjs,cjs,json[39m
+[32m[nodemon] starting `node src/server.js src/server.js`[39m
+   Users table: ready
+   Auth sessions table: ready
+   Audit logs table: ready
+ Server running at http://localhost:3001
+   DB ready: yes

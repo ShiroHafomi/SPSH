@@ -4,6 +4,8 @@
  * Usage: <Icon name="home" className="w-5 h-5" />
  */
 
+import React from 'react';
+
 export const icons = {
   // Navigation & Layout
   home: (
@@ -392,6 +394,12 @@ export const icons = {
     </svg>
   ),
 
+  moon: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12.79A9 9 1 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </svg>
+  ),
+
   // Files & Documents
   file: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -492,22 +500,18 @@ export const icons = {
 
 // Icon component
 export function Icon({ name, className = '', style, ...props }) {
-  const IconComponent = icons[name];
-  if (!IconComponent) {
+  const IconElement = icons[name];
+  if (!IconElement) {
     console.warn(`Icon "${name}" not found`);
     return null;
   }
-  return (
-    <svg
-      className={`shrink-0 ${className}`}
-      style={style}
-      aria-hidden="true"
-      focusable="false"
-      {...props}
-    >
-      {IconComponent.props.children}
-    </svg>
-  );
+  return React.cloneElement(IconElement, {
+    className: `shrink-0 ${className}`,
+    style,
+    'aria-hidden': 'true',
+    focusable: 'false',
+    ...props,
+  });
 }
 
 // Helper to get icon by name (for dynamic rendering)

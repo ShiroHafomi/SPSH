@@ -929,7 +929,7 @@ async function getStudentPercentiles(studentId) {
  * Check personal risk alerts for a student.
  * Returns array of alert objects for the student portal banner.
  */
-async function checkPersonalRiskAlerts(student) {
+function checkPersonalRiskAlerts(student) {
   const alerts = [];
   const thresholds = {
     attendance: 75,
@@ -1016,8 +1016,7 @@ async function assessStudentRisk(studentId) {
   const student = await findById(studentId);
   if (!student) return null;
 
-  const { checkPersonalRiskAlerts } = require('./studentService');
-  const alerts = await checkPersonalRiskAlerts(student);
+  const alerts = checkPersonalRiskAlerts(student);
 
   // Determine overall risk level
   let riskLevel = 'low';

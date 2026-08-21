@@ -74,9 +74,52 @@ function normalizeBulkFilters(value) {
   return normalized;
 }
 
+/**
+ * Validate student data against column definitions from schema_map.
+ * @param {Object} data - The data object to validate
+ * @param {Array} columns - Array of column definitions with name, type, maxLen, etc.
+ * @returns {Array<string>} Array of error messages (empty if valid)
+ */
+function validateStudentData(data, columns) {
+  const errors = [];
+  for (const col of columns) {
+    const val = data[col.name];
+    if (!col.nullable && (val === undefined || val === null || val === '')) {
+      errors.push(`"${col.displayLabel}" is required.`);
+      continue;
+    }
+    if (val === undefined || val === null || val === '') continue;
+
+    if (col.inferredType === 'int' || col.inferredType === 'bigint') {
+      if (isNaN(parseInt(val, 10)) || !Number.isFinite(Number(val))) {
+        errors.push(`"${col.displayLabel}" must be a number.`);
+      }
+    }
+    if (col.inferredType === 'decimal') {
+      if (isNaN(parseFloat(val)) || !Number.isFinite(Number(val))) {
+        errors.push(`"${col.displayLabel}" must be a number.`);
+      }
+    }
+    if (col.inferredType === 'text' || col.inferredType === 'label') {
+      const maxLen = Math.max((col.stats?.maxLength || 0) * 3, 255);
+      if (String(val).length > maxLen) {
+        errors.push(`"${col.displayLabel}" is too long (max ${maxLen} characters).`);
+      }
+    }
+    if (col.inferredType === 'date') {
+      const d = new Date(val);
+      if (isNaN(d.getTime())) {
+        errors.push(`"${col.displayLabel}" must be a valid date.`);
+      }
+    }
+  }
+  return errors;
+}
+
 module.exports = {
   boundedString,
   normalizeBulkFilters,
   normalizePositiveIds,
   parsePositiveSafeInteger,
+  validateStudentData,
 };

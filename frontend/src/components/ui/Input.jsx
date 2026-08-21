@@ -3,7 +3,7 @@
  */
 
 import { forwardRef, useId } from 'react';
-import { getIcon } from './Icons';
+import { Icon } from './Icons';
 
 const Input = forwardRef(
   (
@@ -34,8 +34,7 @@ const Input = forwardRef(
     const iconNode = (icon) => {
       if (!icon) return null;
       if (typeof icon === 'string') {
-        const IconSvg = getIcon(icon);
-        return IconSvg ? <IconSvg className="w-5 h-5" aria-hidden="true" /> : null;
+        return <Icon name={icon} className="w-5 h-5" />;
       }
       return icon;
     };

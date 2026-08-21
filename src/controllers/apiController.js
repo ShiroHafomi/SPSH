@@ -9,7 +9,7 @@ const { getDisplayColumns, getSchemaMap, loadSchemaMap } = require('../utils/sch
 const { buildColumnSets } = require('../utils/columns');
 const { buildChartConfig } = require('../utils/chartConfig');
 const { generateFeedback } = require('../utils/feedbackTemplates');
-const { parsePositiveSafeInteger } = require('../utils/inputValidation');
+const { parsePositiveSafeInteger, validateStudentData } = require('../utils/inputValidation');
 const { validatePredictionProfile } = require('../utils/mlValidation');
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
@@ -642,48 +642,6 @@ async function apiAdminSummarizeHabits(req, res) {
     console.error('[apiAdminSummarizeHabits]', err);
     res.status(500).json({ error: 'Failed to summarize habits.' });
   }
-}
-
-// ─── Helper ──────────────────────────────────────────────────────────────────
-
-/**
- * Validate student form data.
- * Returns array of error messages (empty if valid).
- */
-function validateStudentData(data, columns) {
-  const errors = [];
-  for (const col of columns) {
-    const val = data[col.name];
-    if (!col.nullable && (val === undefined || val === null || val === '')) {
-      errors.push(`"${col.displayLabel}" is required.`);
-      continue;
-    }
-    if (val === undefined || val === null || val === '') continue;
-
-    if (col.inferredType === 'int' || col.inferredType === 'bigint') {
-      if (isNaN(parseInt(val, 10)) || !Number.isFinite(Number(val))) {
-        errors.push(`"${col.displayLabel}" must be a number.`);
-      }
-    }
-    if (col.inferredType === 'decimal') {
-      if (isNaN(parseFloat(val)) || !Number.isFinite(Number(val))) {
-        errors.push(`"${col.displayLabel}" must be a number.`);
-      }
-    }
-    if (col.inferredType === 'text' || col.inferredType === 'label') {
-      const maxLen = Math.max((col.stats?.maxLength || 0) * 3, 255);
-      if (String(val).length > maxLen) {
-        errors.push(`"${col.displayLabel}" is too long (max ${maxLen} characters).`);
-      }
-    }
-    if (col.inferredType === 'date') {
-      const d = new Date(val);
-      if (isNaN(d.getTime())) {
-        errors.push(`"${col.displayLabel}" must be a valid date.`);
-      }
-    }
-  }
-  return errors;
 }
 
 module.exports = {
