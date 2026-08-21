@@ -16,6 +16,7 @@ import {
   ConfirmDialog,
 } from '../components/ui';
 import { useFlash } from '../components/ui/Toast';
+import { CreateUserModal } from '../components/CreateUserModal';
 
 export default function AdminUsers() {
   const { user: currentUser } = useAuth();
@@ -23,10 +24,11 @@ export default function AdminUsers() {
   const { addFlash } = useFlash();
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState([]);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState({ open: false, id: null, name: '' });
 
-  const fetchUsers = async () => {
-    setLoading(true);
+  const fetchUsers = async ({ showLoading = true } = {}) => {
+    if (showLoading) setLoading(true);
     try {
       const data = await api.get('/admin/users');
       setUsers(data.users);
@@ -41,6 +43,11 @@ export default function AdminUsers() {
     fetchUsers();
   }, [addFlash]);
 
+  const handleUserCreated = async (createdUser) => {
+    addFlash(t('admin.userCreated', { name: createdUser.name }), 'success');
+    await fetchUsers({ showLoading: false });
+  };
+
   const handleDelete = (id, name) => {
     if (id === currentUser?.id) return;
     setConfirmDialog({ open: true, id, name });
@@ -49,7 +56,7 @@ export default function AdminUsers() {
   const confirmDelete = async () => {
     const { id, name } = confirmDialog;
     try {
-      await api.post(`/admin/users/${id}/delete`);
+      await api.delete(`/admin/users/${id}`);
       addFlash(t('admin.userDeleted', { name }), 'success');
       fetchUsers();
     } catch (err) {
@@ -75,14 +82,23 @@ export default function AdminUsers() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-warning-100 dark:bg-warning-900/30 text-warning-600 dark:text-warning-400 flex items-center justify-center">
-          <Icon name="users" className="w-5 h-5" />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-warning-100 dark:bg-warning-900/30 text-warning-600 dark:text-warning-400 flex items-center justify-center">
+            <Icon name="users" className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-primary-950 dark:text-gray-100">{t('admin.manageUsers')}</h2>
+            <p className="text-sm text-primary-500 dark:text-gray-400">{t('admin.manageUsersDesc')}</p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-xl font-bold text-primary-950 dark:text-gray-100">{t('admin.manageUsers')}</h2>
-          <p className="text-sm text-primary-500 dark:text-gray-400">{t('admin.manageUsersDesc')}</p>
-        </div>
+        <Button
+          leftIcon="userPlus"
+          onClick={() => setCreateModalOpen(true)}
+          className="w-full sm:w-auto"
+        >
+          {t('admin.addUser')}
+        </Button>
       </div>
 
       {/* Users Table */}
@@ -155,6 +171,12 @@ export default function AdminUsers() {
           {t('common.backToDashboard')}
         </Link>
       </div>
+
+      <CreateUserModal
+        isOpen={createModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+        onCreated={handleUserCreated}
+      />
 
       <ConfirmDialog
         isOpen={confirmDialog.open}

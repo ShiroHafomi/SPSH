@@ -1,0 +1,97 @@
+
+> student-performance-study-habits@1.0.0 dev
+> node "node_modules/nodemon/bin/nodemon.js" src/server.js
+
+[33m[nodemon] 3.1.14[39m
+[33m[nodemon] to restart at any time, enter `rs`[39m
+[33m[nodemon] watching path(s): src\**\*[39m
+[33m[nodemon] watching extensions: js,mjs,cjs,json[39m
+[32m[nodemon] starting `node src/server.js src/server.js`[39m
+   Users table: ready
+   Auth sessions table: ready
+   Audit logs table: ready
+ Server running at http://localhost:3001
+   DB ready: yes
+[0mPOST /api/auth/login [33m401[0m 247.876 ms - 38[0m
+[0mPOST /api/auth/l[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node src/server.js src/server.js`[39m
+   Users table: ready
+   Auth sessions table: ready
+   Audit logs table: ready
+node:events:487
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3001
+    at Server.setupListenHandle [as _listen2] (node:net:2167:16)
+    at listenInCluster (node:net:2224:12)
+    at Server.listen (node:net:2344:7)
+    at app.listen (D:\Student Performance & Study Habits\node_modules\express\lib\application.js:635:24)
+    at main (D:\Student Performance & Study Habits\src\server.js:52:7)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:2203:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 3001
+}
+
+Node.js v24.19.0
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node src/server.js src/server.js`[39m
+   Users table: ready
+   Auth sessions table: ready
+   Audit logs table: ready
+ Server running at http://localhost:3001
+   DB ready: yes
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node src/server.js src/server.js`[39m
+   Users table: ready
+   Auth sessions table: ready
+   Audit logs table: ready
+node:events:487
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::3001
+    at Server.setupListenHandle [as _listen2] (node:net:2167:16)
+    at listenInCluster (node:net:2224:12)
+    at Server.listen (node:net:2344:7)
+    at app.listen (D:\Student Performance & Study Habits\node_modules\express\lib\application.js:635:24)
+    at main (D:\Student Performance & Study Habits\src\server.js:52:7)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:2203:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 3001
+}
+
+Node.js v24.19.0
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node src/server.js src/server.js`[39m
+   Users table: ready
+   Auth sessions table: ready
+   Audit logs table: ready
+ Server running at http://localhost:3001
+   DB ready: yes
+rd/stats [36m304[0m 9.817 ms - -[0m
+[0mGET /api/dashboard/at-risk [36m304[0m 2.890 ms - -[0m
+[0mGET /api/dashboard/stats [36m304[0m 7.758 ms - -[0m
+[0mGET /api/auth/me [36m304[0m 1.205 ms - -[0m
+[0mGET /api/auth/me [36m304[0m 1.304 ms - -[0m
+[0mGET /api/dashboard/at-risk [36m304[0m 4.487 ms - -[0m
+[0mGET /api/dashboard/stats [36m304[0m 15.915 ms - -[0m
+[0mGET /api/dashboard/at-risk [36m304[0m 3.774 ms - -[0m
+[0mGET /api/dashboard/stats [36m304[0m 7.638 ms - -[0m
+[0mPOST /api/feedback [33m400[0m 2.359 ms - 87[0m
+[0mPOST /api/feedback [33m400[0m 1.783 ms - 87[0m
+[0mPOST /api/feedback [33m400[0m 1.318 ms - 87[0m

@@ -171,6 +171,18 @@ const KPICard = ({
     default: 'bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-400',
   };
 
+  const textColors = {
+    primary: 'text-primary-900 dark:text-primary-100',
+    success: 'text-success-900 dark:text-success-100',
+    accent: 'text-accent-900 dark:text-accent-100',
+    danger: 'text-danger-900 dark:text-danger-100',
+    default: 'text-primary-900 dark:text-primary-100',
+  };
+
+  const textClass = featured
+    ? 'text-white'
+    : textColors[variant] || textColors.default;
+
   return (
     <Component
       className={`
@@ -193,7 +205,7 @@ const KPICard = ({
           </div>
         )}
       </div>
-      <p className={`kpi-value ${featured ? 'text-white' : ''} font-mono tabular-nums`}>
+      <p className={`kpi-value ${textClass} font-mono tabular-nums`}>
         {formatValue(value, format)}
       </p>
       {trend !== undefined && (

@@ -70,8 +70,8 @@ async function apiListUsers(req, res) {
     const search = boundedString(req.query.q, { field: 'q', max: 200 });
 
     const offset = (page - 1) * size;
-    const conditions = ['role != ?']; // Exclude system accounts if any
-    const values = ['admin']; // Don't hide admin users
+    const conditions = [];
+    const values = [];
 
     if (role !== 'all') {
       conditions.push('role = ?');
@@ -91,7 +91,7 @@ async function apiListUsers(req, res) {
       [...values, size, offset]
     );
 
-    const [{ total }] = await pool.query(
+    const [[{ total }]] = await pool.query(
       `SELECT COUNT(*) AS total FROM users ${whereClause}`,
       values
     );
@@ -186,6 +186,9 @@ async function apiCreateUser(req, res) {
 
     res.status(201).json({ user });
   } catch (err) {
+    if (err?.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ error: 'Email already registered.' });
+    }
     console.error('[apiCreateUser]', err);
     res.status(500).json({ error: 'Failed to create user.' });
   }

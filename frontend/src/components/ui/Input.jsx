@@ -86,7 +86,7 @@ const Input = forwardRef(
             </div>
           )}
           {rightElement && (
-            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+            <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
               {rightElement}
             </div>
           )}

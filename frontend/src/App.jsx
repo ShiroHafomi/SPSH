@@ -3,6 +3,7 @@ import { AuthProvider } from './hooks/useAuth';
 import { ThemeProvider } from './hooks/useTheme';
 import { LanguageProvider } from './hooks/useLanguage';
 import { FlashProvider } from './components/FlashProvider';
+import { ToastProvider } from './components/ui/Toast';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { MainLayout } from './components/MainLayout';
 import { AdminLayout } from './components/AdminLayout';
@@ -37,7 +38,8 @@ function App() {
       <ThemeProvider>
         <LanguageProvider>
           <FlashProvider>
-            <Routes>
+            <ToastProvider>
+              <Routes>
               {/* Public routes (full-screen) */}
               <Route path="/login" element={<Login />} />
               {/* <Route path="/register" element={<Register />} /> */} {/* Disabled - Admin only creates users */}
@@ -101,7 +103,8 @@ function App() {
               {/* Default redirects based on role */}
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
-            </Routes>
+              </Routes>
+            </ToastProvider>
           </FlashProvider>
         </LanguageProvider>
       </ThemeProvider>
