@@ -80,39 +80,10 @@ export default function AdminDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="bento-grid-4">
-          {[...Array(4)].map((_, i) => <SkeletonCard key={i} padding="lg" />)}
-        </div>
-        <div className="bento-grid-2">
-          {[...Array(6)].map((_, i) => <SkeletonChart key={i} />)}
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <Card padding="lg" className="text-center py-12">
-        <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-danger-100 dark:bg-danger-900/40 text-danger-600 dark:text-danger-400 flex items-center justify-center">
-          <Icon name="alertTriangle" className="w-6 h-6" />
-        </div>
-        <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-2">{t('admin.failedToLoad')}</h3>
-        <p className="text-primary-500 dark:text-gray-400 mb-4">{error}</p>
-        <Button variant="primary" leftIcon={<Icon name="refreshCw" className="w-4 h-4" />} onClick={() => { setRefreshing(true); fetchAnalytics(); }} disabled={refreshing} loading={refreshing}>
-          {t('common.tryAgain')}
-        </Button>
-      </Card>
-    );
-  }
-
-  if (!analytics) return null;
-
-  // Null-safe: `?? {}` catches both undefined AND null
-  const kpis = analytics.kpis ?? {};
-  const charts = analytics.charts ?? {};
+  // Keep every hook above conditional returns so loading the async response never
+  // changes hook order between renders.
+  const kpis = analytics?.kpis ?? {};
+  const charts = analytics?.charts ?? {};
 
   // ── Grade Distribution (Doughnut) ───────────────────────────────────────────
   const gradeOrder = ['A', 'B', 'C', 'D', 'F'];
@@ -325,6 +296,36 @@ export default function AdminDashboard() {
 
     return list.slice(0, 3);
   }, [kpis, charts, partTimeJob, t]);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="bento-grid-4">
+          {[...Array(4)].map((_, i) => <SkeletonCard key={i} padding="lg" />)}
+        </div>
+        <div className="bento-grid-2">
+          {[...Array(6)].map((_, i) => <SkeletonChart key={i} />)}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card padding="lg" className="text-center py-12">
+        <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-danger-100 dark:bg-danger-900/40 text-danger-600 dark:text-danger-400 flex items-center justify-center">
+          <Icon name="alertTriangle" className="w-6 h-6" />
+        </div>
+        <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-2">{t('admin.failedToLoad')}</h3>
+        <p className="text-primary-500 dark:text-gray-400 mb-4">{error}</p>
+        <Button variant="primary" leftIcon={<Icon name="refreshCw" className="w-4 h-4" />} onClick={() => { setRefreshing(true); fetchAnalytics(); }} disabled={refreshing} loading={refreshing}>
+          {t('common.tryAgain')}
+        </Button>
+      </Card>
+    );
+  }
+
+  if (!analytics) return null;
 
   const EmptyChart = ({ message }) => (
     <Card padding="lg" className="text-center py-12">

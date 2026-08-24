@@ -49,9 +49,24 @@ async function main() {
     );
   }
 
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(` Server running at http://localhost:${PORT}`);
     console.log(`   DB ready: ${dbReady ? 'yes' : 'no'}`);
+  });
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\n  Port ${PORT} is already in use.`);
+      console.error(`  Another process is listening on this port.`);
+      console.error(`  To fix:`);
+      console.error(`    1. Find and stop the process using port ${PORT}, or`);
+      console.error(`    2. Set a different port via PORT environment variable (e.g., PORT=3002 npm run dev)`);
+      console.error(`  Example: lsof -ti:${PORT} | xargs kill -9   (on macOS/Linux)`);
+      console.error(`  On Windows, use: netstat -ano | findstr :${PORT} then taskkill /PID <PID> /F`);
+    } else {
+      console.error('  Server error:', err);
+    }
+    process.exit(1);
   });
 }
 

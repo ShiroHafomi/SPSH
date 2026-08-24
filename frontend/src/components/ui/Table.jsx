@@ -23,6 +23,7 @@ const Table = forwardRef(
       loading = false,
       emptyMessage = 'No data available',
       emptyDescription = 'Try adjusting your search or filter criteria.',
+      emptyAction,
       className = '',
       rowClassName,
       onRowClick,
@@ -219,6 +220,7 @@ const Table = forwardRef(
                   </div>
                   <p className="text-primary-400 dark:text-gray-500 font-medium">{emptyMessage}</p>
                   <p className="text-sm text-primary-400 dark:text-gray-500 mt-1">{emptyDescription}</p>
+                  {emptyAction && <div className="mt-4">{emptyAction}</div>}
                 </td>
               </tr>
             ) : (

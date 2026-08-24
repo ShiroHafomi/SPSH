@@ -5,7 +5,7 @@
 import { useEffect, useRef, useCallback, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from './Button';
-import { Icon, getIcon } from './Icons';
+import { Icon } from './Icons';
 
 const Modal = ({
   isOpen,
@@ -172,14 +172,14 @@ const ConfirmDialog = ({
   icon,
 }) => {
   const variants = {
-    danger: { icon: 'alertTriangle', color: 'text-danger-600 dark:text-danger-400', btn: 'btn-danger' },
-    warning: { icon: 'alertCircle', color: 'text-warning-600 dark:text-warning-400', btn: 'btn-warning' },
-    info: { icon: 'info', color: 'text-sky-600 dark:text-sky-400', btn: 'btn-primary' },
-    success: { icon: 'checkCircle', color: 'text-success-600 dark:text-success-400', btn: 'btn-success' },
+    danger: { icon: 'alertTriangle', color: 'text-danger-600 dark:text-danger-400', btn: 'danger' },
+    warning: { icon: 'alertCircle', color: 'text-warning-600 dark:text-warning-400', btn: 'danger' },
+    info: { icon: 'info', color: 'text-sky-600 dark:text-sky-400', btn: 'primary' },
+    success: { icon: 'checkCircle', color: 'text-success-600 dark:text-success-400', btn: 'success' },
   };
 
   const config = variants[variant] || variants.danger;
-  const IconComponent = icon ? getIcon(icon) : getIcon(config.icon);
+  const iconName = icon || config.icon;
 
   return (
     <Modal
@@ -202,7 +202,7 @@ const ConfirmDialog = ({
       <div className="space-y-4">
         <div className="flex items-start gap-3">
           <div className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${config.color.replace('text-', 'bg-').replace('-600', '-100').replace('-400', '-900/40')} ${config.color.replace('-600', '-700').replace('-400', '-300')}`}>
-            {IconComponent && <IconComponent className="w-5 h-5" />}
+            <Icon name={iconName} className="w-5 h-5" />
           </div>
           <p className="text-primary-700 dark:text-gray-300 mt-0.5">{message}</p>
         </div>

@@ -7,9 +7,10 @@ const AuthContext = createContext(null);
 // Default landing route for a given role. Used by ProtectedRoute (role gate),
 // Login redirect, and Navbar. Pure utility — safe to import anywhere.
 export function homeForRole(role) {
+  if (role === 'admin') return '/admin';
   if (role === 'student') return '/student';
   if (role === 'teacher') return '/teacher';
-  return '/dashboard'; // admin (and any unknown role)
+  return '/dashboard';
 }
 
 export function AuthProvider({ children }) {

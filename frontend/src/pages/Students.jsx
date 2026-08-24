@@ -172,7 +172,7 @@ export default function Students() {
           key: 'name',
           header: col.displayLabel,
           sortable: true,
-          render: (row) => (
+          render: (_, row) => (
             <span className="font-medium text-primary-950 dark:text-gray-100">
               {t('students.studentHash', { id: row.student_id || row.id })}
             </span>
@@ -186,8 +186,7 @@ export default function Students() {
           key: col.name,
           header: col.displayLabel,
           sortable: true,
-          render: (row) => {
-            const val = row[col.name];
+          render: (val) => {
             if (val === null || val === undefined) return <span className="text-gray-300 italic">—</span>;
             return (
               <Badge variant={val ? 'success' : 'default'} size="sm">
@@ -204,8 +203,7 @@ export default function Students() {
           key: col.name,
           header: col.displayLabel,
           sortable: true,
-          render: (row) => {
-            const val = row[col.name];
+          render: (val) => {
             if (val === null || val === undefined) return <span className="text-gray-300 italic">—</span>;
             return new Date(val).toLocaleDateString();
           },
@@ -217,8 +215,7 @@ export default function Students() {
         key: col.name,
         header: col.displayLabel,
         sortable: true,
-        render: (row) => {
-          const val = row[col.name];
+        render: (val) => {
           if (val === null || val === undefined) return <span className="text-gray-300 italic">—</span>;
           return String(val);
         },
@@ -233,7 +230,7 @@ export default function Students() {
     sortable: false,
     align: 'right',
     width: 180,
-    render: (row) => (
+    render: (_, row) => (
       <Flex gap={2} justify="end" className="whitespace-nowrap">
         <Tooltip content={t('students.aiEvaluate')}>
           <Button
@@ -354,19 +351,10 @@ export default function Students() {
               </Link>
             )
           }
-          rowKey="id"
+          keyField="id"
           sortColumn={sort === 'student_id' ? 'name' : sort}
           sortDirection={dir}
           onSort={handleSort}
-          pagination={{
-            page,
-            pageSize,
-            total,
-            totalPages,
-            onPageChange: setPage,
-            showPageSize: false,
-          }}
-          skeletonRows={8}
         />
 
         {totalPages > 1 && (
