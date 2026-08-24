@@ -741,7 +741,7 @@ async function apiAdminMlHealth(req, res) {
         healthStatus = healthStatus === 'unknown' ? 'warning' : healthStatus;
         healthIssues.push(`Models are ${modelAgeDays} days old (retraining recommended)`);
       } else if (modelAgeDays !== null && modelAgeDays > 7) {
-        healthStatus = healthStatus === 'unknown' ? 'healthy' : healthStatus;
+        healthStatus = healthStatus === 'unknown' ? 'warning' : healthStatus;
         healthIssues.push(`Models are ${modelAgeDays} days old`);
       } else {
         healthStatus = healthStatus === 'unknown' ? 'healthy' : healthStatus;

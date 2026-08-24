@@ -244,75 +244,138 @@ export default function StudentDashboard() {
       <div className="space-y-6">
         {/* Overview Tab - Personal Scorecard */}
         {activeTab === 'overview' && (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            {/* Final Score Card */}
-            <div className="card p-6">
+          <>
+            {/* Quick What-If Widget */}
+            <div className="card p-6 mb-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-medium text-primary-500 dark:text-gray-400">
-                  {t('student.finalScore')}
+                <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100">
+                  Quick What-If: Study Hours
                 </h3>
-                <span className={`text-3xl font-bold font-mono ${getScoreColor(profile.final_score)}`}>
-                  {profile.final_score}
-                </span>
               </div>
-              <p className="text-sm text-primary-400 dark:text-gray-500">
-                {t('student.percentile', { p: percentiles.finalScore || 0 })}
-              </p>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-primary-600 dark:text-gray-300 mb-2">
+                    Study Hours per Day
+                  </label>
+                  <div className="flex items-center gap-4">
+                    <input
+                      type="range"
+                      min={0}
+                      max={16}
+                      step={0.5}
+                      value={simInputs.study_hours_per_day}
+                      onChange={(e) => handleInputChange('study_hours_per_day', parseFloat(e.target.value))}
+                      className="flex-1 h-2 bg-primary-100 dark:bg-gray-800 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                    />
+                    <span className="text-lg font-mono text-primary-950 dark:text-gray-100 w-16 text-right">
+                      {simInputs.study_hours_per_day}h
+                    </span>
+                  </div>
+                  <p className="text-sm text-primary-400 dark:text-gray-500 mt-1">
+                    Current: {profile.study_hours_per_day}h
+                  </p>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-primary-500 dark:text-gray-400">
+                      Predicted Score:
+                    </p>
+                    <p className="text-2xl font-bold font-mono">
+                      {simulated?.final_score?.toFixed(1) ?? '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-primary-500 dark:text-gray-400">
+                      Predicted Grade:
+                    </p>
+                    <span className={`${getGradeBadgeClass(simulated?.grade)} text-lg px-3 py-1`}>
+                      {simulated?.grade ?? '—'}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    // Trigger simulation to update the simulated state
+                    handleSimulate();
+                  }}
+                  className="btn-outline btn-primary w-full"
+                >
+                  Run Quick Simulation
+                </button>
+              </div>
             </div>
 
-            {/* Grade Card */}
-            <div className="card p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-medium text-primary-500 dark:text-gray-400">
-                  {t('student.grade')}
+            {/* Scorecard Grid */}
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+              {/* Final Score Card */}
+              <div className="card p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-medium text-primary-500 dark:text-gray-400">
+                    {t('student.finalScore')}
+                  </h3>
+                  <span className={`text-3xl font-bold font-mono ${getScoreColor(profile.final_score)}`}>
+                    {profile.final_score}
+                  </span>
+                </div>
+                <p className="text-sm text-primary-400 dark:text-gray-500">
+                  {t('student.percentile', { p: percentiles.finalScore || 0 })}
+                </p>
+              </div>
+
+              {/* Grade Card */}
+              <div className="card p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-medium text-primary-500 dark:text-gray-400">
+                    {t('student.grade')}
+                  </h3>
+                  <span className={`${getGradeBadgeClass(profile.grade)} text-lg px-4 py-2`}>
+                    {profile.grade}
+                  </span>
+                </div>
+                <p className="text-sm text-primary-400 dark:text-gray-500">
+                  {t('student.classPercentile', { p: percentiles.gpa || 0 })}
+                </p>
+              </div>
+
+              {/* Previous GPA Card */}
+              <div className="card p-6">
+                <h3 className="text-sm font-medium text-primary-500 dark:text-gray-400 mb-2">
+                  {t('student.previousGPA')}
                 </h3>
-                <span className={`${getGradeBadgeClass(profile.grade)} text-lg px-4 py-2`}>
-                  {profile.grade}
-                </span>
+                <p className="text-3xl font-bold font-mono text-primary-950 dark:text-gray-100">
+                  {profile.previous_gpa?.toFixed(1) || '-'}
+                </p>
+                <p className="text-sm text-primary-400 dark:text-gray-500 mt-1">
+                  {t('student.percentile', { p: percentiles.gpa || 0 })}
+                </p>
               </div>
-              <p className="text-sm text-primary-400 dark:text-gray-500">
-                {t('student.classPercentile', { p: percentiles.gpa || 0 })}
-              </p>
-            </div>
 
-            {/* Previous GPA Card */}
-            <div className="card p-6">
-              <h3 className="text-sm font-medium text-primary-500 dark:text-gray-400 mb-2">
-                {t('student.previousGPA')}
-              </h3>
-              <p className="text-3xl font-bold font-mono text-primary-950 dark:text-gray-100">
-                {profile.previous_gpa?.toFixed(1) || '-'}
-              </p>
-              <p className="text-sm text-primary-400 dark:text-gray-500 mt-1">
-                {t('student.percentile', { p: percentiles.gpa || 0 })}
-              </p>
-            </div>
-
-            {/* Attendance Card */}
-            <div className="card p-6">
-              <h3 className="text-sm font-medium text-primary-500 dark:text-gray-400 mb-2">
-                {t('student.attendance')}
-              </h3>
-              <p className="text-3xl font-bold font-mono text-primary-950 dark:text-gray-100">
-                {profile.attendance_percent}%
-              </p>
-              <div className="mt-3 h-2 bg-primary-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-300 ${
-                    profile.attendance_percent >= 75
-                      ? 'bg-success-500'
-                      : profile.attendance_percent >= 60
-                      ? 'bg-warning-500'
-                      : 'bg-danger-500'
-                  }`}
-                  style={{ width: `${profile.attendance_percent}%` }}
-                />
+              {/* Attendance Card */}
+              <div className="card p-6">
+                <h3 className="text-sm font-medium text-primary-500 dark:text-gray-400 mb-2">
+                  {t('student.attendance')}
+                </h3>
+                <p className="text-3xl font-bold font-mono text-primary-950 dark:text-gray-100">
+                  {profile.attendance_percent}%
+                </p>
+                <div className="mt-3 h-2 bg-primary-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${
+                      profile.attendance_percent >= 75
+                        ? 'bg-success-500'
+                        : profile.attendance_percent >= 60
+                        ? 'bg-warning-500'
+                        : 'bg-danger-500'
+                    }`}
+                    style={{ width: `${profile.attendance_percent}%` }}
+                  />
+                </div>
+                <p className="text-sm text-primary-400 dark:text-gray-500 mt-1">
+                  {t('student.percentile', { p: percentiles.attendance || 0 })}
+                </p>
               </div>
-              <p className="text-sm text-primary-400 dark:text-gray-500 mt-1">
-                {t('student.percentile', { p: percentiles.attendance || 0 })}
-              </p>
             </div>
-          </div>
+          </>
         )}
 
         {/* Simulator Tab */}

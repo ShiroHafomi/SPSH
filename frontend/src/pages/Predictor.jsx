@@ -33,6 +33,9 @@ export default function Predictor() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [autoPredict, setAutoPredict] = useState(false);
+  const [whatIfFeature, setWhatIfFeature] = useState('study_hours_per_day');
+  const [whatIfValue, setWhatIfValue] = useState(4);
+  const [whatIfResult, setWhatIfResult] = useState(null);
   const debounceRef = useRef(null);
 
   const handleChange = useCallback((field, value) => {
@@ -68,7 +71,33 @@ export default function Predictor() {
   const reset = useCallback(() => {
     setProfile(DEFAULT_PROFILE);
     setResult(null);
+    setWhatIfResult(null);
   }, []);
+
+  const handleWhatIfPredict = useCallback(async () => {
+    if (!result) return;
+
+    setLoading(true);
+    try {
+      // Create a modified profile for what-if analysis
+      const modifiedProfile = { ...profile, [whatIfFeature]: whatIfValue };
+
+      // Convert numeric values appropriately
+      if (whatIfFeature === 'age' || whatIfFeature === 'attendance_percent') {
+        modifiedProfile[whatIfFeature] = parseInt(whatIfValue, 10);
+      } else if (whatIfFeature === 'study_hours_per_day' || whatIfFeature === 'sleep_hours' || whatIfFeature === 'previous_gpa') {
+        modifiedProfile[whatIfFeature] = parseFloat(whatIfValue);
+      }
+
+      const response = await api.post('/feedback', modifiedProfile);
+      setWhatIfResult(response);
+    } catch (err) {
+      addFlash(err.message, 'error');
+      setWhatIfResult(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [profile, whatIfFeature, whatIfValue, result, addFlash]);
 
   const grade = result?.grade || '—';
   const score = result?.final_score;
@@ -354,6 +383,89 @@ export default function Predictor() {
                           </div>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* What-If Analysis */}
+                {result && (
+                  <div className="mt-8">
+                    <h4 className="text-sm font-bold text-primary-700 dark:text-gray-200 mb-3">
+                      What-If Analysis
+                    </h4>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-primary-600 dark:text-gray-300 mb-2">
+                            Feature to Test
+                          </label>
+                          <select
+                            id="whatif-feature"
+                            className="input input-bordered w-full"
+                            onChange={(e) => setWhatIfFeature(e.target.value)}
+                          >
+                            <option value="study_hours_per_day">Study Hours/Day</option>
+                            <option value="attendance_percent">Attendance %</option>
+                            <option value="sleep_hours">Sleep Hours</option>
+                            <option value="previous_gpa">Previous GPA</option>
+                            <option value="age">Age</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-primary-600 dark:text-gray-300 mb-2">
+                            Test Value
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              id="whatif-value"
+                              className="input input-bordered w-full"
+                              value={whatIfValue}
+                              onChange={(e) => setWhatIfValue(parseFloat(e.target.value) || 0)}
+                            />
+                          </div>
+                        </div>
+                        <div className="col-span-2">
+                          <button
+                            onChange={handleWhatIfPredict}
+                            disabled={loading}
+                            className="btn-outline btn-primary w-full"
+                          >
+                            {loading ? 'Analyzing...' : 'Run What-If Analysis'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {whatIfResult && (
+                        <div className="mt-4 p-4 rounded-lg border border-primary-200 bg-primary-50">
+                          <h5 className="text-sm font-semibold text-primary-700 dark:text-gray-300 mb-2">
+                            What-If Result
+                          </h5>
+                          <div className="space-y-2">
+                            <p className="text-xs text-primary-600 dark:text-gray-400">
+                              Changing <strong className="text-primary-900 dark:text-gray-100">{whatIfFeature.replace(/_/g, ' ')}</strong> to
+                              <span className="font-mono">{whatIfValue}</span>:
+                            </p>
+                            <div className="flex items-center gap-4">
+                              <div className="text-xs font-mono">
+                                Score: {whatIfResult.final_score?.toFixed(1) ?? '—'}
+                              </div>
+                              <div className="text-xs font-mono">
+                                Grade: <span className={`${getGradeBadgeClass(whatIfResult.grade)}`}>
+                                  {whatIfResult.grade ?? '—'}
+                                </span>
+                              </div>
+                            </div>
+                            {whatIfResult.final_score !== null && result.final_score !== null && (
+                              <div className="text-xs text-primary-500 dark:text-gray-400 mt-1">
+                                Change:
+                                {(whatIfResult.final_score - result.final_score).toFixed(1)}
+                                points
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

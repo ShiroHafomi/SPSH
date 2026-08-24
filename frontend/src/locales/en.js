@@ -86,6 +86,7 @@ const en = {
     switchToDark: 'Switch to dark mode',
     switchLang: 'Switch to {lang}',
     teacherDashboard: 'Teacher Dashboard',
+    whatIfSimulator: 'What-If Simulator',
     myPortal: 'My Portal',
     role: {
       admin: 'Admin',
@@ -294,6 +295,20 @@ const en = {
     aiCounselModalDesc: 'Generate personalized AI counseling guidance for this student. Add any specific concerns below.',
     customPromptPlaceholder: 'Enter specific guidance focus (optional)...',
     generateCounsel: 'Generate',
+    // What-If Simulation
+    whatIfSimulation: 'What-If Simulation',
+    whatIfSimulationAria: 'Run What-If simulation for {name}',
+    runningSimulation: 'Running simulation...',
+    whatIfModalTitle: 'What-If Simulation for {name}',
+    whatIfModalDesc: 'Adjust study habits to see predicted outcomes.',
+    baselinePrediction: 'Baseline Prediction',
+    whatIfControls: 'What-If Controls',
+    whatIfFeature: 'Feature to Change',
+    whatIfValue: 'Test Value',
+    runSimulation: 'Run Simulation',
+    whatIfResult: 'What-If Result',
+    change: 'Change',
+    points: 'points',
   },
 
   login: {
@@ -494,6 +509,13 @@ const en = {
     recommendations: 'Recommendations',
     adjustSliders: 'Adjust the sliders to see predictions',
     adjustSlidersDesc: 'Run a simulation to see how changes affect your predicted grade.',
+    // Quick What-If Widget
+    quickWhatIfStudyHours: 'Quick What-If: Study Hours',
+    studyHoursPerDay: 'Study Hours per Day',
+    currentLabel: 'Current:',
+    predictedScoreLabel: 'Predicted Score:',
+    predictedGradeLabel: 'Predicted Grade:',
+    runQuickSimulation: 'Run Quick Simulation',
     // Advisor
     loadingAdvice: 'Loading advice...',
     // Edit Profile

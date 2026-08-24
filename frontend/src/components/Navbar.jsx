@@ -32,16 +32,19 @@ export function Navbar() {
           { path: '/teacher', label: t('nav.teacherDashboard') },
           { path: '/students', label: t('nav.students') },
           { path: '/predictor', label: t('nav.aiCounselor') },
+          { path: '/what-if', label: t('nav.whatIfSimulator') },
         ];
       case 'teacher':
         return [
           { path: '/teacher', label: t('nav.teacherDashboard') },
           { path: '/students', label: t('nav.students') },
           { path: '/predictor', label: t('nav.aiCounselor') },
+          { path: '/what-if', label: t('nav.whatIfSimulator') },
         ];
       case 'student':
         return [
           { path: '/student', label: t('nav.myPortal') },
+          { path: '/what-if', label: t('nav.whatIfSimulator') },
         ];
       default:
         return [];

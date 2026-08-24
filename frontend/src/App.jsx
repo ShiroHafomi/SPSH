@@ -10,11 +10,12 @@ import { AdminLayout } from './components/AdminLayout';
 import { TeacherLayout } from './components/TeacherLayout';
 import { StudentLayout } from './components/StudentLayout';
 import Login from './pages/Login';
-// import Register from './pages/Register'; // Disabled - Admin only creates users
+// import Register from './'; // Disabled - Admin only creates users
 import Dashboard from './pages/Dashboard';
 import Students from './pages/Students';
 import StudentForm from './pages/StudentForm';
 import Predictor from './pages/Predictor';
+import WhatIfSimulator from './pages/WhatIfSimulator';
 import StudentDashboard from './pages/StudentDashboard';
 import TeacherDashboard from './pages/TeacherDashboard';
 import AdminUsers from './pages/AdminUsers';
@@ -87,6 +88,7 @@ function App() {
               }>
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/predictor" element={<Predictor />} />
+                <Route path="/what-if" element={<WhatIfSimulator />} />
               </Route>
 
               {/* Shared, teacher/admin-only routes (still float under MainLayout) */}

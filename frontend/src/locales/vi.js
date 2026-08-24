@@ -96,6 +96,7 @@ const vi = {
     switchToDark: 'Chuyển sang chế độ tối',
     switchLang: 'Chuyển sang {lang}',
     teacherDashboard: 'Bảng điều khiển Giáo viên',
+    whatIfSimulator: 'Mô phỏng What-If',
     myPortal: 'Cổng thông tin cá nhân',
     role: {
       admin: 'Quản trị',
@@ -141,6 +142,20 @@ const vi = {
     aiCounselModalDesc: 'Tạo hướng dẫn tư vấn cá nhân cho sinh viên. Thêm mối quan tâm cụ thể bên dưới.',
     customPromptPlaceholder: 'Nhập trọng tâm hướng dẫn (tùy chọn)...',
     generateCounsel: 'Tạo',
+    // What-If Simulation
+    whatIfSimulation: 'Mô phỏng What-If',
+    whatIfSimulationAria: 'Chạy mô phỏng What-If cho {name}',
+    runningSimulation: 'Đang chạy mô phỏng...',
+    whatIfModalTitle: 'Mô phỏng What-If cho {name}',
+    whatIfModalDesc: 'Điều chỉnh thói quen học tập để xem kết quả dự đoán.',
+    baselinePrediction: 'Dự đoán cơ sở',
+    whatIfControls: 'Các điều khiển What-If',
+    whatIfFeature: 'Đặc điểm thay đổi',
+    whatIfValue: 'Giá trị thử nghiệm',
+    runSimulation: 'Chạy mô phỏng',
+    whatIfResult: 'Kết quả What-If',
+    change: 'Thay đổi',
+    points: 'điểm',
   },
 
   login: {

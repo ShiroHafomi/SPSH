@@ -57,6 +57,12 @@ export default function TeacherDashboard() {
   const [showCounselModal, setShowCounselModal] = useState(false);
   const [counselPrompt, setCounselPrompt] = useState('');
   const [counselLoading, setCounselLoading] = useState(false);
+  const [whatIfStudent, setWhatIfStudent] = useState(null);
+  const [whatIfBaseline, setWhatIfBaseline] = useState(null);
+  const [whatIfSimulated, setWhatIfSimulated] = useState(null);
+  const [whatIfLoading, setWhatIfLoading] = useState(false);
+  const [modalWhatIfFeature, setModalWhatIfFeature] = useState('study_hours_per_day');
+  const [modalWhatIfValue, setModalWhatIfValue] = useState(4);
   const { isDark } = useTheme();
 
   // ─── Data fetching ────────────────────────────────────────────────────────────
@@ -230,6 +236,38 @@ export default function TeacherDashboard() {
       setCounselLoading(false);
     }
   }, [selectedStudent, counselPrompt, addFlash, fetchStudents, api]);
+
+  const handleWhatIfForStudent = useCallback(async (student) => {
+    setWhatIfStudent(student);
+    setWhatIfLoading(true);
+    try {
+      // Get baseline prediction (current)
+      const baselineRes = await api.post('/feedback', {
+        gender: student.gender,
+        age: student.age,
+        study_hours_per_day: student.study_hours_per_day,
+        attendance_percent: student.attendance_percent,
+        sleep_hours: student.sleep_hours,
+        previous_gpa: student.previous_gpa,
+        parental_education: student.parental_education,
+        internet_access: student.internet_access,
+        extracurricular: student.extracurricular,
+        part_time_job: student.part_time_job,
+      });
+      setWhatIfBaseline(baselineRes);
+      // For simulation, we'll just show the baseline as the simulated for now? Actually we want to show what-if with a change.
+      // But the requirement is to have a quick action button that opens a modal to run what-if.
+      // We'll set the simulated to the baseline for now, and the modal will allow changing.
+      setWhatIfSimulated(baselineRes);
+    } catch (err) {
+      console.error('Failed to run what-if simulation:', err);
+      addFlash(err.message, 'error');
+      setWhatIfBaseline(null);
+      setWhatIfSimulated(null);
+    } finally {
+      setWhatIfLoading(false);
+    }
+  }, [addFlash, t]);
 
   // Loading skeleton
   if (loading) {
@@ -520,6 +558,27 @@ export default function TeacherDashboard() {
                           <MessageSquare className="w-4 h-4" aria-hidden="true" />
                           <span className="hidden sm:inline ml-1">{t('teacher.aiCounsel')}</span>
                         </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleWhatIfForStudent(student)}
+                          aria-label={t('teacher.whatIfSimulationAria', { name: student.name })}
+                          disabled={whatIfLoading && whatIfStudent?.id === student.id}
+                        >
+                          {whatIfLoading && whatIfStudent?.id === student.id ? (
+                            <>
+                              <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.001 8.001 0 01-11.582-8m0 0a8.007 8.007 0 0011.583 8z" />
+                              </svg>
+                              <span className="hidden sm:inline">{t('teacher.runningSimulation')}</span>
+                            </>
+                          ) : (
+                            <>
+                              {renderIcon('Sliders', { className: "w-4 h-4" })}
+                              <span className="hidden sm:inline ml-1">{t('teacher.whatIfSimulation')}</span>
+                            </>
+                          )}
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -709,6 +768,163 @@ export default function TeacherDashboard() {
               <Button onClick={handleGenerateCounsel} loading={counselLoading}>
                 {t('teacher.generateCounsel')}
               </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* What-If Modal */}
+      {whatIfStudent && (
+        <Modal
+          isOpen={!!whatIfStudent}
+          onClose={() => {
+            setWhatIfStudent(null);
+            setWhatIfBaseline(null);
+            setWhatIfSimulated(null);
+            setModalWhatIfFeature('study_hours_per_day');
+            setModalWhatIfValue(4);
+          }}
+          title={t('teacher.whatIfModalTitle', { name: whatIfStudent?.name })}
+          size="lg"
+          ariaDescribedBy="what-if-modal-desc"
+        >
+          <div className="space-y-4">
+            <p id="what-if-modal-desc" className="text-primary-600 dark:text-gray-400">
+              {t('teacher.whatIfModalDesc')}
+            </p>
+            {/* Baseline Info */}
+            <div className="space-y-4">
+              <h5 className="text-sm font-semibold text-primary-700 dark:text-gray-300 mb-2">
+                {t('teacher.baselinePrediction')}
+              </h5>
+              <div className="flex items-center gap-4">
+                <div className="text-xs font-mono">
+                  Score: {whatIfBaseline?.final_score?.toFixed(1) ?? '—'}
+                </div>
+                <div className="text-xs font-mono">
+                  Grade: <span className={`${getGradeBadgeClass(whatIfBaseline?.grade)}`}>
+                    {whatIfBaseline?.grade ?? '—'}
+                  </span>
+                </div>
+              </div>
+            </div>
+            {/* What-If Controls */}
+            <div className="space-y-4">
+              <h5 className="text-sm font-semibold text-primary-700 dark:text-gray-300 mb-2">
+                {t('teacher.whatIfControls')}
+              </h5>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-primary-600 dark:text-gray-300 mb-2">
+                    {t('teacher.whatIfFeature')}
+                  </label>
+                  <select
+                    id="whatif-feature-teacher"
+                    className="input input-bordered w-full"
+                    value={modalWhatIfFeature}
+                    onChange={(e) => setModalWhatIfFeature(e.target.value)}
+                  >
+                    <option value="study_hours_per_day">
+                      {t('student.studyHoursPerDay')}
+                    </option>
+                    <option value="attendance_percent">
+                      {t('student.attendancePercent')}
+                    </option>
+                    <option value="sleep_hours">
+                      {t('student.sleepHours')}
+                    </option>
+                    <option value="previous_gpa">
+                      {t('student.previousGPA')}
+                    </option>
+                    <option value="age">
+                      {t('common.age')}
+                    </option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-primary-600 dark:text-gray-300 mb-2">
+                    {t('teacher.whatIfValue')}
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      id="whatif-value-teacher"
+                      className="input input-bordered w-full"
+                      value={modalWhatIfValue}
+                      onChange={(e) => setModalWhatIfValue(parseFloat(e.target.value) || 0)}
+                    />
+                  </div>
+                </div>
+                <div className="col-span-2">
+                  <button
+                    onClick={async () => {
+                      setWhatIfLoading(true);
+                      try {
+                        // Create a modified profile for what-if analysis
+                        const modifiedProfile = {
+                          gender: whatIfStudent?.gender,
+                          age: whatIfStudent?.age,
+                          study_hours_per_day: whatIfStudent?.study_hours_per_day,
+                          attendance_percent: whatIfStudent?.attendance_percent,
+                          sleep_hours: whatIfStudent?.sleep_hours,
+                          previous_gpa: whatIfStudent?.previous_gpa,
+                          parental_education: whatIfStudent?.parental_education,
+                          internet_access: whatIfStudent?.internet_access,
+                          extracurricular: whatIfStudent?.extracurricular,
+                          part_time_job: whatIfStudent?.part_time_job,
+                          [modalWhatIfFeature]:
+                            modalWhatIfFeature === 'age' || modalWhatIfFeature === 'attendance_percent'
+                              ? parseInt(modalWhatIfValue, 10)
+                              : parseFloat(modalWhatIfValue)
+                        };
+                        const response = await api.post('/feedback', modifiedProfile);
+                        setWhatIfSimulated(response);
+                      } catch (err) {
+                        console.error('Failed to run what-if simulation:', err);
+                        addFlash(err.message, 'error');
+                        setWhatIfSimulated(null);
+                      } finally {
+                        setWhatIfLoading(false);
+                      }
+                    }}
+                    disabled={whatIfLoading}
+                    className="btn-outline btn-primary w-full"
+                  >
+                    {whatIfLoading ? 'Running...' : t('teacher.runSimulation')}
+                  </button>
+                </div>
+              </div>
+              {/* What-If Result */}
+              {whatIfSimulated && (
+                <div className="mt-4 p-4 rounded-lg border border-primary-200 bg-primary-50">
+                  <h5 className="text-sm font-semibold text-primary-700 dark:text-gray-300 mb-2">
+                    {t('teacher.whatIfResult')}
+                  </h5>
+                  <div className="space-y-2">
+                    <p className="text-xs text-primary-600 dark:text-gray-400">
+                      Changing <strong className="text-primary-900 dark:text-gray-100">{modalWhatIfFeature.replace(/_/g, ' ')}</strong> to
+                      <span className="font-mono">{modalWhatIfValue}</span>:
+                    </p>
+                    <div className="flex items-center gap-4">
+                      <div className="text-xs font-mono">
+                        Score: {whatIfSimulated?.final_score?.toFixed(1) ?? '—'}
+                      </div>
+                      <div className="text-xs font-mono">
+                        Grade: <span className={`${getGradeBadgeClass(whatIfSimulated?.grade)}`}>
+                          {whatIfSimulated?.grade ?? '—'}
+                        </span>
+                      </div>
+                    </div>
+                    {whatIfSimulated?.final_score !== null && whatIfBaseline?.final_score !== null && (
+                      <div className="text-xs text-primary-500 dark:text-gray-400 mt-1">
+                        {t('teacher.change')}:
+                        {(whatIfSimulated.final_score - whatIfBaseline.final_score).toFixed(1)}
+                        {t('teacher.points')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </Modal>
