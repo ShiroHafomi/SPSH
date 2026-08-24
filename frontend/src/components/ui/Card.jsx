@@ -196,7 +196,7 @@ const KPICard = ({
       aria-label={label}
     >
       <div className="flex items-start justify-between">
-        <p className="kpi-label text-white/75 group:hover:text-white transition-colors">
+        <p className={`kpi-label ${featured ? 'text-white/75' : 'text-primary-400'} group:hover:text-white/75 dark:group:hover:text-white/60 transition-colors`}>
           {label}
         </p>
         {icon && (
