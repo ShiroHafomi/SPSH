@@ -47,6 +47,27 @@ async function apiListGoals(req, res) {
 }
 
 /**
+ * GET /api/student/me/goals/progress
+ * List goal histories and the server-calculated progress summaries for the
+ * authenticated student. The original raw list endpoint remains unchanged.
+ */
+async function apiListGoalsWithProgress(req, res) {
+  try {
+    const studentId = req.user.studentId;
+
+    if (!studentId) {
+      return res.status(400).json({ error: 'No student record linked to this account.' });
+    }
+
+    const goals = await studyGoalService.getGoalsWithProgressByStudent(studentId);
+    return res.json({ goals });
+  } catch (err) {
+    console.error('[apiListGoalsWithProgress]', err);
+    return res.status(500).json({ error: 'Failed to load goal progress.' });
+  }
+}
+
+/**
  * POST /api/student/me/goals
  * Create a new goal for the authenticated student.
  */
@@ -333,6 +354,10 @@ async function apiCreateCheckIn(req, res) {
       return res.status(400).json({ error: 'No student record linked to this account.' });
     }
 
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'teacher_feedback')) {
+      return res.status(400).json({ error: 'teacher_feedback can only be updated by a teacher.' });
+    }
+
     // Verify goal belongs to this student
     const goal = await studyGoalService.getGoalById(goalId);
 
@@ -344,7 +369,7 @@ async function apiCreateCheckIn(req, res) {
       return res.status(403).json({ error: 'Access denied.' });
     }
 
-    const { study_hours, sleep_hours, attendance_percent, current_score, student_note, teacher_feedback, week_start } = req.body || {};
+    const { study_hours, sleep_hours, attendance_percent, current_score, student_note, week_start } = req.body || {};
 
     // Validate input
     const validationErrors = studyGoalService.validateCheckInData({
@@ -353,7 +378,6 @@ async function apiCreateCheckIn(req, res) {
       attendancePercent: attendance_percent,
       currentScore: current_score,
       studentNote: student_note,
-      teacherFeedback: teacher_feedback,
       weekStart: week_start,
     });
 
@@ -378,7 +402,7 @@ async function apiCreateCheckIn(req, res) {
       attendancePercent: attendance_percent,
       currentScore: current_score,
       studentNote: student_note,
-      teacherFeedback: teacher_feedback,
+      teacherFeedback: null,
       weekStart: week_start,
     });
 
@@ -419,6 +443,10 @@ async function apiUpdateCheckIn(req, res) {
       return res.status(400).json({ error: 'No student record linked to this account.' });
     }
 
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'teacher_feedback')) {
+      return res.status(400).json({ error: 'teacher_feedback can only be updated by a teacher.' });
+    }
+
     // Verify check-in exists and belongs to the goal
     const existingCheckIn = await studyGoalService.getCheckInById(checkInId);
 
@@ -441,7 +469,7 @@ async function apiUpdateCheckIn(req, res) {
       return res.status(403).json({ error: 'Access denied.' });
     }
 
-    const { study_hours, sleep_hours, attendance_percent, current_score, student_note, teacher_feedback } = req.body || {};
+    const { study_hours, sleep_hours, attendance_percent, current_score, student_note } = req.body || {};
 
     // Validate input (only validate fields that are being updated)
     const updates = {};
@@ -488,14 +516,6 @@ async function apiUpdateCheckIn(req, res) {
         validationErrors.push('student_note cannot exceed 1000 characters.');
       } else {
         updates.studentNote = student_note;
-      }
-    }
-
-    if (teacher_feedback !== undefined) {
-      if (typeof teacher_feedback !== 'string' || teacher_feedback.length > 1000) {
-        validationErrors.push('teacher_feedback cannot exceed 1000 characters.');
-      } else {
-        updates.teacherFeedback = teacher_feedback;
       }
     }
 
@@ -596,6 +616,7 @@ async function apiDeleteCheckIn(req, res) {
 
 module.exports = {
   apiListGoals,
+  apiListGoalsWithProgress,
   apiCreateGoal,
   apiGetGoal,
   apiUpdateGoal,

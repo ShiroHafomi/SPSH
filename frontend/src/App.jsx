@@ -23,6 +23,8 @@ import AdminDashboard from './pages/AdminDashboard';
 import AdminStudents from './pages/AdminStudents';
 import AdminAtRisk from './pages/AdminAtRisk';
 import AdminAITools from './pages/AdminAITools';
+import StudentGoals from './pages/StudentGoals';
+import StudentGoalsProgress from './pages/StudentGoalsProgress';
 
 /**
  * Routing map
@@ -53,6 +55,7 @@ function App() {
               }>
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/admin/students" element={<AdminStudents />} />
+                <Route path="/admin/students/:studentId/goals" element={<StudentGoalsProgress mode="admin" />} />
                 <Route path="/admin/at-risk" element={<AdminAtRisk />} />
                 <Route path="/admin/ai-tools" element={<AdminAITools />} />
                 <Route path="/admin/users" element={<AdminUsers />} />
@@ -68,6 +71,7 @@ function App() {
                 <Route path="/teacher/students" element={<Students />} />
                 <Route path="/teacher/students/new" element={<StudentForm />} />
                 <Route path="/teacher/students/:id/edit" element={<StudentForm />} />
+                <Route path="/teacher/students/:studentId/goals" element={<StudentGoalsProgress mode="teacher" />} />
                 <Route path="/teacher/at-risk" element={<AdminAtRisk />} />
               </Route>
 
@@ -78,6 +82,7 @@ function App() {
                 </ProtectedRoute>
               }>
                 <Route path="/student" element={<StudentDashboard />} />
+                <Route path="/goals" element={<StudentGoals />} />
               </Route>
 
               {/* Shared routes - any authenticated user (floating Navbar via MainLayout) */}

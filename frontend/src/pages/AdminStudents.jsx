@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../api';
 import { useFlash } from '../components/FlashProvider';
 import { useLanguage } from '../hooks/useLanguage';
@@ -19,6 +20,7 @@ import {
   MoreHorizontal,
   Check,
   CheckCheck,
+  Target,
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 
@@ -91,6 +93,7 @@ function SelectFilter({ label, value, options, onChange, placeholder = 'All' }) 
 }
 
 export default function AdminStudents() {
+  const navigate = useNavigate();
   const { flash, addFlash } = useFlash();
   const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
@@ -498,6 +501,14 @@ export default function AdminStudents() {
                           title={t('admin.viewDetails')}
                         >
                           <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => navigate(`/admin/students/${student.id}/goals`)}
+                          className="p-2 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-xl transition-colors"
+                          title={t('goals.viewProgress')}
+                          aria-label={t('goals.viewProgressAria', { name: student.name || student.student_id })}
+                        >
+                          <Target className="w-4 h-4" aria-hidden="true" />
                         </button>
                         <button
                           onClick={() => handleEdit(student)}

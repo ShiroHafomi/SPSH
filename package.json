@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node \"node_modules/nodemon/bin/nodemon.js\" src/server.js",
-    "dev:full": "concurrently \"npm run dev\" \"npm run dev:frontend\"",
+    "dev:full": "node ./node_modules/concurrently/dist/bin/concurrently.js \"node ./node_modules/nodemon/bin/nodemon.js src/server.js\" \"npm --prefix frontend run dev\"",
     "dev:frontend": "cd frontend && npm run dev",
     "build:frontend": "cd frontend && npm run build",
     "import": "node src/scripts/import.js",

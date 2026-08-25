@@ -6,7 +6,7 @@ import { useLanguage } from '../hooks/useLanguage';
 import { api } from '../api';
 import { renderIcon } from '../components/IconMap';
 import { MessageSquare, AlertTriangle, Users, CheckCircle, X, ChevronLeft, ChevronRight } from 'lucide-react';
-import { MULTI_SERIES_COLORS, GRADE_COLORS, getChartOptions, getScatterOptions, getHorizontalBarOptions } from '../utils/chartTheme';
+import { MULTI_SERIES_COLORS, GRADE_COLORS, getChartOptions, getGradeBadgeClass, getScatterOptions, getHorizontalBarOptions } from '../utils/chartTheme';
 import { formatLabel } from '../utils/formatLabel';
 import { useTheme } from '../hooks/useTheme';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, PointElement, ArcElement, Title, Tooltip, Legend, Filler } from 'chart.js';
@@ -557,6 +557,15 @@ export default function TeacherDashboard() {
                         >
                           <MessageSquare className="w-4 h-4" aria-hidden="true" />
                           <span className="hidden sm:inline ml-1">{t('teacher.aiCounsel')}</span>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => navigate(`/teacher/students/${student.id}/goals`)}
+                          aria-label={t('goals.viewProgressAria', { name: student.name || student.student_id })}
+                        >
+                          {renderIcon('Target', { className: 'w-4 h-4' })}
+                          <span className="hidden sm:inline ml-1">{t('goals.viewProgress')}</span>
                         </Button>
                         <Button
                           variant="ghost"

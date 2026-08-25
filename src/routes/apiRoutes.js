@@ -77,6 +77,7 @@ const {
 // Study Goals
 const {
   apiListGoals,
+  apiListGoalsWithProgress,
   apiCreateGoal,
   apiGetGoal,
   apiUpdateGoal,
@@ -210,6 +211,7 @@ studentRouter.get(
 
 // Study Goals
 studentRouter.get('/me/goals', apiListGoals);
+studentRouter.get('/me/goals/progress', apiListGoalsWithProgress);
 studentRouter.post('/me/goals', apiCreateGoal);
 studentRouter.get('/me/goals/:goalId', apiGetGoal);
 studentRouter.put('/me/goals/:goalId', apiUpdateGoal);
