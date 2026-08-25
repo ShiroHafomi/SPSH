@@ -290,3 +290,55 @@ test('notification preferences initialize defaults, update known booleans, and r
     /not a notification preference/i
   );
 });
+
+test('event identity metadata accepts safe versions and UTC Mondays only', () => {
+  assert.deepEqual(
+    notificationService.validateMetadata({
+      goalId: '8',
+      checkinId: '99',
+      eventVersion: '2',
+      reminderWeekStart: '2026-08-24',
+    }),
+    {
+      goalId: 8,
+      checkinId: 99,
+      eventVersion: 2,
+      reminderWeekStart: '2026-08-24',
+    }
+  );
+
+  assert.throws(
+    () => notificationService.validateMetadata({ reminderWeekStart: '2026-08-25' }),
+    /UTC Monday/i
+  );
+  assert.throws(
+    () => notificationService.validateMetadata({ eventVersion: 0 }),
+    /positive integer/i
+  );
+});
+
+test('event identity fields alter deterministic dedupe keys and stored metadata remains private', () => {
+  const first = notificationService.buildDedupeKey('progress_attention', {
+    goalId: 8,
+    checkinId: 99,
+    progressStatus: 'needs_attention',
+    eventVersion: 1,
+  });
+  const revision = notificationService.buildDedupeKey('progress_attention', {
+    goalId: 8,
+    checkinId: 99,
+    progressStatus: 'needs_attention',
+    eventVersion: 2,
+  });
+
+  assert.notEqual(first, revision);
+  assert.deepEqual(
+    notificationService.parseStoredMetadata(JSON.stringify({
+      goalId: 8,
+      eventVersion: 2,
+      reminderWeekStart: '2026-08-24',
+      feedback: 'private text',
+    })),
+    { goalId: 8, eventVersion: 2, reminderWeekStart: '2026-08-24' }
+  );
+});

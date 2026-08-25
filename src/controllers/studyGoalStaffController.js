@@ -7,6 +7,7 @@
  */
 const studyGoalService = require('../services/studyGoalService');
 const authService = require('../services/authService');
+const goalNotificationService = require('../services/goalNotificationService');
 const { boundedString, parsePositiveSafeInteger } = require('../utils/inputValidation');
 
 const MAX_GOALS_PAGE_SIZE = 100;
@@ -53,6 +54,13 @@ function writeAuditEvent(req, { action, resourceType, resourceId, metadata }) {
     ipAddress: req.ip || req.headers?.['x-forwarded-for'] || 'unknown',
     userAgent: req.headers?.['user-agent'],
   });
+}
+
+async function runNotificationEffect(label, identifiers, work) {
+  const [result] = await Promise.allSettled([Promise.resolve().then(work)]);
+  if (result.status === 'rejected') {
+    console.error('[studyGoalStaffNotification]', { label, ...identifiers });
+  }
 }
 
 /**
@@ -147,14 +155,17 @@ async function apiTeacherUpdateGoalFeedback(req, res) {
       });
     }
 
-    const updated = await studyGoalService.updateTeacherFeedbackForGoal(
+    const outcome = await studyGoalService.updateTeacherFeedbackWithOutcome(
       checkInId,
       parsedGoalId.id,
       parsedStudentId.id,
       teacherFeedback
     );
-    if (!updated) {
+    if (!outcome.checkIn) {
       return res.status(404).json({ error: 'Goal check-in not found.' });
+    }
+    if (!outcome.changed) {
+      return res.json({ checkIn: outcome.checkIn, changed: false });
     }
 
     await writeAuditEvent(req, {
@@ -168,8 +179,19 @@ async function apiTeacherUpdateGoalFeedback(req, res) {
       },
     });
 
+    await runNotificationEffect(
+      'teacher_feedback',
+      { studentId: parsedStudentId.id, goalId: parsedGoalId.id, checkInId },
+      () => goalNotificationService.notifyTeacherFeedback({
+        studentId: parsedStudentId.id,
+        goalId: parsedGoalId.id,
+        checkInId,
+        eventVersion: outcome.checkIn.notification_revision || 1,
+      })
+    );
+
     return res.json({
-      checkIn: { ...checkIn, teacher_feedback: teacherFeedback },
+      checkIn: outcome.checkIn,
       changed: true,
     });
   } catch (err) {

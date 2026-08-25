@@ -26,6 +26,8 @@ const ALLOWED_METADATA_FIELDS = new Set([
   'checkinId',
   'progressStatus',
   'deadline',
+  'eventVersion',
+  'reminderWeekStart',
 ]);
 const PREFERENCE_COLUMNS = Object.freeze({
   goal_reminders: 'goal_reminders',
@@ -81,7 +83,7 @@ function isCalendarDate(value) {
 }
 
 function normalizeMetadataValue(key, value) {
-  if (key === 'goalId' || key === 'studentId' || key === 'checkinId') {
+  if (key === 'goalId' || key === 'studentId' || key === 'checkinId' || key === 'eventVersion') {
     return assertPositiveId(value, `metadata.${key}`);
   }
   if (key === 'progressStatus') {
@@ -93,6 +95,12 @@ function normalizeMetadataValue(key, value) {
   if (key === 'deadline') {
     if (!isCalendarDate(value)) {
       throw new TypeError('metadata.deadline must be a valid date.');
+    }
+    return value;
+  }
+  if (key === 'reminderWeekStart') {
+    if (!isCalendarDate(value) || new Date(`${value}T00:00:00.000Z`).getUTCDay() !== 1) {
+      throw new TypeError('metadata.reminderWeekStart must be a UTC Monday date.');
     }
     return value;
   }
@@ -113,7 +121,7 @@ function validateMetadata(metadata) {
   }
 
   const normalized = {};
-  for (const key of ['goalId', 'studentId', 'checkinId', 'progressStatus', 'deadline']) {
+  for (const key of ['goalId', 'studentId', 'checkinId', 'progressStatus', 'deadline', 'eventVersion', 'reminderWeekStart']) {
     if (Object.prototype.hasOwnProperty.call(metadata, key)) {
       normalized[key] = normalizeMetadataValue(key, metadata[key]);
     }
@@ -137,7 +145,7 @@ function parseStoredMetadata(rawMetadata) {
   if (!isPlainObject(parsed)) return {};
 
   const safeMetadata = {};
-  for (const key of ['goalId', 'studentId', 'checkinId', 'progressStatus', 'deadline']) {
+  for (const key of ['goalId', 'studentId', 'checkinId', 'progressStatus', 'deadline', 'eventVersion', 'reminderWeekStart']) {
     if (!Object.prototype.hasOwnProperty.call(parsed, key)) continue;
     try {
       safeMetadata[key] = normalizeMetadataValue(key, parsed[key]);

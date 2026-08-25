@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const express = require('express');
 
 const notificationService = require('../services/notificationService');
+const goalNotificationService = require('../services/goalNotificationService');
 const apiRoutes = require('../routes/apiRoutes');
 const {
   apiDeleteNotification,
@@ -244,6 +245,57 @@ test('notification preference and list database failures return safe error respo
     assert.deepEqual(listResponse.body, { error: 'Failed to load notifications.' });
   } finally {
     Object.assign(notificationService, originals);
+    console.error = originalConsoleError;
+  }
+});
+
+test('notification reads synchronize only the authenticated student and preserve reads on sync failure', async () => {
+  const notificationOriginals = preserve(notificationService, [
+    'listNotifications',
+    'countUnreadNotifications',
+  ]);
+  const eventOriginals = preserve(goalNotificationService, ['syncStudentGoalReminders']);
+  const originalConsoleError = console.error;
+  const syncCalls = [];
+  let listCalls = 0;
+  let countCalls = 0;
+  goalNotificationService.syncStudentGoalReminders = async (event) => {
+    syncCalls.push(event);
+  };
+  notificationService.listNotifications = async () => {
+    listCalls += 1;
+    return { notifications: [], total: 0, page: 1, size: 20, totalPages: 0 };
+  };
+  notificationService.countUnreadNotifications = async () => {
+    countCalls += 1;
+    return 3;
+  };
+
+  try {
+    const studentRequest = createRequest({ user: { id: 5, role: 'student', studentId: 42 } });
+    await apiListNotifications(studentRequest, createResponse());
+    await apiUnreadNotificationCount(studentRequest, createResponse());
+    assert.deepEqual(syncCalls, [
+      { userId: 5, studentId: 42 },
+      { userId: 5, studentId: 42 },
+    ]);
+    assert.equal(listCalls, 1);
+    assert.equal(countCalls, 1);
+
+    await apiListNotifications(createRequest({ user: { id: 6, role: 'teacher', studentId: 42 } }), createResponse());
+    assert.equal(syncCalls.length, 2);
+
+    goalNotificationService.syncStudentGoalReminders = () => {
+      throw new Error('notification database unavailable');
+    };
+    console.error = () => {};
+    const failureResponse = createResponse();
+    await apiListNotifications(studentRequest, failureResponse);
+    assert.equal(failureResponse.statusCode, 200);
+    assert.equal(listCalls, 3);
+  } finally {
+    Object.assign(notificationService, notificationOriginals);
+    Object.assign(goalNotificationService, eventOriginals);
     console.error = originalConsoleError;
   }
 });

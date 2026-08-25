@@ -87,3 +87,74 @@ test('admin goal pagination binds student ID, size, and offset', async () => {
   assert.deepEqual(pageCall.params, [42, 20, 40]);
   assert.deepEqual(countCall.params, [42]);
 });
+
+test('weekly check-in initialization upgrades existing tables with a notification revision', async () => {
+  const calls = [];
+  pool.query = async (sql, params) => {
+    calls.push({ sql, params });
+    return [{}];
+  };
+
+  await studyGoalService.ensureWeeklyCheckinsTable();
+
+  assert.equal(calls.length, 2);
+  assert.match(calls[0].sql, /notification_revision INT UNSIGNED NOT NULL DEFAULT 1/i);
+  assert.match(calls[1].sql, /ALTER TABLE weekly_checkins/i);
+  assert.match(calls[1].sql, /ADD COLUMN IF NOT EXISTS notification_revision/i);
+});
+
+test('check-in updates increment the persisted notification revision', async () => {
+  let call;
+  pool.query = async (sql, params) => {
+    call = { sql, params };
+    return [{ affectedRows: 1 }];
+  };
+
+  const updated = await studyGoalService.updateCheckIn(99, { studyHours: 8 });
+
+  assert.equal(updated, true);
+  assert.match(call.sql, /study_hours = \?/i);
+  assert.match(call.sql, /notification_revision = notification_revision \+ 1/i);
+  assert.deepEqual(call.params, [8, 99]);
+});
+
+test('teacher feedback outcome increments revisions only for changed feedback and reloads the scoped row', async () => {
+  const calls = [];
+  pool.query = async (sql, params) => {
+    calls.push({ sql, params });
+    if (/UPDATE weekly_checkins/i.test(sql)) return [{ affectedRows: 1 }];
+    return [[{ id: 99, goal_id: 8, notification_revision: 3, teacher_feedback: 'Fresh feedback' }]];
+  };
+
+  const outcome = await studyGoalService.updateTeacherFeedbackWithOutcome(
+    99,
+    8,
+    42,
+    'Fresh feedback'
+  );
+
+  assert.equal(outcome.changed, true);
+  assert.equal(outcome.checkIn.notification_revision, 3);
+  assert.match(calls[0].sql, /teacher_feedback = \?/i);
+  assert.match(calls[0].sql, /notification_revision = weekly_checkins\.notification_revision \+ 1/i);
+  assert.match(calls[0].sql, /NOT \(weekly_checkins\.teacher_feedback <=> \?\)/i);
+  assert.deepEqual(calls[0].params, ['Fresh feedback', 99, 8, 42, 'Fresh feedback']);
+  assert.match(calls[1].sql, /weekly_checkins\.id = \?/i);
+  assert.deepEqual(calls[1].params, [99, 8, 42]);
+});
+
+test('active reminder candidate query is parameterized, ordered, and bounded', async () => {
+  let call;
+  pool.query = async (sql, params) => {
+    call = { sql, params };
+    return [[{ id: 8, student_id: 42, deadline: '2026-08-26' }]];
+  };
+
+  const goals = await studyGoalService.getActiveGoalReminderCandidates(42, { limit: 11 });
+
+  assert.equal(goals.length, 1);
+  assert.match(call.sql, /WHERE student_id = \? AND status = 'active'/i);
+  assert.match(call.sql, /ORDER BY deadline IS NULL ASC, deadline ASC, id ASC/i);
+  assert.match(call.sql, /LIMIT \?/i);
+  assert.deepEqual(call.params, [42, 11]);
+});

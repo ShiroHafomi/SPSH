@@ -5,6 +5,7 @@
  * in-app notifications and per-user notification preferences.
  */
 const notificationService = require('../services/notificationService');
+const goalNotificationService = require('../services/goalNotificationService');
 const { parsePositiveSafeInteger } = require('../utils/inputValidation');
 
 const LIST_QUERY_FIELDS = new Set(['page', 'size', 'status', 'type']);
@@ -44,12 +45,29 @@ function parseListQuery(query) {
   }
 }
 
+async function syncStudentReminders(req) {
+  if (req.user?.role !== 'student') return;
+
+  const userId = parsePositiveSafeInteger(req.user.id);
+  const studentId = parsePositiveSafeInteger(req.user.studentId);
+  if (userId === null || studentId === null) return;
+
+  const [result] = await Promise.allSettled([
+    Promise.resolve().then(() => goalNotificationService.syncStudentGoalReminders({ userId, studentId })),
+  ]);
+  if (result.status === 'rejected') {
+    console.error('[notificationReminderSync]', { userId, studentId });
+  }
+}
+
 /**
  * GET /api/notifications
  */
 async function apiListNotifications(req, res) {
   const parsedQuery = parseListQuery(req.query || {});
   if (parsedQuery.error) return res.status(400).json({ error: parsedQuery.error });
+
+  await syncStudentReminders(req);
 
   try {
     const result = await notificationService.listNotifications(req.user.id, parsedQuery.options);
@@ -64,6 +82,8 @@ async function apiListNotifications(req, res) {
  * GET /api/notifications/unread-count
  */
 async function apiUnreadNotificationCount(req, res) {
+  await syncStudentReminders(req);
+
   try {
     const unreadCount = await notificationService.countUnreadNotifications(req.user.id);
     return res.json({ unreadCount });

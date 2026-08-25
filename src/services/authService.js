@@ -6,6 +6,7 @@ const bcrypt = require('bcryptjs');
 const { pool } = require('../config/db');
 const { revokeAllUserSessions } = require('./authSessionService');
 const { sanitizeAuditMetadata } = require('../utils/auditSanitizer');
+const { parsePositiveSafeInteger } = require('../utils/inputValidation');
 
 const SALT_ROUNDS = 12;
 const VALID_ROLES = ['admin', 'teacher', 'student'];
@@ -119,6 +120,28 @@ async function findById(id) {
     [id]
   );
   return rows.length ? rows[0] : null;
+}
+
+/**
+ * Resolve a notification recipient only when one active student account maps to
+ * the internal student record. The non-unique legacy linkage is intentionally
+ * treated as ambiguous rather than guessing a recipient.
+ */
+async function findUniqueActiveStudentUserId(studentId) {
+  const safeStudentId = parsePositiveSafeInteger(studentId);
+  if (safeStudentId === null) return null;
+
+  const [rows] = await pool.query(
+    `SELECT id
+     FROM users
+     WHERE student_id = ? AND role = ? AND is_active = ?
+     ORDER BY id ASC
+     LIMIT 2`,
+    [safeStudentId, 'student', 1]
+  );
+
+  if (rows.length !== 1) return null;
+  return parsePositiveSafeInteger(rows[0]?.id);
 }
 
 /**
@@ -389,6 +412,7 @@ module.exports = {
   registerUser,
   loginUser,
   findById,
+  findUniqueActiveStudentUserId,
   getUserById,
   getUserByEmail,
   emailExists,
