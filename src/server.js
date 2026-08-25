@@ -7,6 +7,7 @@ const { createApp } = require('./app');
 const { ensureReady } = require('./config/db');
 const { ensureUsersTable, ensureAuditLogsTable } = require('./services/authService');
 const { ensureAuthSessionsTable } = require('./services/authSessionService');
+const { ensureStudyGoalsTable, ensureWeeklyCheckinsTable } = require('./services/studyGoalService');
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -39,6 +40,22 @@ async function main() {
     console.log('   Audit logs table: ready');
   } catch (err) {
     console.error('   Audit logs table: FAILED —', err.message);
+  }
+
+  // Auto-create the study_goals table
+  try {
+    await ensureStudyGoalsTable();
+    console.log('   Study goals table: ready');
+  } catch (err) {
+    console.error('   Study goals table: FAILED —', err.message);
+  }
+
+  // Auto-create the weekly_checkins table
+  try {
+    await ensureWeeklyCheckinsTable();
+    console.log('   Weekly checkins table: ready');
+  } catch (err) {
+    console.error('   Weekly checkins table: FAILED —', err.message);
   }
 
   if (!dbReady) {

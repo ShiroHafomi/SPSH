@@ -74,6 +74,19 @@ const {
   apiStudentUpdateProfile,
 } = require('../controllers/studentController');
 
+// Study Goals
+const {
+  apiListGoals,
+  apiCreateGoal,
+  apiGetGoal,
+  apiUpdateGoal,
+  apiDeleteGoal,
+  apiListCheckIns,
+  apiCreateCheckIn,
+  apiUpdateCheckIn,
+  apiDeleteCheckIn,
+} = require('../controllers/studyGoalController');
+
 const router = express.Router();
 const authenticatedLimit = (limiter) => rateLimitMiddleware(limiter, {
   keyGenerator: authenticatedRateLimitKey,
@@ -184,6 +197,19 @@ studentRouter.get(
   authenticatedLimit(studentAiLimiter),
   apiStudentAdvisor
 );
+
+// Study Goals
+studentRouter.get('/me/goals', apiListGoals);
+studentRouter.post('/me/goals', apiCreateGoal);
+studentRouter.get('/me/goals/:goalId', apiGetGoal);
+studentRouter.put('/me/goals/:goalId', apiUpdateGoal);
+studentRouter.delete('/me/goals/:goalId', apiDeleteGoal);
+
+// Weekly Check-ins
+studentRouter.get('/me/goals/:goalId/checkins', apiListCheckIns);
+studentRouter.post('/me/goals/:goalId/checkins', apiCreateCheckIn);
+studentRouter.put('/me/goals/:goalId/checkins/:checkinId', apiUpdateCheckIn);
+studentRouter.delete('/me/goals/:goalId/checkins/:checkinId', apiDeleteCheckIn);
 
 router.use('/student', studentRouter);
 
