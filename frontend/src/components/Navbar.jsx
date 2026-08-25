@@ -6,6 +6,7 @@ import { useAuth, homeForRole } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
 import { useLanguage } from '../hooks/useLanguage';
 import { Link, useLocation } from 'react-router-dom';
+import { NotificationBell } from './NotificationBell';
 import {
   Button,
   Avatar,
@@ -127,6 +128,8 @@ export function Navbar() {
               </Link>
             ))}
           </div>
+
+          <NotificationBell />
 
           {/* User Info + Menu */}
           <Dropdown
