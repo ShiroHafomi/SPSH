@@ -46,6 +46,7 @@ async function ensureWeeklyCheckinsTable() {
       current_score DECIMAL(5,2) NULL,
       student_note TEXT NULL,
       teacher_feedback TEXT NULL,
+      notification_revision INT UNSIGNED NOT NULL DEFAULT 1,
       week_start DATE NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -56,6 +57,11 @@ async function ensureWeeklyCheckinsTable() {
       UNIQUE KEY uk_goal_week (goal_id, week_start)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
+  await pool.query(
+    `ALTER TABLE weekly_checkins
+     ADD COLUMN IF NOT EXISTS notification_revision INT UNSIGNED NOT NULL DEFAULT 1
+     AFTER teacher_feedback`
+  );
 }
 
 /**
@@ -218,6 +224,23 @@ async function getActiveGoalByStudent(studentId) {
 }
 
 /**
+ * Get a deterministic, bounded set of active goals for on-demand reminder sync.
+ * Callers request one more than their processing cap so they can report truncation
+ * without ever scanning the rest of the student's goals.
+ */
+async function getActiveGoalReminderCandidates(studentId, { limit }) {
+  const [rows] = await pool.query(
+    `SELECT id, student_id, deadline
+     FROM study_goals
+     WHERE student_id = ? AND status = 'active'
+     ORDER BY deadline IS NULL ASC, deadline ASC, id ASC
+     LIMIT ?`,
+    [studentId, limit]
+  );
+  return rows;
+}
+
+/**
  * Create a weekly check-in.
  * @param {Object} opts - { goalId, studyHours, sleepHours, attendancePercent, currentScore, studentNote, teacherFeedback, weekStart }
  * @returns {Promise<Object>} Created check-in
@@ -238,6 +261,7 @@ async function createCheckIn({ goalId, studyHours, sleepHours, attendancePercent
     current_score: currentScore,
     student_note: studentNote,
     teacher_feedback: teacherFeedback,
+    notification_revision: 1,
     week_start: weekStart,
   };
 }
@@ -304,6 +328,30 @@ async function updateTeacherFeedbackForGoal(checkInId, goalId, studentId, teache
 }
 
 /**
+ * Update teacher feedback only when its persisted value changes, then load the
+ * fresh scoped record so callers receive its authoritative revision and timestamps.
+ */
+async function updateTeacherFeedbackWithOutcome(checkInId, goalId, studentId, teacherFeedback) {
+  const [result] = await pool.query(
+    `UPDATE weekly_checkins
+     INNER JOIN study_goals ON study_goals.id = weekly_checkins.goal_id
+     SET weekly_checkins.teacher_feedback = ?,
+         weekly_checkins.notification_revision = weekly_checkins.notification_revision + 1
+     WHERE weekly_checkins.id = ?
+       AND weekly_checkins.goal_id = ?
+       AND study_goals.student_id = ?
+       AND NOT (weekly_checkins.teacher_feedback <=> ?)`,
+    [teacherFeedback, checkInId, goalId, studentId, teacherFeedback]
+  );
+
+  const checkIn = await getCheckInByIdForGoalAndStudent(checkInId, goalId, studentId);
+  return {
+    checkIn,
+    changed: result.affectedRows > 0,
+  };
+}
+
+/**
  * Get check-in by goal and week.
  * @param {number} goalId
  * @param {string} weekStart - Date in YYYY-MM-DD format
@@ -356,6 +404,7 @@ async function updateCheckIn(checkInId, updates) {
     return false;
   }
 
+  fields.push('notification_revision = notification_revision + 1');
   values.push(checkInId);
 
   const [result] = await pool.query(
@@ -568,6 +617,7 @@ module.exports = {
   getGoalsWithProgressByStudent,
   getGoalWithProgressForStudent,
   getActiveGoalByStudent,
+  getActiveGoalReminderCandidates,
   updateGoal,
   deleteGoal,
   createCheckIn,
@@ -577,6 +627,7 @@ module.exports = {
   getCheckInsByGoal,
   updateCheckIn,
   updateTeacherFeedbackForGoal,
+  updateTeacherFeedbackWithOutcome,
   deleteCheckIn,
   getGoalProgress,
   validateGoalData,

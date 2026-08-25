@@ -3,7 +3,15 @@
  * All endpoints require student authentication and proper authorization.
  */
 const studyGoalService = require('../services/studyGoalService');
+const goalNotificationService = require('../services/goalNotificationService');
 const { logAuditEvent } = require('../services/authService');
+
+async function runNotificationEffect(label, identifiers, work) {
+  const [result] = await Promise.allSettled([Promise.resolve().then(work)]);
+  if (result.status === 'rejected') {
+    console.error('[studyGoalNotification]', { label, ...identifiers });
+  }
+}
 
 /**
  * Validate that a positive safe-integer ID was provided.
@@ -242,6 +250,16 @@ async function apiUpdateGoal(req, res) {
       userAgent: req.headers['user-agent'],
     });
 
+    if (existingGoal.status !== 'completed'
+        && status === 'completed'
+        && updatedGoal?.status === 'completed') {
+      await runNotificationEffect(
+        'goal_completed',
+        { userId: req.user.id, studentId, goalId },
+        () => goalNotificationService.notifyGoalCompleted({ userId: req.user.id, goalId })
+      );
+    }
+
     res.json({ goal: updatedGoal });
   } catch (err) {
     console.error('[apiUpdateGoal]', err);
@@ -414,8 +432,19 @@ async function apiCreateCheckIn(req, res) {
       resourceId: checkIn.id,
       metadata: { studentId, goalId, weekStart: checkIn.week_start },
       ipAddress: req.ip || req.headers['x-forwarded-for'] || 'unknown',
-      userAgent: req.headers['user-agent'],
     });
+
+    await runNotificationEffect(
+      'progress_attention',
+      { userId: req.user.id, studentId, goalId, checkInId: checkIn.id },
+      () => goalNotificationService.notifyProgressAttention({
+        userId: req.user.id,
+        studentId,
+        goalId,
+        checkInId: checkIn.id,
+        eventVersion: checkIn.notification_revision || 1,
+      })
+    );
 
     res.status(201).json({ checkIn });
   } catch (err) {
@@ -545,6 +574,18 @@ async function apiUpdateCheckIn(req, res) {
       ipAddress: req.ip || req.headers['x-forwarded-for'] || 'unknown',
       userAgent: req.headers['user-agent'],
     });
+
+    await runNotificationEffect(
+      'progress_attention',
+      { userId: req.user.id, studentId, goalId, checkInId },
+      () => goalNotificationService.notifyProgressAttention({
+        userId: req.user.id,
+        studentId,
+        goalId,
+        checkInId,
+        eventVersion: updatedCheckIn?.notification_revision || 1,
+      })
+    );
 
     res.json({ checkIn: updatedCheckIn });
   } catch (err) {

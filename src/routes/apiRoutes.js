@@ -9,6 +9,7 @@ const {
   adminBulkAiLimiter,
   authenticatedRateLimitKey,
   loginLimiter,
+  notificationMutationLimiter,
   predictionLimiter,
   rateLimitMiddleware,
   refreshLimiter,
@@ -94,6 +95,17 @@ const {
   apiTeacherUpdateGoalFeedback,
 } = require('../controllers/studyGoalStaffController');
 
+// Notifications
+const {
+  apiDeleteNotification,
+  apiGetNotificationPreferences,
+  apiListNotifications,
+  apiMarkAllNotificationsRead,
+  apiMarkNotificationRead,
+  apiUnreadNotificationCount,
+  apiUpdateNotificationPreferences,
+} = require('../controllers/notificationController');
+
 const router = express.Router();
 const authenticatedLimit = (limiter) => rateLimitMiddleware(limiter, {
   keyGenerator: authenticatedRateLimitKey,
@@ -107,6 +119,35 @@ router.post('/auth/register', rateLimitMiddleware(registerLimiter), apiRegister)
 
 // ─── Auth (requires auth) ────────────────────────────────────────────────────
 router.get('/auth/me', sessionAuth, apiMe);
+
+// ─── Notifications (authenticated users, own resources only) ─────────────────
+router.get('/notifications', requireAuth, apiListNotifications);
+router.get('/notifications/unread-count', requireAuth, apiUnreadNotificationCount);
+router.put(
+  '/notifications/read-all',
+  requireAuth,
+  authenticatedLimit(notificationMutationLimiter),
+  apiMarkAllNotificationsRead
+);
+router.get('/notifications/preferences', requireAuth, apiGetNotificationPreferences);
+router.put(
+  '/notifications/preferences',
+  requireAuth,
+  authenticatedLimit(notificationMutationLimiter),
+  apiUpdateNotificationPreferences
+);
+router.put(
+  '/notifications/:notificationId/read',
+  requireAuth,
+  authenticatedLimit(notificationMutationLimiter),
+  apiMarkNotificationRead
+);
+router.delete(
+  '/notifications/:notificationId',
+  requireAuth,
+  authenticatedLimit(notificationMutationLimiter),
+  apiDeleteNotification
+);
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
 router.get('/dashboard/stats', requireAuth, apiDashboardStats);

@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 
 const studyGoalService = require('../services/studyGoalService');
 const authService = require('../services/authService');
+const goalNotificationService = require('../services/goalNotificationService');
 const { requireRole } = require('../middleware/auth');
 const {
   apiAdminListStudentGoals,
@@ -142,25 +143,39 @@ test('staff controllers reject invalid route IDs before service calls', async ()
   }
 });
 
-test('teacher feedback updates only a securely resolved check-in and writes an audit event', async () => {
+test('teacher feedback updates only a securely resolved check-in, writes an audit event, and emits a private event', async () => {
   const serviceOriginals = preserve(studyGoalService, [
     'getCheckInByIdForGoalAndStudent',
-    'updateTeacherFeedbackForGoal',
+    'updateTeacherFeedbackWithOutcome',
   ]);
   const authOriginals = preserve(authService, ['logAuditEvent']);
+  const notificationOriginals = preserve(goalNotificationService, ['notifyTeacherFeedback']);
   let lookupArgs = null;
   let updateArgs = null;
   let auditEvent = null;
+  let notificationEvent = null;
   studyGoalService.getCheckInByIdForGoalAndStudent = async (...args) => {
     lookupArgs = args;
-    return { id: 99, goal_id: 8, teacher_feedback: null };
+    return { id: 99, goal_id: 8, teacher_feedback: null, notification_revision: 2 };
   };
-  studyGoalService.updateTeacherFeedbackForGoal = async (...args) => {
+  studyGoalService.updateTeacherFeedbackWithOutcome = async (...args) => {
     updateArgs = args;
-    return true;
+    return {
+      changed: true,
+      checkIn: {
+        id: 99,
+        goal_id: 8,
+        teacher_feedback: 'Keep up the consistent work.',
+        notification_revision: 3,
+        updated_at: '2026-08-25 10:00:00',
+      },
+    };
   };
   authService.logAuditEvent = async (event) => {
     auditEvent = event;
+  };
+  goalNotificationService.notifyTeacherFeedback = async (event) => {
+    notificationEvent = event;
   };
 
   try {
@@ -175,12 +190,88 @@ test('teacher feedback updates only a securely resolved check-in and writes an a
     assert.deepEqual(updateArgs, [99, 8, 42, 'Keep up the consistent work.']);
     assert.equal(res.body.changed, true);
     assert.equal(res.body.checkIn.teacher_feedback, 'Keep up the consistent work.');
+    assert.equal(res.body.checkIn.notification_revision, 3);
     assert.equal(auditEvent.action, 'UPDATE_CHECKIN_FEEDBACK');
     assert.equal(auditEvent.resourceId, 99);
     assert.deepEqual(auditEvent.metadata, { studentId: 42, goalId: 8, feedbackChanged: true });
+    assert.deepEqual(notificationEvent, {
+      studentId: 42,
+      goalId: 8,
+      checkInId: 99,
+      eventVersion: 3,
+    });
   } finally {
     restore(studyGoalService, serviceOriginals);
     restore(authService, authOriginals);
+    restore(goalNotificationService, notificationOriginals);
+  }
+});
+
+test('teacher feedback does not notify when the persisted value is unchanged', async () => {
+  const serviceOriginals = preserve(studyGoalService, [
+    'getCheckInByIdForGoalAndStudent',
+    'updateTeacherFeedbackWithOutcome',
+  ]);
+  const notificationOriginals = preserve(goalNotificationService, ['notifyTeacherFeedback']);
+  let events = 0;
+  studyGoalService.getCheckInByIdForGoalAndStudent = async () => ({
+    id: 99,
+    goal_id: 8,
+    teacher_feedback: null,
+  });
+  studyGoalService.updateTeacherFeedbackWithOutcome = async () => ({
+    changed: false,
+    checkIn: { id: 99, goal_id: 8, teacher_feedback: 'Already saved.' },
+  });
+  goalNotificationService.notifyTeacherFeedback = async () => { events += 1; };
+
+  try {
+    const res = createResponse();
+    await apiTeacherUpdateGoalFeedback(createRequest({
+      body: { checkin_id: 99, teacher_feedback: 'Changed concurrently.' },
+    }), res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.changed, false);
+    assert.equal(events, 0);
+  } finally {
+    restore(studyGoalService, serviceOriginals);
+    restore(goalNotificationService, notificationOriginals);
+  }
+});
+
+test('teacher feedback retains its successful response when notification delivery fails', async () => {
+  const serviceOriginals = preserve(studyGoalService, [
+    'getCheckInByIdForGoalAndStudent',
+    'updateTeacherFeedbackWithOutcome',
+  ]);
+  const authOriginals = preserve(authService, ['logAuditEvent']);
+  const notificationOriginals = preserve(goalNotificationService, ['notifyTeacherFeedback']);
+  const originalConsoleError = console.error;
+  studyGoalService.getCheckInByIdForGoalAndStudent = async () => ({ id: 99, goal_id: 8, teacher_feedback: null });
+  studyGoalService.updateTeacherFeedbackWithOutcome = async () => ({
+    changed: true,
+    checkIn: { id: 99, goal_id: 8, notification_revision: 3 },
+  });
+  authService.logAuditEvent = async () => {};
+  goalNotificationService.notifyTeacherFeedback = () => {
+    throw new Error('notification storage unavailable');
+  };
+  console.error = () => {};
+
+  try {
+    const res = createResponse();
+    await apiTeacherUpdateGoalFeedback(createRequest({
+      body: { checkin_id: 99, teacher_feedback: 'Keep going.' },
+    }), res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.changed, true);
+  } finally {
+    restore(studyGoalService, serviceOriginals);
+    restore(authService, authOriginals);
+    restore(goalNotificationService, notificationOriginals);
+    console.error = originalConsoleError;
   }
 });
 

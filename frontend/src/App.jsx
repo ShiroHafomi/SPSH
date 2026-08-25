@@ -1,9 +1,10 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './hooks/useAuth';
+import { AuthProvider, useAuth } from './hooks/useAuth';
 import { ThemeProvider } from './hooks/useTheme';
 import { LanguageProvider } from './hooks/useLanguage';
 import { FlashProvider } from './components/FlashProvider';
 import { ToastProvider } from './components/ui/Toast';
+import { NotificationProvider } from './hooks/useNotifications';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { MainLayout } from './components/MainLayout';
 import { AdminLayout } from './components/AdminLayout';
@@ -25,6 +26,7 @@ import AdminAtRisk from './pages/AdminAtRisk';
 import AdminAITools from './pages/AdminAITools';
 import StudentGoals from './pages/StudentGoals';
 import StudentGoalsProgress from './pages/StudentGoalsProgress';
+import Notifications from './pages/Notifications';
 
 /**
  * Routing map
@@ -35,9 +37,21 @@ import StudentGoalsProgress from './pages/StudentGoalsProgress';
  * under <MainLayout/>, which owns the floating Navbar + padded content column.
  * Login is public and full-screen (no navbar).
  */
+function NotificationRedirect() {
+  const { user } = useAuth();
+  const destination = {
+    student: '/student/notifications',
+    teacher: '/teacher/notifications',
+    admin: '/admin/notifications',
+  }[user?.role] || '/dashboard';
+
+  return <Navigate to={destination} replace />;
+}
+
 function App() {
   return (
     <AuthProvider>
+      <NotificationProvider>
       <ThemeProvider>
         <LanguageProvider>
           <FlashProvider>
@@ -59,6 +73,7 @@ function App() {
                 <Route path="/admin/at-risk" element={<AdminAtRisk />} />
                 <Route path="/admin/ai-tools" element={<AdminAITools />} />
                 <Route path="/admin/users" element={<AdminUsers />} />
+                <Route path="/admin/notifications" element={<Notifications />} />
               </Route>
 
               {/* Teacher routes - Teacher or Admin (own sidebar + header) */}
@@ -75,6 +90,15 @@ function App() {
                 <Route path="/teacher/at-risk" element={<AdminAtRisk />} />
               </Route>
 
+              {/* Teacher notification center - Teacher only (own sidebar + header) */}
+              <Route element={
+                <ProtectedRoute roles={['teacher']}>
+                  <TeacherLayout />
+                </ProtectedRoute>
+              }>
+                <Route path="/teacher/notifications" element={<Notifications />} />
+              </Route>
+
               {/* Student routes - Student only (own sidebar + header) */}
               <Route element={
                 <ProtectedRoute roles={['student']}>
@@ -83,6 +107,7 @@ function App() {
               }>
                 <Route path="/student" element={<StudentDashboard />} />
                 <Route path="/goals" element={<StudentGoals />} />
+                <Route path="/student/notifications" element={<Notifications />} />
               </Route>
 
               {/* Shared routes - any authenticated user (floating Navbar via MainLayout) */}
@@ -107,6 +132,15 @@ function App() {
                 <Route path="/students/:id/edit" element={<StudentForm />} />
               </Route>
 
+              <Route
+                path="/notifications"
+                element={(
+                  <ProtectedRoute>
+                    <NotificationRedirect />
+                  </ProtectedRoute>
+                )}
+              />
+
               {/* Default redirects based on role */}
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
@@ -115,6 +149,7 @@ function App() {
           </FlashProvider>
         </LanguageProvider>
       </ThemeProvider>
+      </NotificationProvider>
     </AuthProvider>
   );
 }

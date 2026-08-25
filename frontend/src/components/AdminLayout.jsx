@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useLanguage } from '../hooks/useLanguage';
+import { NotificationBell } from './NotificationBell';
 
 export function AdminLayout() {
   const { t } = useLanguage();
@@ -90,6 +91,20 @@ export function AdminLayout() {
               </svg>
               {t('admin.userManagement')}
             </Link>
+            <Link
+              to="/admin/notifications"
+              className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${
+                location.pathname === '/admin/notifications'
+                  ? 'bg-primary-100 text-primary-800 dark:bg-primary-900/40 dark:text-primary-200'
+                  : 'text-primary-600 dark:text-gray-400 hover:bg-primary-50 dark:hover:bg-gray-800 hover:text-primary-700 dark:hover:text-gray-200'
+              }`}
+              onClick={closeSidebar}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" />
+              </svg>
+              {t('notifications.title')}
+            </Link>
           </nav>
 
           {/* Footer */}
@@ -128,7 +143,7 @@ export function AdminLayout() {
               </button>
               <h1 className="text-xl font-bold text-primary-950 dark:text-gray-100">Admin Dashboard</h1>
             </div>
-            <div aria-hidden="true" className="hidden sm:block w-10" />
+            <NotificationBell />
           </div>
         </header>
         <div className="p-6 lg:p-8">

@@ -169,6 +169,11 @@ const adminBulkAiLimiter = configuredLimiter('RATE_LIMIT_ADMIN_BULK_AI', {
   max: 5,
   devMax: 100,
 });
+const notificationMutationLimiter = configuredLimiter('RATE_LIMIT_NOTIFICATION_MUTATION', {
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  devMax: 500,
+});
 
 function requestIp(req) {
   return req.ip || req.socket?.remoteAddress || 'unknown';
@@ -213,6 +218,7 @@ module.exports = {
   authenticatedRateLimitKey,
   createRateLimiter,
   loginLimiter,
+  notificationMutationLimiter,
   predictionLimiter,
   rateLimitMiddleware,
   refreshLimiter,
