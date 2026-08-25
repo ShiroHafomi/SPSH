@@ -5,6 +5,7 @@
 const studentService = require('../services/studentService');
 const authService = require('../services/authService');
 const mlService = require('../services/mlService');
+const predictionHistoryService = require('../services/predictionHistoryService');
 const { getDisplayColumns, getSchemaMap, loadSchemaMap } = require('../utils/schemaMap');
 const { buildColumnSets } = require('../utils/columns');
 const { buildChartConfig } = require('../utils/chartConfig');
@@ -375,7 +376,29 @@ async function apiPredict(req, res) {
 
   try {
     const validated = validatePredictionProfile(input);
+
+    // Start latency timer
+    const startTime = process.hrtime.bigint();
+
+    // Run ML inference
     const result = await mlService.predict(validated);
+
+    // Stop latency timer
+    const endTime = process.hrtime.bigint();
+    const latencyMs = Number(endTime - startTime) / 1000000; // convert nanoseconds to milliseconds
+
+    // Record prediction event (only after successful inference)
+    try {
+      await predictionHistoryService.recordPredictionEvent(validated, {
+        predictionKind: 'prediction',
+        actorUserId: req.user?.id ?? null,
+        latencyMs
+      });
+    } catch (historyErr) {
+      // Log history error but don't fail the prediction
+      console.error('[apiPredict] Failed to record prediction history:', historyErr.message);
+    }
+
     res.json(result);
   } catch (err) {
     if (err instanceof TypeError || err instanceof RangeError) {
@@ -422,8 +445,31 @@ async function apiFeedback(req, res) {
 
   try {
     const validated = validatePredictionProfile(input);
+
+    // Start latency timer
+    const startTime = process.hrtime.bigint();
+
+    // Run ML inference
     const prediction = await mlService.predict(validated);
+
+    // Stop latency timer
+    const endTime = process.hrtime.bigint();
+    const latencyMs = Number(endTime - startTime) / 1000000; // convert nanoseconds to milliseconds
+
+    // Generate feedback
     const feedback = generateFeedback(input, prediction);
+
+    // Record prediction event (only after successful inference)
+    try {
+      await predictionHistoryService.recordPredictionEvent(validated, {
+        predictionKind: 'feedback',
+        actorUserId: req.user?.id ?? null,
+        latencyMs
+      });
+    } catch (historyErr) {
+      // Log history error but don't fail the prediction
+      console.error('[apiFeedback] Failed to record prediction history:', historyErr.message);
+    }
 
     res.json({
       final_score: prediction.final_score,
