@@ -8,6 +8,7 @@ const { ensureReady } = require('./config/db');
 const { ensureUsersTable, ensureAuditLogsTable } = require('./services/authService');
 const { ensureAuthSessionsTable } = require('./services/authSessionService');
 const { ensureStudyGoalsTable, ensureWeeklyCheckinsTable } = require('./services/studyGoalService');
+const { ensureNotificationTables } = require('./services/notificationService');
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -56,6 +57,14 @@ async function main() {
     console.log('   Weekly checkins table: ready');
   } catch (err) {
     console.error('   Weekly checkins table: FAILED —', err.message);
+  }
+
+  // Auto-create notification storage after the users table dependency.
+  try {
+    await ensureNotificationTables();
+    console.log('   Notification tables: ready');
+  } catch (err) {
+    console.error('   Notification tables: FAILED —', err.message);
   }
 
   if (!dbReady) {
