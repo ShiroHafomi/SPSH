@@ -4,25 +4,10 @@
  */
 const studyGoalService = require('../services/studyGoalService');
 const { logAuditEvent } = require('../services/authService');
+const { parsePositiveSafeInteger } = require('../utils/inputValidation');
 
-/**
- * Validate that a positive safe-integer ID was provided.
- */
-function validateId(id) {
-  if (typeof id === 'string') {
-    const parsed = parseInt(id, 10);
-    if (!Number.isSafeInteger(parsed) || parsed <= 0) {
-      return null;
-    }
-    return parsed;
-  }
-  if (typeof id === 'number') {
-    if (!Number.isSafeInteger(id) || id <= 0) {
-      return null;
-    }
-    return id;
-  }
-  return null;
+function isDuplicateCheckInError(err) {
+  return err?.code === 'ER_DUP_ENTRY';
 }
 
 /**
@@ -80,6 +65,7 @@ async function apiCreateGoal(req, res) {
     }
 
     const { target_score, target_grade, target_study_hours, target_attendance, deadline, status } = req.body || {};
+    const goalStatus = status === undefined ? 'active' : status;
 
     // Validate input
     const validationErrors = studyGoalService.validateGoalData({
@@ -87,32 +73,24 @@ async function apiCreateGoal(req, res) {
       targetGrade: target_grade,
       targetStudyHours: target_study_hours,
       targetAttendance: target_attendance,
-      deadline: deadline,
-      status: status || 'active',
+      deadline,
+      status: goalStatus,
     });
 
     if (validationErrors.length) {
       return res.status(400).json({ error: validationErrors[0], errors: validationErrors });
     }
 
-    // Check for existing active goal (only one active goal per student)
-    const existingActiveGoal = await studyGoalService.getActiveGoalByStudent(studentId);
-    if (existingActiveGoal) {
-      return res.status(400).json({
-        error: 'Cannot create a new active goal. You already have an active goal.',
-        code: 'ACTIVE_GOAL_EXISTS',
-      });
-    }
-
-    // Create the goal
-    const goal = await studyGoalService.createGoal({
+    // Create the goal through a transaction that serializes active-goal checks
+    // for this student, preventing concurrent create requests from bypassing it.
+    const goal = await studyGoalService.createGoalForStudent({
       studentId,
       targetScore: target_score,
       targetGrade: target_grade,
       targetStudyHours: target_study_hours,
       targetAttendance: target_attendance,
-      deadline: deadline,
-      status: status || 'active',
+      deadline,
+      status: goalStatus,
     });
 
     // Log audit event
@@ -128,8 +106,14 @@ async function apiCreateGoal(req, res) {
 
     res.status(201).json({ goal });
   } catch (err) {
+    if (err?.code === 'ACTIVE_GOAL_EXISTS') {
+      return res.status(400).json({
+        error: 'Cannot create a new active goal. You already have an active goal.',
+        code: 'ACTIVE_GOAL_EXISTS',
+      });
+    }
     console.error('[apiCreateGoal]', err);
-    res.status(500).json({ error: 'Failed to create goal.' });
+    return res.status(500).json({ error: 'Failed to create goal.' });
   }
 }
 
@@ -139,7 +123,7 @@ async function apiCreateGoal(req, res) {
  */
 async function apiGetGoal(req, res) {
   try {
-    const goalId = validateId(req.params.goalId);
+    const goalId = parsePositiveSafeInteger(req.params.goalId);
 
     if (!goalId) {
       return res.status(400).json({ error: 'Invalid goal ID.' });
@@ -151,18 +135,14 @@ async function apiGetGoal(req, res) {
       return res.status(400).json({ error: 'No student record linked to this account.' });
     }
 
-    const goal = await studyGoalService.getGoalById(goalId);
+    const goal = await studyGoalService.getGoalByIdForStudent(goalId, studentId);
 
     if (!goal) {
+      // Do not reveal whether another student's goal exists.
       return res.status(404).json({ error: 'Goal not found.' });
     }
 
-    // Verify ownership
-    if (goal.student_id !== studentId) {
-      return res.status(403).json({ error: 'Access denied.' });
-    }
-
-    res.json({ goal });
+    return res.json({ goal });
   } catch (err) {
     console.error('[apiGetGoal]', err);
     res.status(500).json({ error: 'Failed to get goal.' });
@@ -175,7 +155,7 @@ async function apiGetGoal(req, res) {
  */
 async function apiUpdateGoal(req, res) {
   try {
-    const goalId = validateId(req.params.goalId);
+    const goalId = parsePositiveSafeInteger(req.params.goalId);
 
     if (!goalId) {
       return res.status(400).json({ error: 'Invalid goal ID.' });
@@ -187,27 +167,23 @@ async function apiUpdateGoal(req, res) {
       return res.status(400).json({ error: 'No student record linked to this account.' });
     }
 
-    const existingGoal = await studyGoalService.getGoalById(goalId);
+    const existingGoal = await studyGoalService.getGoalByIdForStudent(goalId, studentId);
 
     if (!existingGoal) {
       return res.status(404).json({ error: 'Goal not found.' });
     }
 
-    // Verify ownership
-    if (existingGoal.student_id !== studentId) {
-      return res.status(403).json({ error: 'Access denied.' });
-    }
-
     const { target_score, target_grade, target_study_hours, target_attendance, deadline, status } = req.body || {};
 
-    // Validate input
+    // Preserve the existing lifecycle status for deadline validation when this
+    // update does not include a status change.
     const validationErrors = studyGoalService.validateGoalData({
       targetScore: target_score,
       targetGrade: target_grade,
       targetStudyHours: target_study_hours,
       targetAttendance: target_attendance,
-      deadline: deadline,
-      status: status,
+      deadline,
+      status: status === undefined ? existingGoal.status : status,
     });
 
     if (validationErrors.length) {
@@ -223,13 +199,16 @@ async function apiUpdateGoal(req, res) {
     if (deadline !== undefined) updates.deadline = deadline;
     if (status !== undefined) updates.status = status;
 
-    const success = await studyGoalService.updateGoal(goalId, updates);
+    const result = await studyGoalService.updateGoalForStudent(studentId, goalId, updates);
 
-    if (!success) {
-      return res.status(404).json({ error: 'Goal not found or no changes made.' });
+    if (!result.found) {
+      return res.status(404).json({ error: 'Goal not found.' });
+    }
+    if (!result.updated) {
+      return res.status(400).json({ error: 'No changes made.' });
     }
 
-    const updatedGoal = await studyGoalService.getGoalById(goalId);
+    const updatedGoal = await studyGoalService.getGoalByIdForStudent(goalId, studentId);
 
     // Log audit event
     await logAuditEvent({
@@ -244,8 +223,14 @@ async function apiUpdateGoal(req, res) {
 
     res.json({ goal: updatedGoal });
   } catch (err) {
+    if (err?.code === 'ACTIVE_GOAL_EXISTS') {
+      return res.status(400).json({
+        error: 'Cannot activate this goal while another active goal exists.',
+        code: 'ACTIVE_GOAL_EXISTS',
+      });
+    }
     console.error('[apiUpdateGoal]', err);
-    res.status(500).json({ error: 'Failed to update goal.' });
+    return res.status(500).json({ error: 'Failed to update goal.' });
   }
 }
 
@@ -255,7 +240,7 @@ async function apiUpdateGoal(req, res) {
  */
 async function apiDeleteGoal(req, res) {
   try {
-    const goalId = validateId(req.params.goalId);
+    const goalId = parsePositiveSafeInteger(req.params.goalId);
 
     if (!goalId) {
       return res.status(400).json({ error: 'Invalid goal ID.' });
@@ -267,15 +252,10 @@ async function apiDeleteGoal(req, res) {
       return res.status(400).json({ error: 'No student record linked to this account.' });
     }
 
-    const existingGoal = await studyGoalService.getGoalById(goalId);
+    const existingGoal = await studyGoalService.getGoalByIdForStudent(goalId, studentId);
 
     if (!existingGoal) {
       return res.status(404).json({ error: 'Goal not found.' });
-    }
-
-    // Verify ownership
-    if (existingGoal.student_id !== studentId) {
-      return res.status(403).json({ error: 'Access denied.' });
     }
 
     await studyGoalService.deleteGoal(goalId);
@@ -304,7 +284,7 @@ async function apiDeleteGoal(req, res) {
  */
 async function apiListCheckIns(req, res) {
   try {
-    const goalId = validateId(req.params.goalId);
+    const goalId = parsePositiveSafeInteger(req.params.goalId);
 
     if (!goalId) {
       return res.status(400).json({ error: 'Invalid goal ID.' });
@@ -316,15 +296,10 @@ async function apiListCheckIns(req, res) {
       return res.status(400).json({ error: 'No student record linked to this account.' });
     }
 
-    // Verify goal belongs to this student
-    const goal = await studyGoalService.getGoalById(goalId);
+    const goal = await studyGoalService.getGoalByIdForStudent(goalId, studentId);
 
     if (!goal) {
       return res.status(404).json({ error: 'Goal not found.' });
-    }
-
-    if (goal.student_id !== studentId) {
-      return res.status(403).json({ error: 'Access denied.' });
     }
 
     const checkIns = await studyGoalService.getCheckInsByGoal(goalId);
@@ -342,7 +317,7 @@ async function apiListCheckIns(req, res) {
  */
 async function apiCreateCheckIn(req, res) {
   try {
-    const goalId = validateId(req.params.goalId);
+    const goalId = parsePositiveSafeInteger(req.params.goalId);
 
     if (!goalId) {
       return res.status(400).json({ error: 'Invalid goal ID.' });
@@ -358,15 +333,10 @@ async function apiCreateCheckIn(req, res) {
       return res.status(400).json({ error: 'teacher_feedback can only be updated by a teacher.' });
     }
 
-    // Verify goal belongs to this student
-    const goal = await studyGoalService.getGoalById(goalId);
+    const goal = await studyGoalService.getGoalByIdForStudent(goalId, studentId);
 
     if (!goal) {
       return res.status(404).json({ error: 'Goal not found.' });
-    }
-
-    if (goal.student_id !== studentId) {
-      return res.status(403).json({ error: 'Access denied.' });
     }
 
     const { study_hours, sleep_hours, attendance_percent, current_score, student_note, week_start } = req.body || {};
@@ -419,8 +389,14 @@ async function apiCreateCheckIn(req, res) {
 
     res.status(201).json({ checkIn });
   } catch (err) {
+    if (isDuplicateCheckInError(err)) {
+      return res.status(400).json({
+        error: 'Check-in for this week already exists for this goal.',
+        code: 'CHECKIN_EXISTS',
+      });
+    }
     console.error('[apiCreateCheckIn]', err);
-    res.status(500).json({ error: 'Failed to create check-in.' });
+    return res.status(500).json({ error: 'Failed to create check-in.' });
   }
 }
 
@@ -430,8 +406,8 @@ async function apiCreateCheckIn(req, res) {
  */
 async function apiUpdateCheckIn(req, res) {
   try {
-    const goalId = validateId(req.params.goalId);
-    const checkInId = validateId(req.params.checkinId);
+    const goalId = parsePositiveSafeInteger(req.params.goalId);
+    const checkInId = parsePositiveSafeInteger(req.params.checkinId);
 
     if (!goalId || !checkInId) {
       return res.status(400).json({ error: 'Invalid ID.' });
@@ -447,29 +423,18 @@ async function apiUpdateCheckIn(req, res) {
       return res.status(400).json({ error: 'teacher_feedback can only be updated by a teacher.' });
     }
 
-    // Verify check-in exists and belongs to the goal
-    const existingCheckIn = await studyGoalService.getCheckInById(checkInId);
+    const existingCheckIn = await studyGoalService.getCheckInByIdForGoalAndStudent(
+      checkInId,
+      goalId,
+      studentId
+    );
 
     if (!existingCheckIn) {
+      // Do not disclose other students' goal or check-in relationships.
       return res.status(404).json({ error: 'Check-in not found.' });
     }
 
-    if (existingCheckIn.goal_id !== goalId) {
-      return res.status(400).json({ error: 'Check-in does not belong to this goal.' });
-    }
-
-    // Verify goal and ownership
-    const goal = await studyGoalService.getGoalById(goalId);
-
-    if (!goal) {
-      return res.status(404).json({ error: 'Goal not found.' });
-    }
-
-    if (goal.student_id !== studentId) {
-      return res.status(403).json({ error: 'Access denied.' });
-    }
-
-    const { study_hours, sleep_hours, attendance_percent, current_score, student_note } = req.body || {};
+    const { study_hours, sleep_hours, attendance_percent, current_score, student_note, week_start } = req.body || {};
 
     // Validate input (only validate fields that are being updated)
     const updates = {};
@@ -503,11 +468,15 @@ async function apiUpdateCheckIn(req, res) {
     }
 
     if (current_score !== undefined) {
-      const score = Number(current_score);
-      if (isNaN(score) || score < 0 || score > 100) {
-        validationErrors.push('current_score must be between 0 and 100.');
+      if (current_score === null) {
+        updates.currentScore = null;
       } else {
-        updates.currentScore = score;
+        const score = Number(current_score);
+        if (isNaN(score) || score < 0 || score > 100) {
+          validationErrors.push('current_score must be between 0 and 100.');
+        } else {
+          updates.currentScore = score;
+        }
       }
     }
 
@@ -519,12 +488,30 @@ async function apiUpdateCheckIn(req, res) {
       }
     }
 
+    if (week_start !== undefined) {
+      if (!studyGoalService.isCalendarDate(week_start)) {
+        validationErrors.push('week_start must be a valid date.');
+      } else {
+        updates.weekStart = week_start;
+      }
+    }
+
     if (validationErrors.length) {
       return res.status(400).json({ error: validationErrors[0], errors: validationErrors });
     }
 
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: 'No fields to update.' });
+    }
+
+    if (updates.weekStart !== undefined && updates.weekStart !== existingCheckIn.week_start) {
+      const duplicate = await studyGoalService.getCheckInByGoalAndWeek(goalId, updates.weekStart);
+      if (duplicate && duplicate.id !== checkInId) {
+        return res.status(400).json({
+          error: 'Check-in for this week already exists for this goal.',
+          code: 'CHECKIN_EXISTS',
+        });
+      }
     }
 
     const success = await studyGoalService.updateCheckIn(checkInId, updates);
@@ -548,8 +535,14 @@ async function apiUpdateCheckIn(req, res) {
 
     res.json({ checkIn: updatedCheckIn });
   } catch (err) {
+    if (isDuplicateCheckInError(err)) {
+      return res.status(400).json({
+        error: 'Check-in for this week already exists for this goal.',
+        code: 'CHECKIN_EXISTS',
+      });
+    }
     console.error('[apiUpdateCheckIn]', err);
-    res.status(500).json({ error: 'Failed to update check-in.' });
+    return res.status(500).json({ error: 'Failed to update check-in.' });
   }
 }
 
@@ -559,8 +552,8 @@ async function apiUpdateCheckIn(req, res) {
  */
 async function apiDeleteCheckIn(req, res) {
   try {
-    const goalId = validateId(req.params.goalId);
-    const checkInId = validateId(req.params.checkinId);
+    const goalId = parsePositiveSafeInteger(req.params.goalId);
+    const checkInId = parsePositiveSafeInteger(req.params.checkinId);
 
     if (!goalId || !checkInId) {
       return res.status(400).json({ error: 'Invalid ID.' });
@@ -572,26 +565,15 @@ async function apiDeleteCheckIn(req, res) {
       return res.status(400).json({ error: 'No student record linked to this account.' });
     }
 
-    // Verify check-in exists and belongs to the goal
-    const existingCheckIn = await studyGoalService.getCheckInById(checkInId);
+    const existingCheckIn = await studyGoalService.getCheckInByIdForGoalAndStudent(
+      checkInId,
+      goalId,
+      studentId
+    );
 
     if (!existingCheckIn) {
+      // Do not disclose other students' goal or check-in relationships.
       return res.status(404).json({ error: 'Check-in not found.' });
-    }
-
-    if (existingCheckIn.goal_id !== goalId) {
-      return res.status(400).json({ error: 'Check-in does not belong to this goal.' });
-    }
-
-    // Verify goal and ownership
-    const goal = await studyGoalService.getGoalById(goalId);
-
-    if (!goal) {
-      return res.status(404).json({ error: 'Goal not found.' });
-    }
-
-    if (goal.student_id !== studentId) {
-      return res.status(403).json({ error: 'Access denied.' });
     }
 
     await studyGoalService.deleteCheckIn(checkInId);
