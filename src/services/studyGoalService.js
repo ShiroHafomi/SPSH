@@ -3,6 +3,7 @@
  * Parameterized queries only. No raw SQL in controllers/routes.
  */
 const { pool } = require('../config/db');
+const { calculateProgress } = require('./studyProgressService');
 
 const VALID_STATUSES = ['active', 'completed', 'paused', 'cancelled'];
 const VALID_GRADES = ['A', 'B', 'C', 'D', 'F'];
@@ -105,6 +106,40 @@ async function getGoalsByStudent(studentId) {
     [studentId]
   );
   return rows;
+}
+
+/**
+ * Get one goal only when it belongs to the supplied student.
+ * This is the service-level ownership boundary for staff goal detail routes.
+ */
+async function getGoalByIdForStudent(goalId, studentId) {
+  const [rows] = await pool.query(
+    `SELECT * FROM study_goals WHERE id = ? AND student_id = ?`,
+    [goalId, studentId]
+  );
+  return rows[0] || null;
+}
+
+/**
+ * Get a bounded page of goals for one student.
+ */
+async function getGoalsByStudentPage(studentId, { size, offset }) {
+  const [rows] = await pool.query(
+    `SELECT * FROM study_goals WHERE student_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+    [studentId, size, offset]
+  );
+  return rows;
+}
+
+/**
+ * Count goals for a student to support administrative pagination.
+ */
+async function countGoalsByStudent(studentId) {
+  const [[row]] = await pool.query(
+    `SELECT COUNT(*) AS total FROM study_goals WHERE student_id = ?`,
+    [studentId]
+  );
+  return Number(row?.total) || 0;
 }
 
 /**
@@ -234,6 +269,41 @@ async function getCheckInById(checkInId) {
 }
 
 /**
+ * Resolve a check-in only when its goal belongs to the supplied student.
+ * A missing, mismatched, or deleted resource all resolve to null so callers can
+ * use one non-disclosing 404 response.
+ */
+async function getCheckInByIdForGoalAndStudent(checkInId, goalId, studentId) {
+  const [rows] = await pool.query(
+    `SELECT weekly_checkins.*
+     FROM weekly_checkins
+     INNER JOIN study_goals ON study_goals.id = weekly_checkins.goal_id
+     WHERE weekly_checkins.id = ?
+       AND weekly_checkins.goal_id = ?
+       AND study_goals.student_id = ?`,
+    [checkInId, goalId, studentId]
+  );
+  return rows[0] || null;
+}
+
+/**
+ * Change only teacher_feedback while enforcing the check-in, goal, and student
+ * relationship in one parameterized statement.
+ */
+async function updateTeacherFeedbackForGoal(checkInId, goalId, studentId, teacherFeedback) {
+  const [result] = await pool.query(
+    `UPDATE weekly_checkins
+     INNER JOIN study_goals ON study_goals.id = weekly_checkins.goal_id
+     SET weekly_checkins.teacher_feedback = ?
+     WHERE weekly_checkins.id = ?
+       AND weekly_checkins.goal_id = ?
+       AND study_goals.student_id = ?`,
+    [teacherFeedback, checkInId, goalId, studentId]
+  );
+  return result.affectedRows > 0;
+}
+
+/**
  * Get check-in by goal and week.
  * @param {number} goalId
  * @param {string} weekStart - Date in YYYY-MM-DD format
@@ -310,79 +380,63 @@ async function deleteCheckIn(checkInId) {
 }
 
 /**
- * Get progress summary for a goal.
- * @param {number} goalId
- * @returns {Promise<Object>}
+ * Load and calculate progress for one goal. Kept as a backward-compatible
+ * database wrapper around the pure studyProgressService calculation.
  */
-async function getGoalProgress(goalId) {
+async function getGoalProgress(goalId, { now } = {}) {
   const goal = await getGoalById(goalId);
-  if (!goal) {
-    return null;
-  }
+  if (!goal) return null;
 
   const checkIns = await getCheckInsByGoal(goalId);
-
-  if (!checkIns.length) {
-    return {
-      goal,
-      checkInsCount: 0,
-      latestCheckIn: null,
-      progressPercentage: 0,
-      status: 'insufficient_data',
-    };
-  }
-
-  const completedCheckIns = checkIns.filter(c => c.current_score !== null);
-  const latest = checkIns[checkIns.length - 1];
-
-  // Calculate averages
-  const avgStudyHours = checkIns.reduce((sum, c) => sum + Number(c.study_hours || 0), 0) / checkIns.length;
-  const avgSleepHours = checkIns.reduce((sum, c) => sum + Number(c.sleep_hours || 0), 0) / checkIns.length;
-  const avgAttendance = checkIns.reduce((sum, c) => sum + Number(c.attendance_percent || 0), 0) / checkIns.length;
-
-  // Calculate score change from first check-in
-  const firstCheckIn = checkIns[0];
-  const scoreChange = firstCheckIn && firstCheckIn.current_score !== null && latest.current_score !== null
-    ? Number(latest.current_score) - Number(firstCheckIn.current_score)
-    : null;
-
-  // Calculate distance from target score
-  const targetScore = goal.target_score;
-  const currentScore = latest.current_score;
-  const distanceFromTarget = targetScore && currentScore !== null
-    ? Math.abs(Number(targetScore) - Number(currentScore))
-    : null;
-
-  // Calculate progress percentage based on attendance and study hours
-  let progressPercentage = 0;
-  if (goal.target_attendance && goal.target_study_hours) {
-    const attendanceProgress = (avgAttendance / Number(goal.target_attendance)) * 50;
-    const studyProgress = (avgStudyHours / Number(goal.target_study_hours)) * 50;
-    progressPercentage = Math.min(100, attendanceProgress + studyProgress);
-  } else if (avgAttendance > 0) {
-    progressPercentage = Math.min(100, (avgAttendance / 100) * 50 + (avgStudyHours / 20) * 50);
-  }
-
-  // Determine status
-  let status = 'on_track';
-  if (!completedCheckIns.length) {
-    status = 'insufficient_data';
-  } else if (completedCheckIns.length < 2 || progressPercentage < 50) {
-    status = 'needs_attention';
-  }
-
+  const progress = calculateProgress(goal, checkIns, { now });
   return {
     goal,
-    checkInsCount: checkIns.length,
-    latestCheckIn: latest,
-    avgStudyHours: Number(avgStudyHours.toFixed(2)),
-    avgSleepHours: Number(avgSleepHours.toFixed(2)),
-    avgAttendance: Number(avgAttendance.toFixed(2)),
-    scoreChange: scoreChange !== null ? Number(scoreChange.toFixed(2)) : null,
-    distanceFromTarget: distanceFromTarget !== null ? Number(distanceFromTarget.toFixed(2)) : null,
-    progressPercentage: Number(progressPercentage.toFixed(2)),
-    status,
+    checkInsCount: progress.totalCheckIns,
+    latestCheckIn: progress.latestCheckIn,
+    avgStudyHours: progress.averageWeeklyStudyHours,
+    avgSleepHours: progress.averageSleepHours,
+    avgAttendance: progress.averageAttendance,
+    scoreChange: progress.scoreChange,
+    distanceFromTarget: progress.distanceFromTargetScore,
+    progressPercentage: progress.progressPercentage,
+    status: progress.status,
   };
+}
+
+/**
+ * Load a goal detail only if the goal belongs to the requested student.
+ */
+async function getGoalWithProgressForStudent(studentId, goalId, { now } = {}) {
+  const goal = await getGoalByIdForStudent(goalId, studentId);
+  if (!goal) return null;
+
+  const checkIns = await getCheckInsByGoal(goalId);
+  return {
+    goal,
+    checkIns,
+    progress: calculateProgress(goal, checkIns, { now }),
+  };
+}
+
+/**
+ * Enrich goals with their check-in histories and deterministic progress.
+ * The optional bounds are used by the admin list; teachers omit them and get
+ * all goals for their selected student.
+ */
+async function getGoalsWithProgressByStudent(studentId, { page, size, now } = {}) {
+  const hasPagination = Number.isSafeInteger(page) && Number.isSafeInteger(size);
+  const goals = hasPagination
+    ? await getGoalsByStudentPage(studentId, { size, offset: (page - 1) * size })
+    : await getGoalsByStudent(studentId);
+
+  return Promise.all(goals.map(async (goal) => {
+    const checkIns = await getCheckInsByGoal(goal.id);
+    return {
+      goal,
+      checkIns,
+      progress: calculateProgress(goal, checkIns, { now }),
+    };
+  }));
 }
 
 /**
@@ -507,15 +561,22 @@ module.exports = {
   ensureWeeklyCheckinsTable,
   createGoal,
   getGoalById,
+  getGoalByIdForStudent,
   getGoalsByStudent,
+  getGoalsByStudentPage,
+  countGoalsByStudent,
+  getGoalsWithProgressByStudent,
+  getGoalWithProgressForStudent,
   getActiveGoalByStudent,
   updateGoal,
   deleteGoal,
   createCheckIn,
   getCheckInById,
+  getCheckInByIdForGoalAndStudent,
   getCheckInByGoalAndWeek,
   getCheckInsByGoal,
   updateCheckIn,
+  updateTeacherFeedbackForGoal,
   deleteCheckIn,
   getGoalProgress,
   validateGoalData,

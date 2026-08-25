@@ -86,6 +86,12 @@ const {
   apiUpdateCheckIn,
   apiDeleteCheckIn,
 } = require('../controllers/studyGoalController');
+const {
+  apiAdminListStudentGoals,
+  apiTeacherGetStudentGoal,
+  apiTeacherListStudentGoals,
+  apiTeacherUpdateGoalFeedback,
+} = require('../controllers/studyGoalStaffController');
 
 const router = express.Router();
 const authenticatedLimit = (limiter) => rateLimitMiddleware(limiter, {
@@ -129,6 +135,7 @@ adminRouter.get('/at-risk', apiAdminAtRisk);
 
 // Student management (filtered, with search/sort/pagination)
 adminRouter.get('/students', apiAdminListStudents);
+adminRouter.get('/students/:studentId/goals', apiAdminListStudentGoals);
 adminRouter.post('/students/bulk-export', apiAdminBulkExport);
 adminRouter.post(
   '/students/bulk-ai-evaluate',
@@ -171,6 +178,9 @@ teacherRouter.post(
 
 // Student management
 teacherRouter.get('/students', apiTeacherStudents);
+teacherRouter.get('/students/:studentId/goals', apiTeacherListStudentGoals);
+teacherRouter.get('/students/:studentId/goals/:goalId', apiTeacherGetStudentGoal);
+teacherRouter.put('/students/:studentId/goals/:goalId/feedback', apiTeacherUpdateGoalFeedback);
 teacherRouter.get('/students/:id', apiGetTeacherStudent);
 teacherRouter.put('/students/:id', apiUpdateTeacherStudent);
 
