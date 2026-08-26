@@ -8,6 +8,51 @@ const { calculateProgress } = require('./studyProgressService');
 const VALID_STATUSES = ['active', 'completed', 'paused', 'cancelled'];
 const VALID_GRADES = ['A', 'B', 'C', 'D', 'F'];
 
+class ActiveGoalExistsError extends Error {
+  constructor() {
+    super('Cannot create a new active goal. You already have an active goal.');
+    this.name = 'ActiveGoalExistsError';
+    this.code = 'ACTIVE_GOAL_EXISTS';
+  }
+}
+
+function isCalendarDate(value) {
+  if (typeof value !== 'string') return false;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day;
+}
+
+async function withStudentGoalLock(studentId, operation) {
+  const connection = await pool.getConnection();
+  let transactionStarted = false;
+
+  try {
+    await connection.beginTransaction();
+    transactionStarted = true;
+
+    // Lock the student row so active-goal transitions for one student serialize,
+    // including the case where that student does not yet have a goal row.
+    await connection.query('SELECT id FROM students WHERE id = ? FOR UPDATE', [studentId]);
+
+    const result = await operation(connection);
+    await connection.commit();
+    return result;
+  } catch (err) {
+    if (transactionStarted) await connection.rollback();
+    throw err;
+  } finally {
+    connection.release();
+  }
+}
+
 /**
  * Create the study_goals table if it doesn't exist.
  */
@@ -89,6 +134,40 @@ async function createGoal({ studentId, targetScore, targetGrade, targetStudyHour
 }
 
 /**
+ * Create a goal while serializing active-goal checks for this student. A
+ * controller-level read before insert is not sufficient because two requests
+ * can otherwise both observe no active goal and create one concurrently.
+ */
+async function createGoalForStudent({ studentId, targetScore, targetGrade, targetStudyHours, targetAttendance, deadline, status }) {
+  return withStudentGoalLock(studentId, async (connection) => {
+    if (status === 'active') {
+      const [activeGoals] = await connection.query(
+        `SELECT id FROM study_goals WHERE student_id = ? AND status = 'active' LIMIT 1`,
+        [studentId]
+      );
+      if (activeGoals.length) throw new ActiveGoalExistsError();
+    }
+
+    const [result] = await connection.query(
+      `INSERT INTO study_goals (student_id, target_score, target_grade, target_study_hours, target_attendance, deadline, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [studentId, targetScore, targetGrade, targetStudyHours, targetAttendance, deadline, status]
+    );
+
+    return {
+      id: result.insertId,
+      student_id: studentId,
+      target_score: targetScore,
+      target_grade: targetGrade,
+      target_study_hours: targetStudyHours,
+      target_attendance: targetAttendance,
+      deadline,
+      status,
+    };
+  });
+}
+
+/**
  * Get a goal by ID.
  * @param {number} goalId
  * @returns {Promise<Object|null>}
@@ -154,7 +233,7 @@ async function countGoalsByStudent(studentId) {
  * @param {Object} updates
  * @returns {Promise<boolean>}
  */
-async function updateGoal(goalId, updates) {
+function addGoalUpdateFields(updates) {
   const fields = [];
   const values = [];
 
@@ -183,18 +262,54 @@ async function updateGoal(goalId, updates) {
     values.push(updates.status);
   }
 
-  if (fields.length === 0) {
-    return false;
-  }
+  return { fields, values };
+}
+
+async function updateGoal(goalId, updates) {
+  const { fields, values } = addGoalUpdateFields(updates);
+  if (fields.length === 0) return false;
 
   values.push(goalId);
-
   const [result] = await pool.query(
     `UPDATE study_goals SET ${fields.join(', ')} WHERE id = ?`,
     values
   );
 
   return result.affectedRows > 0;
+}
+
+/**
+ * Update a goal that belongs to one student while serializing active status
+ * transitions for that student. This prevents a paused/completed goal from
+ * becoming active alongside an already active goal.
+ */
+async function updateGoalForStudent(studentId, goalId, updates) {
+  return withStudentGoalLock(studentId, async (connection) => {
+    const [goals] = await connection.query(
+      `SELECT id, status FROM study_goals WHERE id = ? AND student_id = ?`,
+      [goalId, studentId]
+    );
+    const currentGoal = goals[0];
+    if (!currentGoal) return { found: false, updated: false };
+
+    if (updates.status === 'active' && currentGoal.status !== 'active') {
+      const [activeGoals] = await connection.query(
+        `SELECT id FROM study_goals WHERE student_id = ? AND status = 'active' AND id <> ? LIMIT 1`,
+        [studentId, goalId]
+      );
+      if (activeGoals.length) throw new ActiveGoalExistsError();
+    }
+
+    const { fields, values } = addGoalUpdateFields(updates);
+    if (!fields.length) return { found: true, updated: false };
+
+    values.push(goalId, studentId);
+    const [result] = await connection.query(
+      `UPDATE study_goals SET ${fields.join(', ')} WHERE id = ? AND student_id = ?`,
+      values
+    );
+    return { found: true, updated: result.affectedRows > 0 };
+  });
 }
 
 /**
@@ -399,6 +514,10 @@ async function updateCheckIn(checkInId, updates) {
     fields.push('teacher_feedback = ?');
     values.push(updates.teacherFeedback);
   }
+  if (updates.weekStart !== undefined) {
+    fields.push('week_start = ?');
+    values.push(updates.weekStart);
+  }
 
   if (fields.length === 0) {
     return false;
@@ -524,23 +643,21 @@ function validateGoalData(data) {
   }
 
   if (data.deadline !== undefined && data.deadline !== null) {
-    const deadline = new Date(data.deadline);
-    if (isNaN(deadline.getTime())) {
+    if (!isCalendarDate(data.deadline)) {
       errors.push('deadline must be a valid date.');
     } else {
-      // For active goals, deadline cannot be in the past
+      // Compare calendar dates in UTC to avoid local-timezone rollover.
+      const deadline = new Date(`${data.deadline}T00:00:00.000Z`);
       const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (data.status === 'active' && deadline < today) {
+      const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+      if (data.status === 'active' && deadline.getTime() < todayUtc) {
         errors.push('Active goal deadline cannot be in the past.');
       }
     }
   }
 
-  if (data.status !== undefined && data.status !== null) {
-    if (!VALID_STATUSES.includes(data.status)) {
-      errors.push('status must be one of: active, completed, paused, cancelled.');
-    }
+  if (data.status !== undefined && !VALID_STATUSES.includes(data.status)) {
+    errors.push('status must be one of: active, completed, paused, cancelled.');
   }
 
   return errors;
@@ -582,8 +699,7 @@ function validateCheckInData(data) {
   }
 
   if (data.weekStart !== undefined && data.weekStart !== null) {
-    const weekStart = new Date(data.weekStart);
-    if (isNaN(weekStart.getTime())) {
+    if (!isCalendarDate(data.weekStart)) {
       errors.push('week_start must be a valid date.');
     }
   } else {
@@ -609,6 +725,7 @@ module.exports = {
   ensureStudyGoalsTable,
   ensureWeeklyCheckinsTable,
   createGoal,
+  createGoalForStudent,
   getGoalById,
   getGoalByIdForStudent,
   getGoalsByStudent,
@@ -619,6 +736,7 @@ module.exports = {
   getActiveGoalByStudent,
   getActiveGoalReminderCandidates,
   updateGoal,
+  updateGoalForStudent,
   deleteGoal,
   createCheckIn,
   getCheckInById,
@@ -632,6 +750,8 @@ module.exports = {
   getGoalProgress,
   validateGoalData,
   validateCheckInData,
+  isCalendarDate,
+  ActiveGoalExistsError,
   VALID_STATUSES,
   VALID_GRADES,
 };
