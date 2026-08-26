@@ -134,7 +134,7 @@ export default function Students() {
         attendance_percent: student.attendance_percent || 85,
         sleep_hours: student.sleep_hours || 7,
         previous_gpa: student.previous_gpa || 3.0,
-        parental_education: student.parental_education || 'Bachelors',
+        parental_education: student.parental_education || 'Bachelor',
         internet_access: student.internet_access || 'Yes',
         extracurricular: student.extracurricular || 'Yes',
         part_time_job: student.part_time_job || 'No',

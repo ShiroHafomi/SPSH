@@ -370,51 +370,63 @@ async function apiDeleteUser(req, res) {
 
 // ─── ML Prediction ─────────────────────────────────────────────────────────────
 
-/** POST /api/predict - Predict student performance */
-async function apiPredict(req, res) {
-  const input = req.body || {};
+async function runTrackedPrediction(req, predictionKind, logLabel) {
+  const validated = validatePredictionProfile(req.body || {});
+  const startedAt = process.hrtime.bigint();
+  const prediction = await mlService.predict(validated);
+  const inferenceLatencyMs = Number(
+    (process.hrtime.bigint() - startedAt) / 1000000n
+  );
 
   try {
-    const validated = validatePredictionProfile(input);
+    await predictionHistoryService.recordPredictionEvent(
+      validated,
+      prediction,
+      {
+        predictionKind,
+        actorUserId: req.user.id,
+        studentId: null,
+        inferenceLatencyMs,
+      }
+    );
+  } catch (historyErr) {
+    // History is best-effort and must never change a successful API response.
+    console.error(`[${logLabel}] Failed to record prediction history:`, historyErr.message);
+  }
 
-    // Start latency timer
-    const startTime = process.hrtime.bigint();
+  return { validated, prediction };
+}
 
-    // Run ML inference
-    const result = await mlService.predict(validated);
+function sendPredictionError(err, res, logLabel) {
+  if (err instanceof TypeError || err instanceof RangeError) {
+    return res.status(400).json({ error: err.message });
+  }
+  if (err.message === 'ML capacity exceeded') {
+    return res.status(503).json({ error: 'Prediction service temporarily unavailable, please retry' });
+  }
+  if (err.message === 'Prediction failed') {
+    return res.status(500).json({ error: 'Prediction failed' });
+  }
+  if (
+    err.message === 'Failed to parse prediction result' ||
+    err.message === 'ML process failed to start' ||
+    err.message === 'ML output too large' ||
+    err.message === 'ML inference timeout' ||
+    err.message === 'Invalid prediction output'
+  ) {
+    return res.status(500).json({ error: 'Prediction service error' });
+  }
+  console.error(`[${logLabel}]`, err);
+  return res.status(500).json({ error: 'Prediction failed' });
+}
 
-    // Stop latency timer
-    const endTime = process.hrtime.bigint();
-    const latencyMs = Number(endTime - startTime) / 1000000; // convert nanoseconds to milliseconds
-
-    // Record prediction event (only after successful inference)
-    try {
-      await predictionHistoryService.recordPredictionEvent(validated, {
-        predictionKind: 'prediction',
-        actorUserId: req.user?.id ?? null,
-        latencyMs
-      });
-    } catch (historyErr) {
-      // Log history error but don't fail the prediction
-      console.error('[apiPredict] Failed to record prediction history:', historyErr.message);
-    }
-
-    res.json(result);
+/** POST /api/predict - Predict student performance */
+async function apiPredict(req, res) {
+  try {
+    const { prediction } = await runTrackedPrediction(req, 'prediction', 'apiPredict');
+    return res.json(prediction);
   } catch (err) {
-    if (err instanceof TypeError || err instanceof RangeError) {
-      return res.status(400).json({ error: err.message });
-    }
-    if (err.message === 'ML capacity exceeded') {
-      return res.status(503).json({ error: 'Prediction service temporarily unavailable, please retry' });
-    }
-    if (err.message === 'Prediction failed') {
-      return res.status(500).json({ error: 'Prediction failed' });
-    }
-    if (err.message === 'Failed to parse prediction result' || err.message === 'ML process failed to start' || err.message === 'ML output too large' || err.message === 'ML inference timeout') {
-      return res.status(500).json({ error: 'Prediction service error' });
-    }
-    console.error('[apiPredict]', err);
-    res.status(500).json({ error: 'Prediction failed' });
+    return sendPredictionError(err, res, 'apiPredict');
   }
 }
 
@@ -439,39 +451,16 @@ async function apiAtRiskStudents(req, res) {
 
 // ─── AI Feedback ───────────────────────────────────────────────────────────────
 
-/** POST /api/feedback — run ML prediction + generate rule-based feedback */
-async function apiFeedback(req, res) {
-  const input = req.body || {};
-
+async function runFeedbackPrediction(req, res, predictionKind, logLabel) {
   try {
-    const validated = validatePredictionProfile(input);
+    const { validated, prediction } = await runTrackedPrediction(
+      req,
+      predictionKind,
+      logLabel
+    );
+    const feedback = generateFeedback(validated, prediction);
 
-    // Start latency timer
-    const startTime = process.hrtime.bigint();
-
-    // Run ML inference
-    const prediction = await mlService.predict(validated);
-
-    // Stop latency timer
-    const endTime = process.hrtime.bigint();
-    const latencyMs = Number(endTime - startTime) / 1000000; // convert nanoseconds to milliseconds
-
-    // Generate feedback
-    const feedback = generateFeedback(input, prediction);
-
-    // Record prediction event (only after successful inference)
-    try {
-      await predictionHistoryService.recordPredictionEvent(validated, {
-        predictionKind: 'feedback',
-        actorUserId: req.user?.id ?? null,
-        latencyMs
-      });
-    } catch (historyErr) {
-      // Log history error but don't fail the prediction
-      console.error('[apiFeedback] Failed to record prediction history:', historyErr.message);
-    }
-
-    res.json({
+    return res.json({
       final_score: prediction.final_score,
       grade: prediction.grade,
       grade_confidence: prediction.grade_confidence,
@@ -479,21 +468,23 @@ async function apiFeedback(req, res) {
       feedback,
     });
   } catch (err) {
-    if (err instanceof TypeError || err instanceof RangeError) {
-      return res.status(400).json({ error: err.message });
-    }
-    if (err.message === 'ML capacity exceeded') {
-      return res.status(503).json({ error: 'Prediction service temporarily unavailable, please retry' });
-    }
-    if (err.message === 'Prediction failed') {
-      return res.status(500).json({ error: 'Prediction failed' });
-    }
-    if (err.message === 'Failed to parse prediction result' || err.message === 'ML process failed to start' || err.message === 'ML output too large' || err.message === 'ML inference timeout') {
-      return res.status(500).json({ error: 'Prediction service error' });
-    }
-    console.error('[apiFeedback]', err);
-    res.status(500).json({ error: 'Prediction failed' });
+    return sendPredictionError(err, res, logLabel);
   }
+}
+
+/** POST /api/feedback — feedback-generating prediction */
+async function apiFeedback(req, res) {
+  return runFeedbackPrediction(req, res, 'feedback', 'apiFeedback');
+}
+
+/** POST /api/predict/baseline — trusted baseline preview */
+async function apiBaselinePrediction(req, res) {
+  return runFeedbackPrediction(req, res, 'baseline', 'apiBaselinePrediction');
+}
+
+/** POST /api/predict/simulation — trusted What-If simulation */
+async function apiSimulationPrediction(req, res) {
+  return runFeedbackPrediction(req, res, 'simulation', 'apiSimulationPrediction');
 }
 
 /** GET /api/admin/analytics — Admin dashboard analytics */
@@ -698,6 +689,8 @@ module.exports = {
   apiDashboardStats,
   apiAtRiskStudents,
   apiFeedback,
+  apiBaselinePrediction,
+  apiSimulationPrediction,
   apiListStudents,
   apiGetStudent,
   apiCreateStudent,

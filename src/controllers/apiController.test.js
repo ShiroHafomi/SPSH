@@ -1,20 +1,43 @@
 'use strict';
 
-const { describe, it } = require('node:test');
+const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   apiPredict,
-  apiFeedback
+  apiFeedback,
+  apiBaselinePrediction,
+  apiSimulationPrediction,
 } = require('./apiController');
+const mlService = require('../services/mlService');
 const predictionHistoryService = require('../services/predictionHistoryService');
-const { pool } = require('../config/db');
-const authService = require('../services/authService');
 
-// Mock response object
+const originalPredict = mlService.predict;
+const originalRecord = predictionHistoryService.recordPredictionEvent;
+const originalConsoleError = console.error;
+
+const validInput = Object.freeze({
+  gender: 'Female',
+  age: 20,
+  study_hours_per_day: 4.5,
+  attendance_percent: 88,
+  sleep_hours: 7.5,
+  previous_gpa: 3.4,
+  parental_education: 'Master',
+  internet_access: 1,
+  extracurricular: 1,
+  part_time_job: 0,
+});
+const prediction = Object.freeze({
+  final_score: 86.25,
+  grade: 'B',
+  grade_confidence: 0.84,
+  grade_probabilities: { A: 0.1, B: 0.84, C: 0.06 },
+});
+
 function createResponse() {
   return {
     statusCode: 200,
-    body: null,
+    body: undefined,
     status(code) {
       this.statusCode = code;
       return this;
@@ -22,384 +45,163 @@ function createResponse() {
     json(body) {
       this.body = body;
       return this;
-    }
+    },
   };
 }
 
-describe('apiController - Prediction History Integration', () => {
-  describe('apiPredict', () => {
-    it('should record a prediction event of kind "prediction" after successful inference', async () => {
-      // Setup request
-      const req = {
-        body: {
-          gender: 'Female',
-          age: 20,
-          study_hours_per_day: 4.5,
-          attendance_percent: 85,
-          sleep_hours: 7,
-          previous_gpa: 3.5,
-          parental_education: 'Bachelor',
-          internet_access: 1,
-          extracurricular: 0,
-          part_time_job: 1
-        },
-        user: { id: 101 }, // Authenticated user
-        headers: { origin: 'http://localhost:3000' },
-        ip: '127.0.0.1'
-      };
-      const res = createResponse();
+function createRequest(overrides = {}) {
+  return {
+    body: { ...validInput },
+    user: { id: 101, studentId: null },
+    ...overrides,
+  };
+}
 
-      // Mock services
-      const restorePool = mockPoolQuery({});
-      const restoreAuthValidate = mockAuthServiceMethod('validateUserRequest', async (req) => {
-        return { userId: req.user.id }; // Return the user ID from token
-      });
-      const restoreMlPredict = mockMlServiceMethod('predict', async (input) => {
-        // Mock ML inference result
-        return {
-          final_score: 85.5,
-          grade: 'B',
-          grade_confidence: 0.87
-        };
-      });
-      const restorePhRecord = mockPredictionHistoryServiceMethod('recordPredictionEvent', async (input, options) => {
-        return {
-          eventId: 901,
-          snapshotId: 50,
-          modelVersion: 'test-model-version',
-          inputFingerprint: 'test-fingerprint'
-        };
-      });
-      const restorePhUpdate = mockPredictionHistoryServiceMethod('updatePredictionEventWithResults', async (eventId, results) => {
-        // Should not throw
-      });
-
-      try {
-        // Execute the controller
-        await apiPredict(req, res);
-
-        // Verify response
-        assert.strictEqual(res.statusCode, 200);
-        assert.deepEqual(res.body, {
-          final_score: 85.5,
-          grade: 'B',
-          grade_confidence: 0.87
-        });
-
-        // Verify that recordPredictionEvent was called with correct parameters
-        // Note: We can't easily spy on the calls with our simple mock,
-        // but we can at least verify it didn't throw by reaching this point
-        // For a more thorough test, we'd need to use sinon.js or similar,
-        // but we'll verify the basic integration works
-      } finally {
-        restorePool();
-        restoreAuthValidate();
-        restoreMlPredict();
-        restorePhRecord();
-        restorePhUpdate();
-      }
-    });
-
-    it('should not record prediction event when ML inference fails', async () => {
-      // Setup request
-      const req = {
-        body: {
-          gender: 'Male',
-          age: 22,
-          study_hours_per_day: 3,
-          attendance_percent: 90,
-          sleep_hours: 8,
-          previous_gpa: 3.2,
-          parental_education: 'High School',
-          internet_access: 1,
-          extracurricular: 1,
-          part_time_job: 0
-        },
-        user: { id: 102 },
-        headers: { origin: 'http://localhost:3000' },
-        ip: '127.0.0.1'
-      };
-      const res = createResponse();
-
-      // Mock services
-      const restorePool = mockPoolQuery({});
-      const restoreAuthValidate = mockAuthServiceMethod('validateUserRequest', async (req) => {
-        return { userId: req.user.id };
-      });
-      const restoreMlPredict = mockMlServiceMethod('predict', async () => {
-        throw new Error('ML model failed to load');
-      });
-      const restorePhRecord = mockPredictionHistoryServiceMethod('recordPredictionEvent', async () => {
-        // This should NOT be called if inference fails
-        assert.fail('recordPredictionEvent should not be called when ML inference fails');
-      });
-
-      try {
-        await apiPredict(req, res);
-        assert.fail('Expected error response from failed ML inference');
-      } catch (err) {
-        // Controller should catch ML errors and return 503
-        assert.strictEqual(res.statusCode, 503);
-        assert.match(res.body.error, /ML inference temporarily unavailable/);
-      } finally {
-        restorePool();
-        restoreAuthValidate();
-        restoreMlPredict();
-        restorePhRecord();
-      }
-    });
-
-    it('should not record prediction event when validation fails', async () => {
-      // Setup request with invalid data
-      const req = {
-        body: {
-          gender: 'InvalidGender', // Invalid - should be Male/Female
-          age: 20,
-          study_hours_per_day: 4.5,
-          attendance_percent: 85,
-          sleep_hours: 7,
-          previous_gpa: 3.5,
-          parental_education: 'Bachelor',
-          internet_access: 1,
-          extracurricular: 0,
-          part_time_job: 1
-        },
-        user: { id: 103 },
-        headers: { origin: 'http://localhost:3000' },
-        ip: '127.0.0.1'
-      };
-      const res = createResponse();
-
-      // Mock services
-      const restorePool = mockPoolQuery({});
-      const restoreAuthValidate = mockAuthServiceMethod('validateUserRequest', async (req) => {
-        return { userId: req.user.id };
-      });
-      // Mock validation to fail
-      const restoreMlValidate = mockMlServiceMethod('validatePredictionProfile', () => {
-        throw new Error('Invalid gender value');
-      });
-      const restorePhRecord = mockPredictionHistoryServiceMethod('recordPredictionEvent', async () => {
-        // This should NOT be called if validation fails
-        assert.fail('recordPredictionEvent should not be called when validation fails');
-      });
-
-      try {
-        await apiPredict(req, res);
-        assert.fail('Expected error response from validation failure');
-      } catch (err) {
-        // Controller should return 400 for validation errors
-        assert.strictEqual(res.statusCode, 400);
-        assert.match(res.body.error, /Invalid/);
-      } finally {
-        restorePool();
-        restoreAuthValidate();
-        restoreMlValidate();
-        restorePhRecord();
-      }
-    });
+describe('apiController prediction history integration', () => {
+  beforeEach(() => {
+    mlService.predict = async () => ({ ...prediction });
+    predictionHistoryService.recordPredictionEvent = async () => ({ eventId: 1 });
+    console.error = originalConsoleError;
   });
 
-  describe('apiFeedback', () => {
-    it('should record a prediction event of kind "feedback" after successful feedback generation', async () => {
-      // Setup request
-      const req = {
-        body: {
-          student_id: 50,
-          feedback_type: 'improvement'
-        },
-        user: { id: 104 }, // Authenticated user (teacher or admin)
-        headers: { origin: 'http://localhost:3000' },
-        ip: '127.0.0.1'
-      };
-      const res = createResponse();
+  afterEach(() => {
+    mlService.predict = originalPredict;
+    predictionHistoryService.recordPredictionEvent = originalRecord;
+    console.error = originalConsoleError;
+  });
 
-      // Mock services
-      const restorePool = mockPoolQuery({});
-      const restoreAuthValidate = mockAuthServiceMethod('validateUserRequest', async (req) => {
-        // For feedback, we might need different validation
-        // but for this test we'll just return the user ID
-        return { userId: req.user.id };
-      });
-      const restoreAuthGetStudent = mockAuthServiceMethod('getStudentById', async (studentId) => {
-        return {
-          id: studentId,
-          gender: 'Female',
-          age: 19,
-          study_hours_per_day: 3.5,
-          attendance_percent: 88,
-          sleep_hours: 8,
-          previous_gpa: 3.6,
-          parental_education: 'Some College',
-          internet_access: 1,
-          extracurricular: 1,
-          part_time_job: 0
-        };
-      });
-      const restoreMlPredict = mockMlServiceMethod('predict', async (input) => {
-        // Mock ML inference for feedback generation
-        return {
-          final_score: 78.0,
-          grade: 'C',
-          grade_confidence: 0.76
-        };
-      });
-      const restorePhRecord = mockPredictionHistoryServiceMethod('recordPredictionEvent', async (input, options) => {
-        // Verify this is called with predictionKind: 'feedback'
-        assert.strictEqual(options.predictionKind, 'feedback');
-        assert.strictEqual(options.actorUserId, 104);
-        return {
-          eventId: 902,
-          snapshotId: 55,
-          modelVersion: 'feedback-model-version',
-          inputFingerprint: 'feedback-fingerprint'
-        };
-      });
-      const restorePhUpdate = mockPredictionHistoryServiceMethod('updatePredictionEventWithResults', async (eventId, results) => {
-        // Should not throw
-      });
+  it('records exactly one real prediction with the authenticated actor', async () => {
+    const calls = [];
+    predictionHistoryService.recordPredictionEvent = async (...args) => {
+      calls.push(args);
+      return { eventId: 1 };
+    };
+    const req = createRequest();
+    const res = createResponse();
 
-      try {
-        await apiFeedback(req, res);
+    await apiPredict(req, res);
 
-        // Verify response
-        assert.strictEqual(res.statusCode, 200);
-        assert.ok(res.body.feedback);
-        assert.ok(Array.isArray(res.body.feedback));
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.body, prediction);
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0][0], validInput);
+    assert.deepEqual(calls[0][1], prediction);
+    assert.equal(calls[0][2].predictionKind, 'prediction');
+    assert.equal(calls[0][2].actorUserId, 101);
+    assert.equal(calls[0][2].studentId, null);
+    assert.ok(Number.isInteger(calls[0][2].inferenceLatencyMs));
+    assert.ok(calls[0][2].inferenceLatencyMs >= 0);
+  });
 
-        // If we got here without assertion failures, the integration worked
-      } finally {
-        restorePool();
-        restoreAuthValidate();
-        restoreAuthGetStudent();
-        restoreMlPredict();
-        restorePhRecord();
-        restorePhUpdate();
-      }
-    });
+  it('keeps the successful prediction response when history persistence fails', async () => {
+    predictionHistoryService.recordPredictionEvent = async () => {
+      throw new Error('Failed to record prediction event');
+    };
+    console.error = () => {};
+    const res = createResponse();
 
-    it('should not record feedback event when student not found', async () => {
-      // Setup request
-      const req = {
-        body: {
-          student_id: 999, // Non-existent student
-          feedback_type: 'improvement'
-        },
-        user: { id: 105 },
-        headers: { origin: 'http://localhost:3000' },
-        ip: '127.0.0.1'
-      };
-      const res = createResponse();
+    await apiPredict(createRequest(), res);
 
-      // Mock services
-      const restorePool = mockPoolQuery({});
-      const restoreAuthValidate = mockAuthServiceMethod('validateUserRequest', async (req) => {
-        return { userId: req.user.id };
-      });
-      const restoreAuthGetStudent = mockAuthServiceMethod('getStudentById', async () => {
-        return null; // Student not found
-      });
-      const restorePhRecord = mockPredictionHistoryServiceMethod('recordPredictionEvent', async () => {
-        // This should NOT be called if student not found
-        assert.fail('recordPredictionEvent should not be called when student not found');
-      });
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.body, prediction);
+  });
 
-      try {
-        await apiFeedback(req, res);
-        assert.fail('Expected error response for non-existent student');
-      } catch (err) {
-        // Controller should return 404 or 503 for student not found
-        // Looking at the actual implementation, it throws an error that becomes 503
-        assert.strictEqual(res.statusCode, 503);
-        assert.match(res.body.error, /Student record not found/);
-      } finally {
-        restorePool();
-        restoreAuthValidate();
-        restoreAuthGetStudent();
-        restorePhRecord();
-      }
-    });
+  it('does not record an event when validation fails', async () => {
+    let inferenceCalls = 0;
+    let historyCalls = 0;
+    mlService.predict = async () => {
+      inferenceCalls += 1;
+      return prediction;
+    };
+    predictionHistoryService.recordPredictionEvent = async () => {
+      historyCalls += 1;
+    };
+    const res = createResponse();
 
-    it('should not record feedback event when validation fails', async () => {
-      // Setup request with invalid student_id
-      const req = {
-        body: {
-          student_id: 'invalid', // Not a number
-          feedback_type: 'improvement'
-        },
-        user: { id: 106 },
-        headers: { origin: 'http://localhost:3000' },
-        ip: '127.0.0.1'
-      };
-      const res = createResponse();
+    await apiPredict(createRequest({ body: { ...validInput, unknown: true } }), res);
 
-      // Mock services
-      const restorePool = mockPoolQuery({});
-      const restoreAuthValidate = mockAuthServiceMethod('validateUserRequest', async (req) => {
-        return { userId: req.user.id };
-      });
-      const restorePhRecord = mockPredictionHistoryServiceMethod('recordPredictionEvent', async () => {
-        // This should NOT be called if validation fails early
-        assert.fail('recordPredictionEvent should not be called when validation fails');
-      });
+    assert.equal(res.statusCode, 400);
+    assert.match(res.body.error, /Unknown field: unknown/);
+    assert.equal(inferenceCalls, 0);
+    assert.equal(historyCalls, 0);
+  });
 
-      try {
-        await apiFeedback(req, res);
-        assert.fail('Expected error response from validation failure');
-      } catch (err) {
-        // Controller should return 400 for invalid student_id
-        assert.strictEqual(res.statusCode, 400);
-        assert.match(res.body.error, /Invalid/);
-      } finally {
-        restorePool();
-        restoreAuthValidate();
-        restorePhRecord();
-      }
-    });
+  it('does not record an event when inference fails', async () => {
+    let historyCalls = 0;
+    mlService.predict = async () => { throw new Error('Prediction failed'); };
+    predictionHistoryService.recordPredictionEvent = async () => {
+      historyCalls += 1;
+    };
+    const res = createResponse();
+
+    await apiPredict(createRequest(), res);
+
+    assert.equal(res.statusCode, 500);
+    assert.deepEqual(res.body, { error: 'Prediction failed' });
+    assert.equal(historyCalls, 0);
+  });
+
+  it('cannot accept actor or student identity from the prediction body', async () => {
+    let historyCalls = 0;
+    predictionHistoryService.recordPredictionEvent = async () => {
+      historyCalls += 1;
+    };
+    const res = createResponse();
+
+    await apiPredict(createRequest({
+      body: { ...validInput, actorUserId: 999, studentId: 999 },
+    }), res);
+
+    assert.equal(res.statusCode, 400);
+    assert.match(res.body.error, /Unknown field/);
+    assert.equal(historyCalls, 0);
+  });
+
+  it('maps feedback to feedback and preserves its response contract', async () => {
+    const calls = [];
+    predictionHistoryService.recordPredictionEvent = async (...args) => {
+      calls.push(args);
+    };
+    const res = createResponse();
+
+    await apiFeedback(createRequest(), res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.final_score, prediction.final_score);
+    assert.equal(res.body.grade, prediction.grade);
+    assert.equal(res.body.grade_confidence, prediction.grade_confidence);
+    assert.deepEqual(res.body.grade_probabilities, prediction.grade_probabilities);
+    assert.ok(res.body.feedback);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0][2].predictionKind, 'feedback');
+    assert.equal(calls[0][2].actorUserId, 101);
+  });
+
+  it('maps the trusted baseline route to baseline regardless of client hints', async () => {
+    const calls = [];
+    predictionHistoryService.recordPredictionEvent = async (...args) => {
+      calls.push(args);
+    };
+    const res = createResponse();
+
+    await apiBaselinePrediction(createRequest(), res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0][2].predictionKind, 'baseline');
+  });
+
+  it('maps the trusted What-If route to simulation', async () => {
+    const calls = [];
+    predictionHistoryService.recordPredictionEvent = async (...args) => {
+      calls.push(args);
+    };
+    const res = createResponse();
+
+    await apiSimulationPrediction(createRequest(), res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0][2].predictionKind, 'simulation');
   });
 });
-
-// Helper functions for mocking
-function mockPoolQuery(queryResultsMap) {
-  const originalQuery = pool.query;
-
-  pool.query = async (sql, params) => {
-    // Normalize SQL for matching (trim and normalize whitespace)
-    const normalizedSql = sql.trim().replace(/\s+/g, ' ');
-    const result = queryResultsMap[normalizedSql] || queryResultsMap[sql];
-
-    if (result !== undefined) {
-      return result;
-    }
-
-    // If not found, call original
-    return originalQuery.call(pool, sql, params);
-  };
-
-  // Return restore function
-  return () => { pool.query = originalQuery; };
-}
-
-function mockAuthServiceMethod(methodName, implementation) {
-  const original = authService[methodName];
-  authService[methodName] = implementation;
-  return () => { authService[methodName] = original; };
-}
-
-function mockPredictionHistoryServiceMethod(methodName, implementation) {
-  const original = predictionHistoryService[methodName];
-  predictionHistoryService[methodName] = implementation;
-  return () => { predictionHistoryService[methodName] = original; };
-}
-
-function mockMlServiceMethod(methodName, implementation) {
-  // We'll need to mock the mlService that's imported in apiController
-  // Since we can't easily modify the imported module, we'll mock at the require.cache level
-  const mlServiceMock = require.cache[require.resolve('../src/utils/mlService')];
-  if (mlServiceMock && mlServiceMock.exports) {
-    const original = mlServiceMock.exports[methodName];
-    mlServiceMock.exports[methodName] = implementation;
-    return () => { mlServiceMock.exports[methodName] = original; };
-  }
-  return () => {}; // noop if we can't find it
-}

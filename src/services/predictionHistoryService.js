@@ -1,425 +1,307 @@
 'use strict';
 
 /**
- * Prediction History Service — recording of ML prediction events for drift analysis.
- * Handles validation, normalization, and privacy-safe storage of prediction events.
+ * Prediction History Service — privacy-bounded recording of successful ML
+ * inferences. Route/controller code supplies trusted actor, student, and kind.
  */
 const crypto = require('crypto');
 const { pool } = require('../config/db');
-const { parsePositiveSafeInteger } = require('../utils/inputValidation');
+const { validatePredictionProfile } = require('../utils/mlValidation');
 const modelSnapshotService = require('./modelSnapshotService');
 
 const PREDICTION_KINDS = Object.freeze([
   'prediction',
   'feedback',
   'baseline',
-  'simulation'
+  'simulation',
 ]);
-
 const GRADE_ALLOWLIST = Object.freeze(['A', 'B', 'C', 'D', 'F']);
-const MAX_LATENCY_MS = 60000; // 60 seconds
-const SCORE_RANGE = {
-  min: 0,
-  max: 100
-};
+const FINGERPRINT_FIELDS = Object.freeze([
+  'gender',
+  'age',
+  'study_hours_per_day',
+  'attendance_percent',
+  'sleep_hours',
+  'previous_gpa',
+  'parental_education',
+  'internet_access',
+  'extracurricular',
+  'part_time_job',
+]);
+const CONTEXT_FIELDS = new Set([
+  'predictionKind',
+  'actorUserId',
+  'studentId',
+  'inferenceLatencyMs',
+]);
+const EVENT_FIELDS = new Set([
+  'actorUserId',
+  'studentId',
+  'modelSnapshotId',
+  'predictionKind',
+  'predictedScore',
+  'predictedGrade',
+  'gradeConfidence',
+  'inferenceLatencyMs',
+  'studyHours',
+  'attendancePercent',
+  'sleepHours',
+  'previousGpa',
+  'inputFingerprint',
+]);
+const MAX_LATENCY_MS = 60000;
+const SHA256_HEX_PATTERN = /^[a-f0-9]{64}$/;
+
+function assertPlainObject(value, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError(`${label} must be a plain object`);
+  }
+}
+
+function assertKnownFields(value, knownFields, label) {
+  for (const key of Object.keys(value)) {
+    if (!knownFields.has(key)) {
+      throw new RangeError(`Unknown ${label} field: ${key}`);
+    }
+  }
+}
+
+function normalizeFingerprintValue(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'boolean') return value ? 1 : 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string') {
+    const normalized = value.trim();
+    return normalized === '' ? null : normalized;
+  }
+  return null;
+}
 
 /**
- * Generate a privacy-safe input fingerprint from allowlisted behavioral fields.
- * Uses SHA-256 over normalized, sorted key-values.
+ * Hash only approved model fields. Unknown values such as notes, credentials,
+ * cookies, and arbitrary request metadata cannot affect or enter the record.
  */
 function generateInputFingerprint(input) {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) {
-    throw new TypeError('Input must be a plain object');
-  }
+  assertPlainObject(input, 'Input');
 
-  // Define allowlisted behavioral fields for fingerprinting
-  const BEHAVIORAL_FIELDS = [
-    'gender',
-    'age',
-    'study_hours_per_day',
-    'attendance_percent',
-    'sleep_hours',
-    'previous_gpa',
-    'parental_education',
-    'internet_access',
-    'extracurricular',
-    'part_time_job'
-  ];
-
-  // Build normalized input with only allowlisted fields
-  const normalized = {};
-  for (const field of BEHAVIORAL_FIELDS) {
+  const canonical = {};
+  for (const field of FINGERPRINT_FIELDS) {
     if (Object.prototype.hasOwnProperty.call(input, field)) {
-      const value = input[field];
-      // Normalize values for consistent hashing
-      if (value === null || value === undefined) {
-        normalized[field] = null;
-      } else if (typeof value === 'boolean') {
-        normalized[field] = value ? 1 : 0;
-      } else if (typeof value === 'number') {
-        normalized[field] = Number.isFinite(value) ? value : null;
-      } else if (typeof value === 'string') {
-        // Trim strings and normalize empty strings to null
-        const trimmed = value.trim();
-        normalized[field] = trimmed === '' ? null : trimmed;
-      } else {
-        // For other types, use JSON representation
-        normalized[field] = value;
-      }
+      canonical[field] = normalizeFingerprintValue(input[field]);
     }
   }
 
-  // Sort keys and create deterministic JSON string
-  const sortedKeys = Object.keys(normalized).sort();
-  const normalizedJSON = JSON.stringify(
-    sortedKeys.reduce((obj, key) => {
-      obj[key] = normalized[key];
-      return obj;
-    }, {})
-  );
-
-  // Generate SHA-256 hash
-  return crypto
-    .createHash('sha256')
-    .update(normalizedJSON, 'utf-8')
-    .digest('hex');
+  const serialized = JSON.stringify(canonical);
+  return crypto.createHash('sha256').update(serialized, 'utf8').digest('hex');
 }
 
-/**
- * Validate and normalize prediction event fields before persistence.
- * Throws on invalid input.
- */
-function validatePredictionEvent({
-  actorUserId,
-  studentId,
-  modelSnapshotId,
-  predictionKind,
-  predictedScore,
-  predictedGrade,
-  gradeConfidence,
-  inferenceLatencyMs,
-  studyHours,
-  attendancePercent,
-  sleepHours,
-  previousGpa,
-  inputFingerprint
-}) {
-  // Validate actor_user_id (can be null if not authenticated)
-  if (actorUserId !== null && actorUserId !== undefined) {
-    if (!Number.isSafeInteger(actorUserId) || actorUserId <= 0) {
-      throw new RangeError('actor_user_id must be a positive integer or null');
-    }
-  } else {
-    // Explicitly set to null if undefined
-    actorUserId = null;
+function normalizeOptionalId(value, field) {
+  if (value === null || value === undefined) return null;
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new RangeError(`${field} must be a positive safe integer or null`);
+  }
+  return value;
+}
+
+function validatePredictionEvent(event) {
+  assertPlainObject(event, 'Prediction event');
+  assertKnownFields(event, EVENT_FIELDS, 'prediction event');
+
+  const actorUserId = normalizeOptionalId(event.actorUserId, 'actor_user_id');
+  const studentId = normalizeOptionalId(event.studentId, 'student_id');
+
+  if (!Number.isSafeInteger(event.modelSnapshotId) || event.modelSnapshotId <= 0) {
+    throw new RangeError('model_snapshot_id must be a positive safe integer');
+  }
+  if (typeof event.predictionKind !== 'string' || !PREDICTION_KINDS.includes(event.predictionKind)) {
+    throw new RangeError(`prediction_kind must be one of: ${PREDICTION_KINDS.join(', ')}`);
+  }
+  if (!Number.isFinite(event.predictedScore) || event.predictedScore < 0 || event.predictedScore > 100) {
+    throw new RangeError('predicted_score must be a finite number between 0 and 100');
+  }
+  if (typeof event.predictedGrade !== 'string' || !GRADE_ALLOWLIST.includes(event.predictedGrade)) {
+    throw new RangeError(`predicted_grade must be one of: ${GRADE_ALLOWLIST.join(', ')}`);
+  }
+  if (!Number.isFinite(event.gradeConfidence) || event.gradeConfidence < 0 || event.gradeConfidence > 1) {
+    throw new RangeError('grade_confidence must be a finite number between 0 and 1');
+  }
+  if (!Number.isInteger(event.inferenceLatencyMs) || event.inferenceLatencyMs < 0 || event.inferenceLatencyMs > MAX_LATENCY_MS) {
+    throw new RangeError(`inference_latency_ms must be an integer between 0 and ${MAX_LATENCY_MS}`);
   }
 
-  // Validate student_id (nullable, but if set must be positive integer)
-  if (studentId !== null && studentId !== undefined) {
-    if (!Number.isSafeInteger(studentId) || studentId <= 0) {
-      throw new RangeError('student_id must be a positive integer or null');
-    }
-  } else {
-    studentId = null;
-  }
-
-  // Validate model_snapshot_id (required, must be positive integer)
-  if (!Number.isSafeInteger(modelSnapshotId) || modelSnapshotId <= 0) {
-    throw new RangeError('model_snapshot_id must be a positive integer');
-  }
-
-  // Validate prediction_kind (must be allowlisted)
-  if (typeof predictionKind !== 'string' || !PREDICTION_KINDS.includes(predictionKind)) {
-    throw new RangeError(
-      `prediction_kind must be one of: ${PREDICTION_KINDS.join(', ')}`
-    );
-  }
-
-  // Validate predicted_score (finite number within range)
-  if (!Number.isFinite(predictedScore)) {
-    throw new RangeError('predicted_score must be a finite number');
-  }
-  if (predictedScore < SCORE_RANGE.min || predictedScore > SCORE_RANGE.max) {
-    throw new RangeError(
-      `predicted_score must be between ${SCORE_RANGE.min} and ${SCORE_RANGE.max}`
-    );
-  }
-
-  // Validate predicted_grade (must be in allowlist)
-  if (typeof predictedGrade !== 'string' || !GRADE_ALLOWLIST.includes(predictedGrade)) {
-    throw new RangeError(
-      `predicted_grade must be one of: ${GRADE_ALLOWLIST.join(', ')}`
-    );
-  }
-
-  // Validate grade_confidence (finite number between 0 and 1)
-  if (!Number.isFinite(gradeConfidence)) {
-    throw new RangeError('grade_confidence must be a finite number');
-  }
-  if (gradeConfidence < 0 || gradeConfidence > 1) {
-    throw new RangeError('grade_confidence must be between 0 and 1');
-  }
-
-  // Validate inference_latency_ms (non-negative integer, bounded)
-  if (!Number.isInteger(inferenceLatencyMs)) {
-    throw new RangeError('inference_latency_ms must be an integer');
-  }
-  if (inferenceLatencyMs < 0) {
-    throw new RangeError('inference_latency_ms must be non-negative');
-  }
-  if (inferenceLatencyMs > MAX_LATENCY_MS) {
-    throw new RangeError(
-      `inference_latency_ms must not exceed ${MAX_LATENCY_MS}ms`
-    );
-  }
-
-  // Validate behavioral numeric fields (if provided)
   const behavioralFields = [
-    { name: 'study_hours', value: studyHours, max: 24 },
-    { name: 'attendance_percent', value: attendancePercent, max: 100 },
-    { name: 'sleep_hours', value: sleepHours, max: 24 },
-    { name: 'previous_gpa', value: previousGpa, max: 4.0 }
+    ['study_hours', event.studyHours, 24, false],
+    ['attendance_percent', event.attendancePercent, 100, true],
+    ['sleep_hours', event.sleepHours, 24, false],
+    ['previous_gpa', event.previousGpa, 4, false],
   ];
-
-  for (const field of behavioralFields) {
-    if (field.value !== null && field.value !== undefined) {
-      if (!Number.isFinite(field.value)) {
-        throw new RangeError(`${field.name} must be a finite number`);
-      }
-      if (field.value < 0) {
-        throw new RangeError(`${field.name} must be non-negative`);
-      }
-      if (field.value > field.max) {
-        throw new RangeError(`${field.name} must not exceed ${field.max}`);
-      }
+  for (const [name, value, max, integer] of behavioralFields) {
+    if (value === null || value === undefined) continue;
+    if (!Number.isFinite(value) || value < 0 || value > max || (integer && !Number.isInteger(value))) {
+      throw new RangeError(`${name} must be ${integer ? 'an integer' : 'a finite number'} between 0 and ${max}`);
     }
   }
 
-  // Validate input_fingerprint (string, expected SHA-256 length)
-  if (typeof inputFingerprint !== 'string' || inputFingerprint.length !== 64) {
-    throw new RangeError('input_fingerprint must be a 64-character hex string');
+  if (typeof event.inputFingerprint !== 'string' || !SHA256_HEX_PATTERN.test(event.inputFingerprint)) {
+    throw new RangeError('input_fingerprint must be a 64-character SHA-256 hash');
   }
-  if (!/^[0-9a-f]+$/i.test(inputFingerprint)) {
-    throw new RangeError('input_fingerprint must contain only hexadecimal characters');
-  }
-}
 
-/**
- * Insert one successful prediction event.
- * Returns the event ID.
- */
-async function insertPredictionEvent({
-  actorUserId,
-  studentId,
-  modelSnapshotId,
-  predictionKind,
-  predictedScore,
-  predictedGrade,
-  gradeConfidence,
-  inferenceLatencyMs,
-  studyHours,
-  attendancePercent,
-  sleepHours,
-  previousGpa,
-  inputFingerprint
-}) {
-  // Validate all inputs
-  validatePredictionEvent({
+  return {
+    ...event,
     actorUserId,
     studentId,
-    modelSnapshotId,
-    predictionKind,
-    predictedScore,
-    predictedGrade,
-    gradeConfidence,
-    inferenceLatencyMs,
-    studyHours,
-    attendancePercent,
-    sleepHours,
-    previousGpa,
-    inputFingerprint
-  });
+    studyHours: event.studyHours ?? null,
+    attendancePercent: event.attendancePercent ?? null,
+    sleepHours: event.sleepHours ?? null,
+    previousGpa: event.previousGpa ?? null,
+  };
+}
 
+/**
+ * Persist one fully populated successful event with parameterized SQL.
+ */
+async function insertPredictionEvent(event) {
+  const validated = validatePredictionEvent(event);
+
+  let result;
   try {
-    const [result] = await pool.query(
+    [result] = await pool.query(
       `
       INSERT INTO ml_prediction_events
         (actor_user_id, student_id, model_snapshot_id, prediction_kind,
          predicted_score, predicted_grade, grade_confidence, inference_latency_ms,
          study_hours, attendance_percent, sleep_hours, previous_gpa, input_fingerprint)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
-        actorUserId ?? null,
-        studentId ?? null,
-        modelSnapshotId,
-        predictionKind,
-        predictedScore,
-        predictedGrade,
-        gradeConfidence,
-        inferenceLatencyMs,
-        studyHours ?? null,
-        attendancePercent ?? null,
-        sleepHours ?? null,
-        previousGpa ?? null,
-        inputFingerprint
+        validated.actorUserId,
+        validated.studentId,
+        validated.modelSnapshotId,
+        validated.predictionKind,
+        validated.predictedScore,
+        validated.predictedGrade,
+        validated.gradeConfidence,
+        validated.inferenceLatencyMs,
+        validated.studyHours,
+        validated.attendancePercent,
+        validated.sleepHours,
+        validated.previousGpa,
+        validated.inputFingerprint,
       ]
     );
-
-    return result.insertId;
   } catch (err) {
-    // Log safely (don't include sensitive data in error messages)
-    console.error('[predictionHistoryService] Failed to insert prediction event:', err.message);
     throw new Error('Failed to record prediction event');
   }
-}
 
-/**
- * Get or create the active model snapshot and record a prediction event.
- * Convenience method that combines snapshot retrieval with event insertion.
- */
-async function recordPredictionEvent(predictionInput, options = {}) {
-  const {
-    predictionKind = 'prediction', // default, can be overridden by caller
-    actorUserId = null, // will be set from auth context in controllers
-    latencyMs = 0
-  } = options;
-
-  // Get active model snapshot
-  const { snapshotId, modelVersion } = await modelSnapshotService.getActiveSnapshot();
-
-  // Generate input fingerprint from the prediction input
-  const inputFingerprint = generateInputFingerprint(predictionInput);
-
-  // Extract behavioral fields for storage (with validation)
-  const {
-    gender,
-    age,
-    study_hours_per_day,
-    attendance_percent,
-    sleep_hours,
-    previous_gpa,
-    parental_education,
-    internet_access,
-    extracurricular,
-    part_time_job
-  } = predictionInput;
-
-  // Insert the prediction event
-  const eventId = await insertPredictionEvent({
-    actorUserId,
-    studentId: null, // TODO: resolve from actorUserId if needed, but nullable per spec
-    modelSnapshotId: snapshotId,
-    predictionKind,
-    predictedScore: 0, // placeholder - will be updated after inference
-    predictedGrade: 'F', // placeholder
-    gradeConfidence: 0, // placeholder
-    inferenceLatencyMs: latencyMs,
-    studyHours: study_hours_per_day ?? null,
-    attendancePercent: attendance_percent ?? null,
-    sleepHours: sleep_hours ?? null,
-    previousGpa: previous_gpa ?? null,
-    inputFingerprint
-  });
-
-  return {
-    eventId,
-    snapshotId,
-    modelVersion,
-    inputFingerprint
-  };
-}
-
-/**
- * Update a prediction event with the actual inference results.
- * Called after successful ML inference.
- */
-async function updatePredictionEventWithResults(eventId, predictionResults) {
-  // Validate prediction results
-  if (!predictionResults || typeof predictionResults !== 'object') {
-    throw new TypeError('Prediction results must be an object');
+  if (!Number.isSafeInteger(result.insertId) || result.insertId <= 0) {
+    throw new Error('Failed to record prediction event');
   }
+  return result.insertId;
+}
 
+function validatePredictionResult(predictionResult) {
+  assertPlainObject(predictionResult, 'Prediction result');
   const {
     final_score: predictedScore,
     grade: predictedGrade,
-    grade_confidence: gradeConfidence
-  } = predictionResults;
+    grade_confidence: gradeConfidence,
+  } = predictionResult;
 
-  // Basic validation (full validation happens in insertPredictionEvent)
   if (!Number.isFinite(predictedScore) || predictedScore < 0 || predictedScore > 100) {
-    throw new RangeError('Invalid predicted_score');
+    throw new RangeError('Prediction result final_score must be a finite number between 0 and 100');
   }
-  if (typeof predictedGrade !== 'string' || !['A', 'B', 'C', 'D', 'F'].includes(predictedGrade)) {
-    throw new RangeError('Invalid predicted_grade');
+  if (typeof predictedGrade !== 'string' || !GRADE_ALLOWLIST.includes(predictedGrade)) {
+    throw new RangeError(`Prediction result grade must be one of: ${GRADE_ALLOWLIST.join(', ')}`);
   }
   if (!Number.isFinite(gradeConfidence) || gradeConfidence < 0 || gradeConfidence > 1) {
-    throw new RangeError('Invalid grade_confidence');
+    throw new RangeError('Prediction result grade_confidence must be a finite number between 0 and 1');
   }
 
-  try {
-    await pool.query(
-      `
-      UPDATE ml_prediction_events
-      SET predicted_score = ?,
-          predicted_grade = ?,
-          grade_confidence = ?
-      WHERE id = ?
-      `,
-      [predictedScore, predictedGrade, gradeConfidence, eventId]
-    );
-  } catch (err) {
-    console.error('[predictionHistoryService] Failed to update prediction event:', err.message);
-    // Don't throw - persistence failure shouldn't fail the inference
-  }
+  return { predictedScore, predictedGrade, gradeConfidence };
 }
 
 /**
- * Ensure the ml_prediction_events table exists.
- * Called during server startup.
+ * Validate input/output/context and atomically insert the actual inference
+ * result. No placeholder event is created before inference completes.
  */
-async function ensurePredictionEventsTable() {
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS ml_prediction_events (
-            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            actor_user_id INT UNSIGNED NULL,
-            student_id INT UNSIGNED NULL,
-            model_snapshot_id INT UNSIGNED NOT NULL,
-            prediction_kind ENUM('prediction', 'feedback', 'baseline', 'simulation') NOT NULL,
-            predicted_score DECIMAL(5,2) NOT NULL,
-            predicted_grade ENUM('A', 'B', 'C', 'D', 'F') NOT NULL,
-            grade_confidence DECIMAL(4,3) NOT NULL,
-            inference_latency_ms INT UNSIGNED NOT NULL,
-            study_hours DECIMAL(4,2) NULL,
-            attendance_percent INT UNSIGNED NULL,
-            sleep_hours DECIMAL(4,2) NULL,
-            previous_gpa DECIMAL(3,2) NULL,
-            input_fingerprint CHAR(64) NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_prediction_events_created (created_at),
-            INDEX idx_prediction_events_actor (actor_user_id, created_at),
-            INDEX idx_prediction_events_student (student_id, created_at),
-            INDEX idx_prediction_events_model (model_snapshot_id, created_at),
-            INDEX idx_prediction_events_kind (prediction_kind, created_at),
-            CONSTRAINT fk_prediction_events_model_snapshot
-                FOREIGN KEY (model_snapshot_id) REFERENCES ml_model_snapshots(id)
-                ON DELETE RESTRICT,
-            CONSTRAINT fk_prediction_events_actor
-                FOREIGN KEY (actor_user_id) REFERENCES users(id)
-                ON DELETE SET NULL,
-            CONSTRAINT fk_prediction_events_student
-                FOREIGN KEY (student_id) REFERENCES students(id)
-                ON DELETE SET NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    `);
+async function recordPredictionEvent(predictionInput, predictionResult, context) {
+  const normalizedInput = validatePredictionProfile(predictionInput);
+  const normalizedResult = validatePredictionResult(predictionResult);
+  assertPlainObject(context, 'Prediction context');
+  assertKnownFields(context, CONTEXT_FIELDS, 'prediction context');
 
-};
+  const {
+    predictionKind,
+    actorUserId = null,
+    studentId = null,
+    inferenceLatencyMs,
+  } = context;
+  const { snapshotId, modelVersion } = await modelSnapshotService.getActiveSnapshot();
+  const inputFingerprint = generateInputFingerprint(normalizedInput);
+
+  const eventId = await insertPredictionEvent({
+    actorUserId,
+    studentId,
+    modelSnapshotId: snapshotId,
+    predictionKind,
+    predictedScore: normalizedResult.predictedScore,
+    predictedGrade: normalizedResult.predictedGrade,
+    gradeConfidence: normalizedResult.gradeConfidence,
+    inferenceLatencyMs,
+    studyHours: normalizedInput.study_hours_per_day,
+    attendancePercent: normalizedInput.attendance_percent,
+    sleepHours: normalizedInput.sleep_hours,
+    previousGpa: normalizedInput.previous_gpa,
+    inputFingerprint,
+  });
+
+  return { eventId, snapshotId, modelVersion, inputFingerprint };
+}
+
+async function ensurePredictionEventsTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ml_prediction_events (
+      id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      actor_user_id INT UNSIGNED NULL,
+      student_id INT UNSIGNED NULL,
+      model_snapshot_id INT UNSIGNED NOT NULL,
+      prediction_kind ENUM('prediction', 'feedback', 'baseline', 'simulation') NOT NULL,
+      predicted_score DECIMAL(5,2) NOT NULL,
+      predicted_grade ENUM('A', 'B', 'C', 'D', 'F') NOT NULL,
+      grade_confidence DECIMAL(4,3) NOT NULL,
+      inference_latency_ms INT UNSIGNED NOT NULL,
+      study_hours DECIMAL(4,2) NULL,
+      attendance_percent TINYINT UNSIGNED NULL,
+      sleep_hours DECIMAL(4,2) NULL,
+      previous_gpa DECIMAL(3,2) NULL,
+      input_fingerprint CHAR(64) NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_prediction_events_created (created_at),
+      INDEX idx_prediction_events_actor (actor_user_id, created_at),
+      INDEX idx_prediction_events_student (student_id, created_at),
+      INDEX idx_prediction_events_model (model_snapshot_id, created_at),
+      INDEX idx_prediction_events_kind (prediction_kind, created_at),
+      CONSTRAINT fk_prediction_events_model_snapshot
+        FOREIGN KEY (model_snapshot_id) REFERENCES ml_model_snapshots(id)
+        ON DELETE RESTRICT,
+      CONSTRAINT fk_prediction_events_actor
+        FOREIGN KEY (actor_user_id) REFERENCES users(id)
+        ON DELETE SET NULL,
+      CONSTRAINT fk_prediction_events_student
+        FOREIGN KEY (student_id) REFERENCES students(id)
+        ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `);
+}
 
 module.exports = {
-    generateInputFingerprint,
-    validatePredictionEvent,
-    insertPredictionEvent,
-    recordPredictionEvent,
-    updatePredictionEventWithResults,
-    ensurePredictionEventsTable
-}
+  FINGERPRINT_FIELDS,
+  GRADE_ALLOWLIST,
+  MAX_LATENCY_MS,
+  PREDICTION_KINDS,
+  generateInputFingerprint,
+  validatePredictionEvent,
+  insertPredictionEvent,
+  recordPredictionEvent,
+  ensurePredictionEventsTable,
+};

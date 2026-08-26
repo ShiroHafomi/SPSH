@@ -37,7 +37,7 @@ const SORT_OPTIONS = [
 const GRADE_OPTIONS = ['A', 'B', 'C', 'D', 'F'];
 const GENDER_OPTIONS = ['Male', 'Female', 'Other'];
 const PART_TIME_JOB_OPTIONS = ['Yes', 'No'];
-const PARENTAL_EDU_OPTIONS = ['High School', 'Bachelor', 'Masters', 'PhD', 'None'];
+const PARENTAL_EDU_OPTIONS = ['High School', 'Bachelor', 'Master', 'PhD', 'None'];
 
 function RiskBadge({ riskLevel }) {
   const { t } = useLanguage();

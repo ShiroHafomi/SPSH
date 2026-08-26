@@ -4,6 +4,7 @@
  */
 const studentService = require('../services/studentService');
 const mlService = require('../services/mlService');
+const predictionHistoryService = require('../services/predictionHistoryService');
 const { generateStudentAdvice } = require('../services/aiCounselService');
 const { logAuditEvent } = require('../services/authService');
 
@@ -106,6 +107,30 @@ async function apiStudentSimulate(req, res) {
         return res.status(404).json({ error: 'Student record not found.' });
       }
       throw err;
+    }
+
+    // Record each inference using route-controlled kinds and trusted identities.
+    const historyEntries = Array.isArray(simulation.historyEntries)
+      ? simulation.historyEntries
+      : [];
+    for (const [index, entry] of historyEntries.entries()) {
+      try {
+        await predictionHistoryService.recordPredictionEvent(
+          entry.input,
+          entry.result,
+          {
+            predictionKind: index === 0 ? 'baseline' : 'simulation',
+            actorUserId: req.user.id,
+            studentId,
+            inferenceLatencyMs: entry.inferenceLatencyMs,
+          }
+        );
+      } catch (historyErr) {
+        console.error(
+          '[apiStudentSimulate] Failed to record prediction history:',
+          historyErr.message
+        );
+      }
     }
 
     // Generate recommendations based on the difference

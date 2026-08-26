@@ -1,223 +1,207 @@
 'use strict';
 
 /**
- * Model Snapshot Service — versioning and tracking of ML model snapshots.
- * Generates stable model versions based on normalized metrics and artifact fingerprints.
+ * Model Snapshot Service — deterministic versioning for the active ML artifacts.
  */
 const crypto = require('crypto');
-const { pool } = require('../config/db');
 const fs = require('fs').promises;
 const path = require('path');
+const { pool } = require('../config/db');
 
 const MODELS_DIR = path.join(__dirname, '..', '..', 'ml', 'models');
 const METRICS_FILE = path.join(MODELS_DIR, 'metrics.json');
-const MAX_METRICS_SIZE = 64 * 1024; // 64 KiB
-
-const ARTIFACT_FILES = [
+const MAX_METRICS_SIZE = 64 * 1024;
+const SHA256_HEX_PATTERN = /^[a-f0-9]{64}$/;
+const ARTIFACT_FILES = Object.freeze([
   'regressor.joblib',
   'classifier.joblib',
-  'preprocessor.joblib'
-];
+  'preprocessor.joblib',
+]);
+
+function sha256(value) {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+function normalizeJson(value) {
+  if (Array.isArray(value)) {
+    return value.map(normalizeJson);
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.keys(value)
+      .sort()
+      .reduce((normalized, key) => {
+        normalized[key] = normalizeJson(value[key]);
+        return normalized;
+      }, {});
+  }
+  return value;
+}
+
+function containsAbsolutePath(value) {
+  if (Array.isArray(value)) {
+    return value.some(containsAbsolutePath);
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.values(value).some(containsAbsolutePath);
+  }
+  return typeof value === 'string' && (
+    path.win32.isAbsolute(value) || path.posix.isAbsolute(value)
+  );
+}
+
+async function readMetrics() {
+  let buffer;
+  try {
+    buffer = await fs.readFile(METRICS_FILE);
+  } catch (err) {
+    throw new Error(`Failed to read model metrics (${err.code || 'unavailable'})`);
+  }
+
+  if (buffer.length > MAX_METRICS_SIZE) {
+    throw new RangeError(`Model metrics must not exceed ${MAX_METRICS_SIZE} bytes`);
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(buffer.toString('utf8'));
+  } catch (err) {
+    throw new Error('Failed to parse model metrics JSON');
+  }
+
+  if (containsAbsolutePath(parsed)) {
+    throw new RangeError('Model metrics must not contain absolute paths');
+  }
+
+  const metricsJson = JSON.stringify(normalizeJson(parsed));
+  if (Buffer.byteLength(metricsJson, 'utf8') > MAX_METRICS_SIZE) {
+    throw new RangeError(`Normalized model metrics must not exceed ${MAX_METRICS_SIZE} bytes`);
+  }
+
+  return metricsJson;
+}
+
+async function hashArtifact(filename) {
+  let buffer;
+  try {
+    buffer = await fs.readFile(path.join(MODELS_DIR, filename));
+  } catch (err) {
+    throw new Error(`Required model artifact unavailable: ${filename}`);
+  }
+  return sha256(buffer);
+}
 
 /**
- * Generate a stable model version hash based on:
- * - Normalized metrics.json (sorted keys)
- * - SHA-256 hashes of active joblib artifacts
+ * Generate a stable SHA-256 version from normalized metrics and filename-bound
+ * artifact hashes. Artifact names remain associated with their contents so
+ * swapping two files cannot produce the same version.
  */
 async function generateModelVersion() {
+  const metricsJson = await readMetrics();
+  const metricsHash = sha256(metricsJson);
+  const artifactHashes = await Promise.all(
+    ARTIFACT_FILES.map(async (filename) => ({
+      filename,
+      hash: await hashArtifact(filename),
+    }))
+  );
+
+  const artifactRecords = artifactHashes.map(
+    ({ filename, hash }) => `${filename}:${hash}`
+  );
+  const artifactFingerprint = sha256(artifactRecords.join('\n'));
+  const modelVersion = sha256([
+    `metrics:${metricsHash}`,
+    ...artifactRecords,
+  ].join('\n'));
+
+  return { modelVersion, metricsJson, artifactFingerprint };
+}
+
+function validateSnapshotData(modelVersion, metricsJson, artifactFingerprint) {
+  if (typeof modelVersion !== 'string' || !SHA256_HEX_PATTERN.test(modelVersion)) {
+    throw new RangeError('model_version must be a 64-character SHA-256 hash');
+  }
+  if (typeof artifactFingerprint !== 'string' || !SHA256_HEX_PATTERN.test(artifactFingerprint)) {
+    throw new RangeError('artifact_fingerprint must be a 64-character SHA-256 hash');
+  }
+  if (typeof metricsJson !== 'string') {
+    throw new TypeError('metrics_json must be a JSON string');
+  }
+  if (Buffer.byteLength(metricsJson, 'utf8') > MAX_METRICS_SIZE) {
+    throw new RangeError(`metrics_json must not exceed ${MAX_METRICS_SIZE} bytes`);
+  }
+
+  let parsed;
   try {
-    // Read and normalize metrics.json
-    let metricsContent = '';
-    try {
-      const metricsBuffer = await fs.readFile(METRICS_FILE);
-      // Limit size to prevent DoS
-      if (metricsBuffer.length > MAX_METRICS_SIZE) {
-        throw new Error('Metrics file too large');
-      }
-      metricsContent = metricsBuffer.toString('utf-8');
-    } catch (err) {
-      throw new Error(`Failed to read metrics: ${err.message}`);
-    }
-
-    let metricsObj;
-    try {
-      metricsObj = JSON.parse(metricsContent);
-    } catch (err) {
-      throw new Error(`Failed to parse metrics JSON: ${err.message}`);
-    }
-
-    // Normalize: sort object keys recursively
-    const normalizedMetrics = JSON.stringify(
-      metricsObj,
-      (key, value) => {
-        // Sort objects by key, leave arrays as-is
-        if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-          return Object.keys(value)
-            .sort()
-            .reduce((obj, k) => {
-              obj[k] = value[k];
-              return obj;
-            }, {});
-        }
-        return value;
-      }
-    );
-
-    // Generate hash of normalized metrics
-    const metricsHash = crypto
-      .createHash('sha256')
-      .update(normalizedMetrics, 'utf-8')
-      .digest('hex');
-
-    // Generate hashes of artifact files
-    const artifactHashes = await Promise.all(
-      ARTIFACT_FILES.map(async (filename) => {
-        const filePath = path.join(MODELS_DIR, filename);
-        try {
-          const buffer = await fs.readFile(filePath);
-          return crypto
-            .createHash('sha256')
-            .update(buffer)
-            .digest('hex');
-        } catch (err) {
-          // If artifact missing, we'll handle it in the version generation
-          return null;
-        }
-      })
-    );
-
-    // Filter out null hashes (missing files) and sort for consistency
-    const validArtifactHashes = artifactHashes
-      .filter((hash) => hash !== null)
-      .sort();
-
-    // Combine metrics hash with artifact hashes
-    const combinedInput = [
-      metricsHash,
-      ...validArtifactHashes,
-      ...ARTIFACT_FILES // Include filenames for version stability
-    ].join('|');
-
-    const modelVersion = crypto
-      .createHash('sha256')
-      .update(combinedInput, 'utf-8')
-      .digest('hex');
-
-    // Also create an artifact fingerprint (simpler version for change detection)
-    const artifactFingerprint = crypto
-      .createHash('sha256')
-      .update(
-        [metricsHash, ...validArtifactHashes].join('|'),
-        'utf-8'
-      )
-      .digest('hex');
-
-    return {
-      modelVersion,
-      metricsJson: normalizedMetrics,
-      artifactFingerprint,
-    };
+    parsed = JSON.parse(metricsJson);
   } catch (err) {
-    // Re-throw with context
-    throw new Error(`Failed to generate model version: ${err.message}`);
+    throw new RangeError('metrics_json must contain valid JSON');
+  }
+  if (containsAbsolutePath(parsed)) {
+    throw new RangeError('metrics_json must not contain absolute paths');
   }
 }
 
 /**
- * Insert a model snapshot idempotently.
- * Returns the snapshot ID and whether it was inserted (true) or already existed (false).
+ * Insert a snapshot idempotently. LAST_INSERT_ID returns the existing row ID
+ * on a concurrent duplicate, so callers never need a read-then-write race.
  */
 async function insertModelSnapshot(modelVersion, metricsJson, artifactFingerprint) {
-  try {
-    const [result] = await pool.query(
-      `
-      INSERT INTO ml_model_snapshots
-        (model_version, metrics_json, artifact_fingerprint)
-      VALUES (?, ?, ?)
-      ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)
-      `,
-      [modelVersion, metricsJson, artifactFingerprint]
-    );
+  validateSnapshotData(modelVersion, metricsJson, artifactFingerprint);
 
-    // If affectedRows is 1, it was inserted; if 2, it was updated (duplicate key)
-    const inserted = result.affectedRows === 1;
-    const snapshotId = result.insertId;
+  const [result] = await pool.query(
+    `
+    INSERT INTO ml_model_snapshots
+      (model_version, metrics_json, artifact_fingerprint)
+    VALUES (?, ?, ?)
+    ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)
+    `,
+    [modelVersion, metricsJson, artifactFingerprint]
+  );
 
-    return { snapshotId, inserted };
-  } catch (err) {
-    throw new Error(`Failed to insert model snapshot: ${err.message}`);
+  if (!Number.isSafeInteger(result.insertId) || result.insertId <= 0) {
+    throw new Error('Database did not return a valid model snapshot ID');
   }
+
+  return {
+    snapshotId: result.insertId,
+    inserted: result.affectedRows === 1,
+  };
 }
 
 /**
- * Get the active model snapshot ID and version.
- * If no snapshot exists, creates one from current models.
+ * Resolve the snapshot for the active files with one concurrency-safe insert.
  */
 async function getActiveSnapshot() {
-  try {
-    // First, try to get the most recent snapshot
-    const [rows] = await pool.query(
-      `
-      SELECT id, model_version, metrics_json, artifact_fingerprint, created_at
-      FROM ml_model_snapshots
-      ORDER BY created_at DESC, id DESC
-      LIMIT 1
-      `
-    );
+  const versionData = await generateModelVersion();
+  const { snapshotId } = await insertModelSnapshot(
+    versionData.modelVersion,
+    versionData.metricsJson,
+    versionData.artifactFingerprint
+  );
 
-    if (rows.length > 0) {
-      const row = rows[0];
-      // Verify that the snapshot still matches current models
-      const currentVersionData = await generateModelVersion();
-
-      if (
-        row.model_version === currentVersionData.modelVersion &&
-        row.artifact_fingerprint === currentVersionData.artifactFingerprint
-      ) {
-        // Current models match the most recent snapshot
-        return {
-          snapshotId: row.id,
-          modelVersion: row.model_version,
-        };
-      }
-      // Otherwise, fall through to create a new snapshot
-    }
-
-    // No existing snapshot or mismatch - create new one
-    const versionData = await generateModelVersion();
-    const { snapshotId, inserted } = await insertModelSnapshot(
-      versionData.modelVersion,
-      versionData.metricsJson,
-      versionData.artifactFingerprint
-    );
-
-    return {
-      snapshotId,
-      modelVersion: versionData.modelVersion,
-    };
-  } catch (err) {
-    throw new Error(`Failed to get active model snapshot: ${err.message}`);
-  }
+  return {
+    snapshotId,
+    modelVersion: versionData.modelVersion,
+  };
 }
 
-/**
- * Ensure the ml_model_snapshots table exists.
- * Called during server startup.
- */
 async function ensureModelSnapshotsTable() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS ml_model_snapshots (
       id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-      model_version VARCHAR(64) NOT NULL UNIQUE,
+      model_version CHAR(64) NOT NULL UNIQUE,
       metrics_json JSON NOT NULL,
-      artifact_fingerprint VARCHAR(64) NOT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      artifact_fingerprint CHAR(64) NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_model_snapshots_created (created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
 }
 
 module.exports = {
+  ARTIFACT_FILES,
+  MAX_METRICS_SIZE,
   generateModelVersion,
   insertModelSnapshot,
   getActiveSnapshot,
