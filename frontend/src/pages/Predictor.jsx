@@ -13,7 +13,7 @@ const DEFAULT_PROFILE = {
   attendance_percent: 85,
   sleep_hours: 7,
   previous_gpa: 3.2,
-  parental_education: 'Masters',
+  parental_education: 'Master',
   internet_access: 'Yes',
   extracurricular: 'Yes',
   part_time_job: 'No',
@@ -89,7 +89,7 @@ export default function Predictor() {
         modifiedProfile[whatIfFeature] = parseFloat(whatIfValue);
       }
 
-      const response = await api.post('/feedback', modifiedProfile);
+      const response = await api.post('/predict/simulation', modifiedProfile);
       setWhatIfResult(response);
     } catch (err) {
       addFlash(err.message, 'error');
@@ -257,10 +257,10 @@ export default function Predictor() {
                   className="input"
                 >
                   <option value="High School">High School</option>
-                  <option value="Associate">Associate</option>
-                  <option value="Bachelors">Bachelors</option>
-                  <option value="Masters">Masters</option>
+                  <option value="Bachelor">Bachelor</option>
+                  <option value="Master">Master</option>
                   <option value="PhD">PhD</option>
+                  <option value="None">None</option>
                 </select>
               </div>
 

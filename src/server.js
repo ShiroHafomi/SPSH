@@ -9,6 +9,8 @@ const { ensureUsersTable, ensureAuditLogsTable } = require('./services/authServi
 const { ensureAuthSessionsTable } = require('./services/authSessionService');
 const { ensureStudyGoalsTable, ensureWeeklyCheckinsTable } = require('./services/studyGoalService');
 const { ensureNotificationTables } = require('./services/notificationService');
+const { ensureModelSnapshotsTable } = require('./services/modelSnapshotService');
+const { ensurePredictionEventsTable } = require('./services/predictionHistoryService');
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -65,6 +67,22 @@ async function main() {
     console.log('   Notification tables: ready');
   } catch (err) {
     console.error('   Notification tables: FAILED —', err.message);
+  }
+
+  // Auto-create ML model snapshots table
+  try {
+    await ensureModelSnapshotsTable();
+    console.log('   ML model snapshots table: ready');
+  } catch (err) {
+    console.error('   ML model snapshots table: FAILED —', err.message);
+  }
+
+  // Auto-create ML prediction events table
+  try {
+    await ensurePredictionEventsTable();
+    console.log('   ML prediction events table: ready');
+  } catch (err) {
+    console.error('   ML prediction events table: FAILED —', err.message);
   }
 
   if (!dbReady) {

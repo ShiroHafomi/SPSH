@@ -16,7 +16,27 @@ const { getSchemaMap } = require('../utils/schemaMap');
  */
 async function predict(input) {
   const validated = validatePredictionProfile(input);
-  return runInference(validated);
+  const result = await runInference(validated);
+  return validatePredictionOutput(result);
+}
+
+/**
+ * Reject corrupt model output instead of coercing or silently clamping it.
+ */
+function validatePredictionOutput(result) {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    throw new Error('Invalid prediction output');
+  }
+  if (!Number.isFinite(result.final_score) || result.final_score < 0 || result.final_score > 100) {
+    throw new Error('Invalid prediction output');
+  }
+  if (!['A', 'B', 'C', 'D', 'F'].includes(result.grade)) {
+    throw new Error('Invalid prediction output');
+  }
+  if (!Number.isFinite(result.grade_confidence) || result.grade_confidence < 0 || result.grade_confidence > 1) {
+    throw new Error('Invalid prediction output');
+  }
+  return result;
 }
 
 /**
@@ -48,16 +68,48 @@ async function simulate(studentId, modifications) {
   if (!student) throw new Error('Student not found');
 
   const schemaMap = getSchemaMap();
-  const baseProfile = studentToProfile(student, schemaMap);
-
-  // Current prediction
+  const baseProfile = validatePredictionProfile(studentToProfile(student, schemaMap));
+  const startedCurrentAt = process.hrtime.bigint();
   const current = await predict(baseProfile);
+  const currentLatencyMs = Number(
+    (process.hrtime.bigint() - startedCurrentAt) / 1000000n
+  );
 
-  // Simulated prediction with modifications
-  const simulatedProfile = { ...baseProfile, ...modifications };
+  if (Object.keys(modifications).length === 0) {
+    return {
+      current,
+      simulated: current,
+      historyEntries: [{
+        input: baseProfile,
+        result: current,
+        inferenceLatencyMs: currentLatencyMs,
+      }],
+    };
+  }
+
+  const simulatedProfile = validatePredictionProfile({ ...baseProfile, ...modifications });
+  const startedSimulatedAt = process.hrtime.bigint();
   const simulated = await predict(simulatedProfile);
+  const simulatedLatencyMs = Number(
+    (process.hrtime.bigint() - startedSimulatedAt) / 1000000n
+  );
 
-  return { current, simulated };
+  return {
+    current,
+    simulated,
+    historyEntries: [
+      {
+        input: baseProfile,
+        result: current,
+        inferenceLatencyMs: currentLatencyMs,
+      },
+      {
+        input: simulatedProfile,
+        result: simulated,
+        inferenceLatencyMs: simulatedLatencyMs,
+      },
+    ],
+  };
 }
 
 /**
@@ -98,4 +150,5 @@ module.exports = {
   simulate,
   batchPredict,
   getStats,
+  validatePredictionOutput,
 };

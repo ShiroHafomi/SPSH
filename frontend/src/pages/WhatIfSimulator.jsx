@@ -14,7 +14,7 @@ const DEFAULT_PROFILE = {
   attendance_percent: 85,
   sleep_hours: 7,
   previous_gpa: 3.2,
-  parental_education: 'Masters',
+  parental_education: 'Master',
   internet_access: 'Yes',
   extracurricular: 'Yes',
   part_time_job: 'No',
@@ -85,7 +85,7 @@ export default function WhatIfSimulator() {
   const handlePredict = useCallback(async (data) => {
     setLoading(true);
     try {
-      const response = await api.post('/feedback', data);
+      const response = await api.post('/predict/baseline', data);
       setBaselineResult(response);
     } catch (err) {
       addFlash(err.message, 'error');
@@ -110,7 +110,7 @@ export default function WhatIfSimulator() {
         modifiedProfile[whatIfFeature] = parseFloat(whatIfValue);
       }
 
-      const response = await api.post('/feedback', modifiedProfile);
+      const response = await api.post('/predict/simulation', modifiedProfile);
       setWhatIfResult(response);
     } catch (err) {
       addFlash(err.message, 'error');
@@ -499,10 +499,10 @@ export default function WhatIfSimulator() {
                   className="input"
                 >
                   <option value="High School">{t('student.highSchool')}</option>
-                  <option value="Associate">{t('student.associate')}</option>
-                  <option value="Bachelors">{t('student.bachelors')}</option>
-                  <option value="Masters">{t('student.masters')}</option>
+                  <option value="Bachelor">{t('student.bachelors')}</option>
+                  <option value="Master">{t('student.masters')}</option>
                   <option value="PhD">{t('student.phd')}</option>
+                  <option value="None">None</option>
                 </select>
               </div>
 

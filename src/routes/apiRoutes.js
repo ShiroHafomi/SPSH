@@ -32,6 +32,8 @@ const {
   apiDashboardStats,
   apiAtRiskStudents,
   apiFeedback,
+  apiBaselinePrediction,
+  apiSimulationPrediction,
   apiListStudents,
   apiGetStudent,
   apiCreateStudent,
@@ -278,6 +280,18 @@ router.post(
   requireAuth,
   authenticatedLimit(predictionLimiter),
   apiFeedback
+);
+router.post(
+  '/predict/baseline',
+  requireAuth,
+  authenticatedLimit(predictionLimiter),
+  apiBaselinePrediction
+);
+router.post(
+  '/predict/simulation',
+  requireAuth,
+  authenticatedLimit(predictionLimiter),
+  apiSimulationPrediction
 );
 
 module.exports = router;

@@ -242,7 +242,7 @@ export default function TeacherDashboard() {
     setWhatIfLoading(true);
     try {
       // Get baseline prediction (current)
-      const baselineRes = await api.post('/feedback', {
+      const baselineRes = await api.post('/predict/baseline', {
         gender: student.gender,
         age: student.age,
         study_hours_per_day: student.study_hours_per_day,
@@ -886,7 +886,7 @@ export default function TeacherDashboard() {
                               ? parseInt(modalWhatIfValue, 10)
                               : parseFloat(modalWhatIfValue)
                         };
-                        const response = await api.post('/feedback', modifiedProfile);
+                        const response = await api.post('/predict/simulation', modifiedProfile);
                         setWhatIfSimulated(response);
                       } catch (err) {
                         console.error('Failed to run what-if simulation:', err);
