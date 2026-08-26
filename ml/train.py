@@ -104,6 +104,12 @@ LOGS_DIR.mkdir(parents=True, exist_ok=True)
 DROP_COLS = ["created_at", "updated_at"]
 TARGET_REG = "final_score"
 TARGET_CLF = "grade"
+DRIFT_BASELINE_COLUMNS = {
+    "study_hours": "study_hours_per_day",
+    "attendance_percent": "attendance_percent",
+    "sleep_hours": "sleep_hours",
+    "previous_gpa": "previous_gpa",
+}
 
 # Grade mapping
 GRADE_MAP = {"F": 0, "D": 1, "C": 2, "B": 3, "A": 4}
@@ -170,6 +176,36 @@ def log_metrics(prefix: str, metrics: Dict[str, float]):
 # ============================================================
 # DATA LOADING & PREPROCESSING
 # ============================================================
+def build_drift_baseline(df: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
+    """Build privacy-safe aggregate statistics for production drift checks."""
+    baseline = {}
+    for feature, column in DRIFT_BASELINE_COLUMNS.items():
+        if column not in df.columns:
+            raise ValueError(f"Missing drift baseline column: {column}")
+
+        values = pd.to_numeric(df[column], errors="coerce").to_numpy(dtype=float)
+        values = values[np.isfinite(values)]
+        if values.size == 0:
+            raise ValueError(f"No finite values for drift baseline column: {column}")
+
+        stats = {
+            "sample_count": int(values.size),
+            "mean": float(np.mean(values)),
+            "standard_deviation": float(np.std(values, ddof=0)),
+            "minimum": float(np.min(values)),
+            "maximum": float(np.max(values)),
+        }
+        if not all(
+            np.isfinite(value)
+            for key, value in stats.items()
+            if key != "sample_count"
+        ):
+            raise ValueError(f"Non-finite drift baseline statistics for: {column}")
+        baseline[feature] = stats
+
+    return baseline
+
+
 def load_data() -> pd.DataFrame:
     """Load and prepare data from cached CSV."""
     logger.info("Loading data from %s", DATA_PATH)
@@ -1505,6 +1541,7 @@ def main():
             "categorical_features": categorical_features,
             "binary_features": binary_features,
         },
+        "drift_baseline": build_drift_baseline(df),
         "training_duration_sec": time.time() - overall_start,
     }
 

@@ -11,11 +11,25 @@ const { pool } = require('../config/db');
 const MODELS_DIR = path.join(__dirname, '..', '..', 'ml', 'models');
 const METRICS_FILE = path.join(MODELS_DIR, 'metrics.json');
 const MAX_METRICS_SIZE = 64 * 1024;
+const MAX_DRIFT_BASELINE_SIZE = 8 * 1024;
 const SHA256_HEX_PATTERN = /^[a-f0-9]{64}$/;
 const ARTIFACT_FILES = Object.freeze([
   'regressor.joblib',
   'classifier.joblib',
   'preprocessor.joblib',
+]);
+const DRIFT_FEATURES = Object.freeze([
+  'study_hours',
+  'attendance_percent',
+  'sleep_hours',
+  'previous_gpa',
+]);
+const DRIFT_STAT_FIELDS = new Set([
+  'sample_count',
+  'mean',
+  'standard_deviation',
+  'minimum',
+  'maximum',
 ]);
 
 function sha256(value) {
@@ -49,6 +63,91 @@ function containsAbsolutePath(value) {
   );
 }
 
+function isPlainObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function parseMetricsValue(metricsValue) {
+  if (Buffer.isBuffer(metricsValue)) metricsValue = metricsValue.toString('utf8');
+  if (typeof metricsValue === 'string') {
+    try {
+      metricsValue = JSON.parse(metricsValue);
+    } catch {
+      throw new RangeError('metrics_json must contain valid JSON');
+    }
+  }
+  if (!isPlainObject(metricsValue)) {
+    throw new RangeError('Model metrics must be a JSON object');
+  }
+  return metricsValue;
+}
+
+function parseDriftBaseline(metricsValue) {
+  const metrics = parseMetricsValue(metricsValue);
+  const rawBaseline = metrics.drift_baseline;
+  if (rawBaseline === undefined) return null;
+  if (!isPlainObject(rawBaseline)) {
+    throw new RangeError('drift_baseline must be an object');
+  }
+  if (Buffer.byteLength(JSON.stringify(rawBaseline), 'utf8') > MAX_DRIFT_BASELINE_SIZE) {
+    throw new RangeError(`drift_baseline must not exceed ${MAX_DRIFT_BASELINE_SIZE} bytes`);
+  }
+
+  for (const feature of Object.keys(rawBaseline)) {
+    if (!DRIFT_FEATURES.includes(feature)) {
+      throw new RangeError(`Unknown drift baseline feature: ${feature}`);
+    }
+  }
+
+  const baseline = {};
+  for (const feature of DRIFT_FEATURES) {
+    if (!Object.prototype.hasOwnProperty.call(rawBaseline, feature)) continue;
+    const stats = rawBaseline[feature];
+    if (!isPlainObject(stats)) {
+      throw new RangeError(`drift_baseline.${feature} must be an object`);
+    }
+    for (const field of Object.keys(stats)) {
+      if (!DRIFT_STAT_FIELDS.has(field)) {
+        throw new RangeError(`Unknown drift baseline statistic: ${feature}.${field}`);
+      }
+    }
+
+    const sampleCount = stats.sample_count;
+    const mean = stats.mean;
+    const standardDeviation = stats.standard_deviation;
+    const minimum = stats.minimum;
+    const maximum = stats.maximum;
+    if (!Number.isSafeInteger(sampleCount) || sampleCount < 0) {
+      throw new RangeError(`drift_baseline.${feature}.sample_count must be a non-negative safe integer`);
+    }
+    for (const [field, value] of [
+      ['mean', mean],
+      ['standard_deviation', standardDeviation],
+      ['minimum', minimum],
+      ['maximum', maximum],
+    ]) {
+      if (!Number.isFinite(value)) {
+        throw new RangeError(`drift_baseline.${feature}.${field} must be finite`);
+      }
+    }
+    if (standardDeviation < 0) {
+      throw new RangeError(`drift_baseline.${feature}.standard_deviation cannot be negative`);
+    }
+    if (minimum > maximum) {
+      throw new RangeError(`drift_baseline.${feature}.minimum cannot exceed maximum`);
+    }
+
+    baseline[feature] = {
+      sampleCount,
+      mean,
+      standardDeviation,
+      minimum,
+      maximum,
+    };
+  }
+  return baseline;
+}
+
 async function readMetrics() {
   let buffer;
   try {
@@ -64,13 +163,14 @@ async function readMetrics() {
   let parsed;
   try {
     parsed = JSON.parse(buffer.toString('utf8'));
-  } catch (err) {
+  } catch {
     throw new Error('Failed to parse model metrics JSON');
   }
 
   if (containsAbsolutePath(parsed)) {
     throw new RangeError('Model metrics must not contain absolute paths');
   }
+  parseDriftBaseline(parsed);
 
   const metricsJson = JSON.stringify(normalizeJson(parsed));
   if (Buffer.byteLength(metricsJson, 'utf8') > MAX_METRICS_SIZE) {
@@ -84,7 +184,7 @@ async function hashArtifact(filename) {
   let buffer;
   try {
     buffer = await fs.readFile(path.join(MODELS_DIR, filename));
-  } catch (err) {
+  } catch {
     throw new Error(`Required model artifact unavailable: ${filename}`);
   }
   return sha256(buffer);
@@ -134,12 +234,13 @@ function validateSnapshotData(modelVersion, metricsJson, artifactFingerprint) {
   let parsed;
   try {
     parsed = JSON.parse(metricsJson);
-  } catch (err) {
+  } catch {
     throw new RangeError('metrics_json must contain valid JSON');
   }
   if (containsAbsolutePath(parsed)) {
     throw new RangeError('metrics_json must not contain absolute paths');
   }
+  parseDriftBaseline(parsed);
 }
 
 /**
@@ -186,6 +287,45 @@ async function getActiveSnapshot() {
   };
 }
 
+async function getModelSnapshot(modelVersion) {
+  if (modelVersion !== undefined && (
+    typeof modelVersion !== 'string' || !SHA256_HEX_PATTERN.test(modelVersion)
+  )) {
+    throw new RangeError('modelVersion must be a 64-character SHA-256 hash');
+  }
+
+  const params = [];
+  let where = '';
+  if (modelVersion !== undefined) {
+    where = 'WHERE model_version = ?';
+    params.push(modelVersion);
+  }
+  const [rows] = await pool.query(
+    `
+    SELECT id, model_version, metrics_json, created_at
+    FROM ml_model_snapshots
+    ${where}
+    ORDER BY created_at DESC, id DESC
+    LIMIT 1
+    `,
+    params
+  );
+  if (!rows[0]) return null;
+
+  let driftBaseline = null;
+  try {
+    driftBaseline = parseDriftBaseline(rows[0].metrics_json);
+  } catch {
+    driftBaseline = null;
+  }
+  return {
+    snapshotId: rows[0].id,
+    modelVersion: rows[0].model_version,
+    driftBaseline,
+    createdAt: rows[0].created_at,
+  };
+}
+
 async function ensureModelSnapshotsTable() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS ml_model_snapshots (
@@ -201,9 +341,13 @@ async function ensureModelSnapshotsTable() {
 
 module.exports = {
   ARTIFACT_FILES,
+  DRIFT_FEATURES,
+  MAX_DRIFT_BASELINE_SIZE,
   MAX_METRICS_SIZE,
   generateModelVersion,
   insertModelSnapshot,
   getActiveSnapshot,
+  getModelSnapshot,
+  parseDriftBaseline,
   ensureModelSnapshotsTable,
 };

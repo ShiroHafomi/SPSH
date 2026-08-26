@@ -97,6 +97,12 @@ const {
   apiTeacherUpdateGoalFeedback,
 } = require('../controllers/studyGoalStaffController');
 
+// ML Monitoring
+const {
+  apiGetMlDrift,
+  apiListMlPredictions,
+} = require('../controllers/mlMonitoringController');
+
 // Notifications
 const {
   apiDeleteNotification,
@@ -167,9 +173,11 @@ router.post('/students/:id/delete', ...requireStudentManagement, apiDeleteStuden
 const adminRouter = express.Router();
 adminRouter.use(requireAuth, requireRole('admin'));
 
-// Analytics
+// Analytics and ML monitoring
 adminRouter.get('/analytics', apiAdminAnalytics);
 adminRouter.get('/ml-health', apiAdminMlHealth);
+adminRouter.get('/ml/predictions', apiListMlPredictions);
+adminRouter.get('/ml/drift', apiGetMlDrift);
 
 // Audit logs
 adminRouter.get('/audit-logs', apiGetAuditLogs);
@@ -207,8 +215,10 @@ router.use('/admin', adminRouter);
 const teacherRouter = express.Router();
 teacherRouter.use(requireAuth, requireRole('admin', 'teacher'));
 
-// Analytics
+// Analytics and organization-wide ML monitoring
 teacherRouter.get('/analytics', apiTeacherAnalytics);
+teacherRouter.get('/ml/predictions', apiListMlPredictions);
+teacherRouter.get('/ml/drift', apiGetMlDrift);
 
 // At-Risk Students
 teacherRouter.get('/at-risk', apiTeacherAtRisk);
