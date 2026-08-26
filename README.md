@@ -208,6 +208,47 @@ After adding new students to MySQL:
 python ml/fetch_data.py && python ml/train.py
 ```
 
+Retraining is manual. A successful run writes a bounded `drift_baseline` to
+`metrics.json` with only count, mean, population standard deviation, minimum,
+and maximum aggregates for study hours, attendance, sleep hours, and previous
+GPA. It stores no training rows or student identifiers. Snapshots created before
+this baseline exists remain valid, but their drift status is `insufficient_data`.
+
+### Prediction History and Drift Monitoring
+
+Admin and teacher staff APIs provide bounded prediction history and model drift
+reports. Teachers have the same organization-wide scope as the application's
+existing teacher analytics; students receive HTTP 403 on staff routes.
+
+History accepts `page`, `size`, `from`, `to`, `kind`, `modelVersion`, and `grade`.
+The default is 20 rows over the previous 30 days; page size is capped at 100 and
+the date range at 366 days. Responses omit behavioral inputs, actor IDs, input
+fingerprints, metrics JSON, and request payloads.
+
+Drift accepts `from`, `to`, and `modelVersion`. Without a version, the latest
+registered snapshot is selected deterministically. Aggregation is restricted to
+that snapshot and successful `prediction` events, so model versions are never
+mixed. `feedback`, `baseline`, and `simulation` events are excluded because they
+represent content-generation or preview/What-If flows rather than real
+production predictions.
+
+Absolute standardized mean shift is calculated per feature:
+
+```text
+shift = abs(current_mean - baseline_mean)
+        / max(baseline_standard_deviation, 1e-9)
+```
+
+- `stable`: shift below `0.25`
+- `warning`: shift from `0.25` up to, but not including, `0.50`
+- `drifted`: shift at least `0.50`
+- `insufficient_data`: missing or invalid baseline/current values, or fewer than
+  30 current observations for the feature
+
+The overall status is the most severe valid feature status; if no valid feature
+comparison exists, it is `insufficient_data`. Drift is aggregated in MySQL with
+bounded parameterized queries and does not trigger automatic retraining.
+
 ---
 
 ##  API Endpoints
@@ -229,6 +270,10 @@ All return JSON. Session cookie sent automatically by browser.
 | GET | `/api/admin/users` | Yes + Admin | List users |
 | POST | `/api/admin/users/:id/delete` | Yes + Admin | Delete user |
 | POST | `/api/predict` | Yes | ML prediction |
+| GET | `/api/admin/ml/predictions` | Yes + Admin | Bounded prediction history |
+| GET | `/api/admin/ml/drift` | Yes + Admin | Model-isolated drift report |
+| GET | `/api/teacher/ml/predictions` | Yes + Teacher/Admin | Organization-wide prediction history |
+| GET | `/api/teacher/ml/drift` | Yes + Teacher/Admin | Organization-wide model drift report |
 
 ---
 
