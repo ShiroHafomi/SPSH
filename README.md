@@ -1,345 +1,546 @@
-# Student Performance & Study Habits — SPA + ML Pipeline
+# Student Performance & Study Habits
 
-A **React/Vite single-page application** backed by an **Express REST API** and **MySQL 8**, with a traditional ML pipeline for predicting student outcomes from study habits and demographics.
+A full-stack web application for analyzing and predicting student performance based on study habits. Built with a React/Vite frontend and Express/MySQL backend, featuring machine learning predictions, notification center, role-based access control, and schema-agnostic design that adapts to any CSV dataset.
 
----
+## 📊 Features
 
-##  Key Features
+- **Authentication System**: Secure login/registration with JWT tokens, password hashing (bcryptjs), and role-based access (admin/teacher/student)
+- **CRUD Operations**: Create, read, update, delete student records with form validation
+- **Dynamic Dashboard**: Interactive KPI cards and charts that adapt to dataset columns
+- **Machine Learning Pipeline**: 
+  - Regression model for final score prediction (CatBoost)
+  - Classification model for grade prediction (Random Forest)
+  - Prediction history tracking with event persistence
+  - Model drift monitoring with standardized mean shift calculation
+- **What-If Simulator**: Modify study habit parameters to see impact on predicted outcomes
+- **Saved What-If Scenarios**: Persist successful simulations, mark preferred scenarios, and compare different approaches
+- **Notification Center**: Real-time alerts for study goals, weekly check-ins, teacher feedback, and risk alerts with preference controls
+- **Study Goals & Weekly Check-ins**: Set academic targets and track progress with completion analytics
+- **Internationalization**: Full English/Vietnamese localization with synchronized key parity
+- **Role-Based Navigation**: 
+  - Students: Personal dashboard, goal tracking, simulation tools
+  - Teachers: Class analytics, ML monitoring, student management
+  - Administrators: User management, system oversight, all teacher/student features
+- **Schema-Agnostic Design**: Automatically adapts to CSV column structure at import time - no hardcoded column names
+- **Security Hardening**: 
+  - CSRF protection via Origin/Referer headers
+  - Parameterized queries to prevent SQL injection
+  - Input validation and sanitization
+  - XSS prevention through escaped templates
+  - Rate limiting on authentication endpoints
+  - Audit logging for sensitive operations
+- **Responsive Design**: Mobile-friendly interface with Tailwind CSS
+- **Production Ready**: Environment configuration, process management, and build optimization
 
-| Area | Description |
-|------|-------------|
-| **Schema-Agnostic** | No hardcoded column names. Columns are inferred from CSV at import time via `schema_map.json`. UI (tables, forms, charts) adapts automatically. |
-| **SPA Dashboard** | KPI cards + 3 Chart.js charts (bar, scatter, histogram) with semantic heuristic chart-role assignment. |
-| **Student CRUD** | Searchable, sortable, paginated table. Dynamic create/edit forms rendered from schema metadata. |
-| **Auth & Admin** | Rotating JWT cookie sessions, bcryptjs password hashing, role-based access, audit logs, and an admin user-management panel. |
-| **ML Prediction** | Two traditional ML models: RidgeCV regression (Final_Score, R²≈0.98) + GradientBoosting classification (Grade A–F, Acc≈0.82). |
-| **Robust Import** | Streaming CSV importer (two-pass: type inference → batch INSERT). Handles MySQL STRICT mode, logs errors to `import_errors.log`. |
+## 🛠️ Technology Stack
 
----
+### Frontend
+- **React 18.3** with **Vite 5.4** build tool
+- **React Router 6.26** for hash-based routing
+- **Tailwind CSS 3.4** via Play CDN (utility-first styling)
+- **Chart.js 4.4** with **react-chartjs-2 5.2** for data visualization
+- **Lucide React** for consistent iconography
+- **Axios** for HTTP client with automatic JWT handling
+- **i18next** for internationalization (English/Vietnamese)
 
-##  Tech Stack
+### Backend
+- **Node.js 22** runtime
+- **Express 4.19** REST API server
+- **mysql2/promise 3.10** connection pool for MySQL 8+
+- **jsonwebtoken 9** for authentication tokens
+- **bcryptjs 3** for password hashing
+- **csv-parse 5.5** for streaming CSV import
+- **cookie-session** for session management
+- **helmet** for security headers (production)
+- **express-rate-limit** for authentication endpoint protection
 
-| Layer | Technology |
-|-------|------------|
-| **Runtime** | Node 22 |
-| **API/Static** | Express 4 |
-| **Frontend** | React 18, React Router 6, Vite 5, Tailwind CSS, Chart.js |
-| **Database** | MySQL 8.0, `mysql2/promise` pool |
-| **Auth** | Access/refresh JWT cookies, database-backed refresh sessions, `bcryptjs` (12 rounds) |
-| **Import** | `csv-parse` (Adaltas, streaming) |
-| **ML** | Python 3.11, scikit-learn, XGBoost, pandas, joblib |
+### Machine Learning
+- **Python 3.11** runtime
+- **scikit-learn** for baseline models and utilities
+- **XGBoost** and **CatBoost** for gradient boosting
+- **Random Forest** for classification
+- **pandas** and **NumPy** for data manipulation
+- **joblib** for model serialization
+- **MLflow** for experiment tracking (optional)
 
----
+### DevOps & Infrastructure
+- **MySQL 8.0.45** database with `student_performance` schema
+- **GitHub Actions** for CI/CD (Node.js 22, Ubuntu)
+- **Nodemon** for development auto-restart
+- **ESLint** and **Prettier** for code quality
+- **Jest** and **node:test** for testing
 
-##  Project Structure
+### Database
+- **Automated schema detection** from CSV headers at import time
+- **Two-pass type inference** (peek + stream) for robust importing
+- **STRICT mode compliance** with row-by-row fallback for invalid data
+- **Audit tables** for tracking changes to critical entities
+- **Connection pooling** with configurable limits
+
+## 📁 Project Structure
 
 ```
-├─ CLAUDE.md                     # Project instructions (for AI)
+├─ README.md
 ├─ package.json
-├─ .env                          # Credentials (gitignored)
 ├─ .env.example
 ├─ .gitignore
-├─ schema_map.json               # GENERATED by import script
+├─ schema_map.json              # GENERATED by import script
 ├─ seed/
-│   └─ sample_students.csv       # 50-row bundled sample
-├─ public/                       # SPA static assets
-│   ├─ index.html                # Shell (loads Tailwind + Chart.js via CDN)
-│   ├─ css/app.css               # Custom styles + animations
-│   └─ js/
-│       ├─ api.js                # fetch wrapper + 401 handling
-│       ├─ router.js             # Hash-based SPA router
-│       ├─ app.js                # Boot, nav, flash, route registration
-│       └─ views/
-│           ├─ login.js
-│           ├─ register.js
-│           ├─ dashboard.js      # KPIs + 3 charts
-│           ├─ students.js       # Search/sort/paginate table
-│           ├─ studentForm.js    # Dynamic create/edit form
-│           └─ adminUsers.js     # User management
-├─ ml/                           # Machine Learning pipeline
+│   └─ sample_students.csv      # Sample data (50 rows, gitignored)
+├─ public/
+│   └─ vite.svg                 # Vite logo
+├─ frontend/                    # React/Vite SPA
+│   ├─ package.json
+│   ├─ vite.config.js
+│   ├─ index.html
+│   ├─ src/
+│   │   ├─ main.jsx             # Entry point
+│   │   ├─ App.jsx              # Root component with routing
+│   │   ├─ api.js               # HTTP client wrapper
+│   │   ├─ hooks/               # Custom React hooks
+│   │   │   ├─ useNotifications.jsx
+│   │   │   └─ ...
+│   │   ├─ components/          # Reusable UI components
+│   │   │   ├─ layouts/         # Role-based layouts (AdminLayout.jsx, etc.)
+│   │   │   ├─ notifications/   # Notification bell, item, preferences
+│   │   │   ├─ forms/           # Dynamic form components
+│   │   │   ├─ charts/          # Chart wrappers
+│   │   │   └─ ...
+│   │   ├─ pages/               # Route components
+│   │   │   ├─ Login.jsx
+│   │   │   ├─ Register.jsx
+│   │   │   ├─ Dashboard.jsx
+│   │   │   ├─ Notifications.jsx
+│   │   │   ├─ Students.jsx
+│   │   │   ├─ WhatIfSimulator.jsx
+│   │   │   ├─ SavedScenarios.jsx
+│   │   │   ├─ StudentProfile.jsx
+│   │   │   ├─ AdminUsers.jsx
+│   │   │   ├─ MlMonitoring.jsx
+│   │   │   └─ ...
+│   │   ├─ utils/               # Utility functions
+│   │   │   ├─ chartConfig.js   # Schema-agnostic chart assignment
+│   │   │   ├─ columns.js       # SQL injection prevention whitelist
+│   │   │   ├─ safeNavigation.js
+│   │   │   ├─ notifications.js # Notification formatting/parsing
+│   │   │   ├─ schemaMap.js     # Load/validate schema_map.json
+│   │   │   ├─ locales/         # English/Vietnamese translation files
+│   │   │   │   ├─ en.js
+│   │   │   │   ├─ vi.js
+│   │   │   │   ├─ mlMonitoringLocaleParity.test.js
+│   │   │   │   └─ notificationLocaleParity.test.js
+│   │   │   └─ whatIf/          # What-If scenario utilities
+│   │   │       ├─ Comparison.jsx
+│   │   │       └─ ...
+│   │   ├─ views/               # Legacy view components (being phased out)
+│   │   │   ├─ login.js
+│   │   │   ├─ register.js
+│   │   │   ├─ dashboard.js
+│   │   │   ├─ students.js
+│   │   │   ├─ studentForm.js
+│   │   │   └─ adminUsers.js
+│   │   └─ locales/             # Legacy flat locale files (being migrated)
+│   │       ├─ en.js
+│   │       └─ vi.js
+│   └─ tests/                   # Vitest/react-testing-library tests
+├─ ml/                          # Machine Learning pipeline
 │   ├─ requirements.txt
-│   ├─ fetch_data.py             # MySQL → CSV cache
-│   ├─ train.py                  # Train models (CV, save joblib)
-│   ├─ inference.py              # CLI + stdin JSON for API
-│   ├─ student_example.json
+│   ├─ fetch_data.py            # MySQL → CSV cache
+│   ├─ train.py                 # Model training (regression + classification)
+│   ├─ inference.py             # CLI + stdin JSON prediction
+│   ├─ student_example.json     # Example input for inference
 │   ├─ README.md
-│   ├─ models/                   # Saved models (gitignored)
-│   │   ├─ regressor.joblib
-│   │   ├─ classifier.joblib
-│   │   ├─ preprocessor.joblib
-│   │   └─ metrics.json
-│   ├─ data/students.csv         # Cached training data (gitignored)
-│   └─ output/                   # Plots (gitignored)
-└─ src/
-   ├─ server.js                  # Entry (creates users table)
-   ├─ app.js                     # Express factory (REST + static)
-   ├─ config/db.js               # mysql2 pool + readiness
-   ├─ middleware/apiAuth.js      # requireApiAuth, requireApiAdmin
+│   ├─ models/                  # Saved models (gitignored)
+│   │   ├─ regressor.joblib     # Final score predictor
+│   │   ├─ classifier.joblib    # Grade predictor
+│   │   ├─ preprocessor.joblib  # Feature preprocessing pipeline
+│   │   ├─ metrics.json         # Evaluation results
+│   │   └─ llm/                 # Experimental LLM scaffold (not integrated)
+│   ├─ data/                    # Cached training data (gitignored)
+│   │   └─ students.csv
+│   └─ output/                  # Generated plots (gitignored)
+│       ├─ feature_importance_*.png
+│       ├─ predictions_vs_actual.png
+│       └─ confusion_matrix.png
+└─ src/                         # Express backend
+   ├─ server.js                 # Entry point (table initialization)
+   ├─ app.js                   # Express factory (REST API + static files)
+   ├─ config/
+   │   └─ db.js                 # mysql2 pool + readiness check
+   ├─ middleware/
+   │   ├─ apiAuth.js            # requireApiAuth, requireApiAdmin
+   │   ├─ apiRateLimit.js       # Authentication endpoint protection
+   │   ├─ apiLogger.js          # Request/response logging
+   │   ├─ csrfProtection.js     # Origin/Referer CSRF protection
+   │   └─ errorHandler.js       # Centralized error handling
    ├─ utils/
-   │   ├─ schemaMap.js           # Load/validate schema_map.json
-   │   ├─ columns.js             # Column whitelist (SQLi boundary)
-   │   └─ chartConfig.js         # Schema-agnostic chart assignment
-   ├─ controllers/apiController.js
+   │   ├─ schemaMap.js          # load/validate schema_map.json
+   │   ├─ columns.js            # column whitelist (SQL injection boundary)
+   │   ├─ chartConfig.js        # schema-agnostic chart assignment
+   │   ├─ mlMonitoring.js       # ML monitoring utilities (drift calculation)
+   │   └─ predictionHistory.js  # prediction event history utilities
+   ├─ controllers/
+   │   └─ apiController.js      # all API handlers (JSON responses)
    ├─ services/
-   │   ├─ authService.js         # ALL users SQL + auth
-   │   └─ studentService.js      # ALL students SQL (param only)
-   ├─ routes/apiRoutes.js
-   └─ scripts/import.js          # CSV → MySQL + schema_map emitter
+   │   ├─ authService.js        # ALL SQL for users table + auth
+   │   ├─ studentService.py     # ALL SQL for students (parameterized only)
+   │   ├─ goalsService.js       # study goals CRUD
+   │   ├─ weeklyCheckinService.js # weekly check-in CRUD
+   │   ├─ notificationService.js # notification CRUD + preferences
+   │   ├─ predictionHistoryService.js # recording prediction events
+   │   ├─ modelSnapshotService.py # deterministic model version hashes
+   │   ├─ mlDriftService.py     # drift calculation (standardized mean shift)
+   │   ├─ whatIfScenarioService.py # saved scenario management
+   │   └─ simulationService.py  # What-If scenario baseline/simulation runner
+   ├─ routes/
+   │   └─ apiRoutes.js          # all API route definitions
+   └─ scripts/
+       ├─ import.js             # CSV → MySQL importer + schema_map emitter
+       ├─ seedAdmin.js          # administrator bootstrap
+       └─ resetDb.js            # development database reset utility
 ```
 
----
+## ⚙️ Prerequisites
 
-##  Quick Start
+- **Node.js 22** (or compatible LTS version)
+- **MySQL 8.0+** (local or remote instance)
+- **Python 3.11** (for ML pipeline - optional if using pre-trained models)
+- **Git** (for version control)
 
-### Prerequisites
-- **Node 22+**
-- **MySQL 8.0+** (local, `local_infile=OFF`, STRICT mode)
-- **Python 3.11+** (for ML pipeline)
+## 🔧 Installation & Setup
 
-### 1. Clone & Install
+### 1. Environment Configuration
+
 ```bash
+# Clone repository
 git clone https://github.com/ShiroHafomi/SPSH.git
 cd SPSH
-npm install
-```
 
-### 2. Configure Environment
-```bash
+# Create environment file
 cp .env.example .env
-# Edit .env with your MySQL credentials
-```
-```env
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=your_password
-DB_NAME=student_performance
-DB_TABLE=students
-PORT=3000
-NODE_ENV=development
+
+# Edit .env with your configuration:
+#   DB_HOST=localhost
+#   DB_PORT=3306
+#   DB_NAME=student_performance
+#   DB_USER=your_username
+#   DB_PASSWORD=your_password
+#   JWT_ACCESS_SECRET=your_access_secret
+#   JWT_REFRESH_SECRET=your_refresh_secret
+#   NODE_ENV=development
+#   PORT=3001
+#   APP_ORIGIN=http://localhost:5173
+#   RATE_LIMIT_WINDOW_MS=900000
+#   RATE_LIMIT_MAX_REQUESTS=100
 ```
 
-### 3. Import Data (creates DB, table, `schema_map.json`)
+### 2. Install Dependencies
+
 ```bash
-# Bundled 50-row sample
+# Install backend dependencies
+npm install
+
+# Install frontend dependencies
+npm install --prefix frontend
+
+# Install ML dependencies (optional but recommended for full functionality)
+cd ml
+pip install -r requirements.txt
+cd ..
+```
+
+### 3. Database Initialization
+
+```bash
+# Import sample data (creates database, tables, and schema_map.json)
 npm run import:sample
 
-# Or your own Kaggle CSV
-npm run import -- --file path/to/your.csv --replace
+# OR import your own CSV file
+npm run import -- --file path/to/your/dataset.csv --replace
 ```
 
-### 4. Start the App
+### 4. Create Administrator Account
+
+Public registration is disabled for security. Create the first admin user:
+
 ```bash
-# Dev (auto-restart)
+ADMIN_EMAIL=admin@example.com \
+ADMIN_PASSWORD=SecurePassword123! \
+ADMIN_NAME="Administrator" \
+npm run seed:admin
+```
+
+## 🚀 Running the Application
+
+### Development Mode
+
+```bash
+# Start backend server (API on http://localhost:3001)
 npm run dev
 
-# Production
+# In a separate terminal, start frontend dev server
+npm run dev --prefix frontend
+```
+
+The frontend will be available at http://localhost:5173 and automatically proxy API requests to http://localhost:3001.
+
+### Alternative: Full-Stack Development (Single Command)
+
+```bash
+# Starts both backend and frontend concurrently
+npm run dev:full
+```
+
+### Production Mode
+
+```bash
+# Build frontend for production
+npm run build --prefix frontend
+
+# Start production server
 npm start
 ```
-Open **http://localhost:3000** → SPA loads, redirects to login or dashboard.
 
----
+The production server serves the React frontend from Express on http://localhost:3001.
 
-##  ML Pipeline (in `ml/`)
+### One-Time Setup Script
 
-### One-Time Setup
 ```bash
-pip install -r ml/requirements.txt
+# Runs: install → import:sample → seed:admin → dev:full
+npm run setup
 ```
 
-### Train Models (after importing data to MySQL)
-```bash
-python ml/fetch_data.py    # Caches CSV from MySQL
-python ml/train.py         # Trains + evaluates + saves models
-```
+## 📚 API Overview
 
-**Output**: `ml/models/{regressor,classifier,preprocessor}.joblib` + `metrics.json` + plots in `ml/output/`
+All API endpoints require authentication unless otherwise noted. Responses are JSON-formatted.
 
-### Predict (CLI)
-```bash
-# Flags
-python ml/inference.py --gender Female --age 19 --study-hours 4.5 --attendance 95 --sleep 8 --gpa 3.8 --parental PhD --internet-access Yes --extracurricular Yes --part-time-job No
-
-# JSON file
-python ml/inference.py --json ml/student_example.json
-
-# Stdin (for API integration)
-echo '{"gender":"Female",...}' | python ml/inference.py --json -
-
-# What-if
-python ml/inference.py --gender Male --age 18 --study-hours 2 --attendance 75 --gpa 2.8 --what-if study_hours_per_day 4.0
-
-# JSON-only output
-python ml/inference.py --api --gender Female ...
-```
-
-### Predict (API)
-```
-POST /api/predict
-Cookie: connect.sid=...
-Content-Type: application/json
-
-{
-  "gender": "Female",
-  "age": 19,
-  "study_hours_per_day": 4.5,
-  "attendance_percent": 95,
-  "sleep_hours": 8,
-  "previous_gpa": 3.8,
-  "parental_education": "PhD",
-  "internet_access": "Yes",
-  "extracurricular": "Yes",
-  "part_time_job": "No"
-}
-```
-Response:
-```json
-{
-  "final_score": 94.0,
-  "grade": "A",
-  "grade_confidence": 0.999,
-  "grade_probabilities": { "A": 0.999, "B": 0.001, "C": 0, "D": 0, "F": 0 }
-}
-```
-
-### Retraining
-After adding new students to MySQL:
-```bash
-python ml/fetch_data.py && python ml/train.py
-```
-
-Retraining is manual. A successful run writes a bounded `drift_baseline` to
-`metrics.json` with only count, mean, population standard deviation, minimum,
-and maximum aggregates for study hours, attendance, sleep hours, and previous
-GPA. It stores no training rows or student identifiers. Snapshots created before
-this baseline exists remain valid, but their drift status is `insufficient_data`.
-
-### Prediction History and Drift Monitoring
-
-Admin and teacher staff APIs provide bounded prediction history and model drift
-reports. Teachers have the same organization-wide scope as the application's
-existing teacher analytics; students receive HTTP 403 on staff routes.
-
-History accepts `page`, `size`, `from`, `to`, `kind`, `modelVersion`, and `grade`.
-The default is 20 rows over the previous 30 days; page size is capped at 100 and
-the date range at 366 days. Responses omit behavioral inputs, actor IDs, input
-fingerprints, metrics JSON, and request payloads.
-
-Drift accepts `from`, `to`, and `modelVersion`. Without a version, the latest
-registered snapshot is selected deterministically. Aggregation is restricted to
-that snapshot and successful `prediction` events, so model versions are never
-mixed. `feedback`, `baseline`, and `simulation` events are excluded because they
-represent content-generation or preview/What-If flows rather than real
-production predictions.
-
-Absolute standardized mean shift is calculated per feature:
-
-```text
-shift = abs(current_mean - baseline_mean)
-        / max(baseline_standard_deviation, 1e-9)
-```
-
-- `stable`: shift below `0.25`
-- `warning`: shift from `0.25` up to, but not including, `0.50`
-- `drifted`: shift at least `0.50`
-- `insufficient_data`: missing or invalid baseline/current values, or fewer than
-  30 current observations for the feature
-
-The overall status is the most severe valid feature status; if no valid feature
-comparison exists, it is `insufficient_data`. Drift is aggregated in MySQL with
-bounded parameterized queries and does not trigger automatic retraining.
-
----
-
-##  API Endpoints
-
-All return JSON. Session cookie sent automatically by browser.
-
+### Authentication
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| POST | `/api/auth/login` | No | Login → returns user |
-| POST | `/api/auth/register` | No | Register (first = admin) |
+| POST | `/api/auth/login` | No | Authenticate user, returns access token |
+| POST | `/api/auth/register` | No | **Disabled** - returns 403 Forbidden |
 | POST | `/api/auth/logout` | Yes | Destroy session |
-| GET | `/api/me` | Yes | Current user |
-| GET | `/api/dashboard/stats` | Yes | KPIs + chart config |
-| GET | `/api/students` | Yes | Paginated list + metadata |
-| GET | `/api/students/:id` | Yes | Single student + metadata |
-| POST | `/api/students` | Yes | Create student |
-| POST | `/api/students/:id` | Yes | Update student |
-| POST | `/api/students/:id/delete` | Yes | Delete student |
-| GET | `/api/admin/users` | Yes + Admin | List users |
-| POST | `/api/admin/users/:id/delete` | Yes + Admin | Delete user |
-| POST | `/api/predict` | Yes | ML prediction |
-| GET | `/api/admin/ml/predictions` | Yes + Admin | Bounded prediction history |
-| GET | `/api/admin/ml/drift` | Yes + Admin | Model-isolated drift report |
-| GET | `/api/teacher/ml/predictions` | Yes + Teacher/Admin | Organization-wide prediction history |
-| GET | `/api/teacher/ml/drift` | Yes + Teacher/Admin | Organization-wide model drift report |
+| GET | `/api/auth/me` | Yes | Get current user profile |
 
----
+### Students
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/students` | Yes | Paginated list with search/sort |
+| GET | `/api/students/:id` | Yes | Single student record |
+| POST | `/api/students` | Yes | Create new student |
+| POST | `/api/students/:id` = Yes | Update existing student |
+| POST | `/api/students/:id/delete` = Yes | Delete student |
 
-##  Security
+### Dashboard & Analytics
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET = `/api/dashboard/stats` | Yes | KPIs + chart configuration |
+| GET = `/api/admin/users` | Yes + Admin | List all system users |
+| POST = `/api/admin/users/:id/delete` | Yes + Admin | Delete user (not self) |
 
-- **Authentication**: Short-lived access JWTs and rotating refresh JWTs use HttpOnly, Secure-in-production, SameSite=Lax cookies. Refresh-token hashes and revocation state are stored in MySQL; logout and security-sensitive account changes revoke sessions.
-- **Authorization**: Generic student CRUD and at-risk datasets are restricted to teachers/admins. Student accounts use the account-linked `/api/student/me/*` endpoints.
-- **Passwords**: bcryptjs with 12 salt rounds. Production bootstrap credentials must be explicit, and seed scripts never print passwords.
-- **Request provenance**: Cookie-authenticated mutations require an exact allowed Origin/Referer in production and reject hostile Fetch Metadata. Explicit Bearer clients do not rely on ambient cookies.
-- **Browser policy**: Helmet provides CSP, HSTS in production, framing/object restrictions, a strict referrer policy, and a restrictive Permissions Policy.
-- **SQL injection**: Sort/search identifiers use a whitelist derived from `schema_map.json`; request values use `?` bindings.
-- **Resource limits**: Request bodies, bulk selections, filters, audit metadata, CSV output, ML processes, and sensitive/expensive endpoints are bounded.
+### Notifications
+| Method | Endpoint | Auth = | Description = |
+|--------|----------|--------|-------------|
+| GET | `/api/notifications` | Yes | Paginated notification list |
+| GET | `/api/notifications/unread-count` | Yes | Unread notification count |
+| PUT | `/api/notifications/:id/read` | Yes | Mark notification as read |
+| PUT | `/api/notifications/read-all` | Yes | Mark all notifications as read |
+| DELETE | `/api/notifications/:id` = Yes | Delete notification |
+| GET | `/api/notifications/preferences` = Yes | Get notification preferences |
+| PUT | `/api/notifications/preferences` = Yes | Update notification preferences |
 
-### Internet-facing production deployment
+### Machine Learning
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/api/predict` = Yes | Generate prediction from student profile |
+=POST | `/api/predict/feedback` = Yes | Submit prediction accuracy feedback |
+| GET | `/api/predict/baseline` = Yes | Get baseline prediction for current inputs |
+| POST | `/api/predict/simulation` = Yes | Get simulation prediction for modified inputs |
+| GET = `/api/predict/history` = Yes | Get paginated prediction history |
+| GET = `/api/predict/drift` = Yes | Get model drift status |
+| GET = `/api/predict/snapshots` = Yes | Get available model snapshots |
+| GET = `/api/predict/snapshot/:id` = Yes | Get specific model snapshot details |
+| GET | `/api/what-if/scenarios` = Yes | List saved What-If scenarios |
+| POST = `/api/what-if/scenarios` = Yes | Create new saved scenario |
+| PATCH = `/api/what-if/scenarios/:id` = Yes | Update scenario name |
+| PATCH = `/api/what-if/scenarios/:id/preferred` = Yes | Mark scenario as preferred |
+| DELETE = `/api/what-if/scenarios/:id` = Yes | Delete saved scenario |
+| GET = `/api/what-if/scenarios/:id/compare` = Yes | Compare two saved scenarios |
 
-1. Build the React client with `npm --prefix frontend run build`; production Express serves only `frontend/dist`. Do not run the Vite development server in production.
-2. Set `NODE_ENV=production`, an HTTPS `APP_ORIGIN`, strong distinct `JWT_SECRET` and `JWT_REFRESH_SECRET` values (at least 32 random bytes each), and production database credentials.
-3. Terminate HTTPS at a trusted reverse proxy or load balancer. Set `TRUST_PROXY` only to the exact proxy address/subnet or known hop count; leave it unset when Express receives clients directly.
-4. Keep the SPA and `/api` on the same origin. The cookie and provenance policy intentionally assumes a same-origin deployment.
-5. Set explicit `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `ADMIN_NAME` before running `npm run seed:admin`. The development `Admin123!` fallback is rejected in production.
-6. Use a shared rate-limit store or equivalent reverse-proxy/WAF limits before scaling to multiple Node replicas; the built-in limiter is process-local.
-7. Back up MySQL, restrict model and application files to the service account, and keep `.env` and secrets out of source control.
+### Goals & Check-ins
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/goals` = Yes | List user's study goals |
+| POST | `/api/goals` = Yes | Create new study goal |
+| PUT | `/api/goals/:id` = Yes | Update study goal |
+| DELETE | `/api/goals/:id` = Yes | Delete study goal |
+| GET | `/api/weekly-checkins` = Yes | List weekly check-ins |
+| POST | `/api/weekly-checkins` = Yes | Create new weekly check-in |
 
-### Deferred framework security migrations
+## 👥 User Roles & Permissions
 
-The compatible-update pass patches `nanoid` to 3.3.18 but deliberately retains Vite 5 and React Router 6. Their remaining advisories require major upgrades:
+### Student
+- Access to personal dashboard and profile
+- CRUD operations on own student record (if linked)
+- Study goal creation and tracking
+- Weekly check-in submission
+- What-If simulation and scenario saving
+- Notification center with preference controls
+- Baseline and simulation predictions
 
-- Vite/esbuild findings affect development tooling. Vite is bound to `127.0.0.1`, must never be exposed as a production server, and developers should not browse untrusted sites while it is running. Plan a separately tested Vite 8 migration.
-- React Router's SSR hydration advisory is not reachable because this application is a client-only SPA. Dynamic post-login navigation is constrained to validated internal paths. Plan a separately tested React Router 7 migration to remove the residual Router advisories.
+### Teacher *(Organization-Wide Scope)*
+- All Student permissions plus:
+- View analytics for all students in organization
+- Access ML monitoring dashboard (organization-wide)
+- Submit feedback on student predictions
+- View notification center for organization
+- Cannot modify other users' accounts or system settings
 
-Run `npm audit` and `npm --prefix frontend audit` during every dependency update. Do not interpret the mitigations above as patched package versions.
+### Administrator
+- All Teacher permissions plus:
+- Create, view, and delete user accounts
+- System oversight and configuration access
+- Full access to all student and teacher features
+- Cannot delete own account
 
----
-
-##  Key Gotchas
-
-| Topic | Detail |
-|-------|--------|
-| **MySQL STRICT** | Empty/invalid dates → NULL; overflow aborts batch → row-by-row fallback + error log |
-| **Schema-agnostic** | No column names in code. `schema_map.json` is the contract. |
-| **Import** | Two-pass (peek → stream). `--replace` drops & recreates table. |
-| **CDN deps** | Tailwind + Chart.js loaded from CDN; need internet. For offline, download to `public/`. |
-| **Single table** | Designed for one CSV → one `students` table. |
-
----
-
-##  Scripts
-
-```bash
-npm start              # node src/server.js
-npm run dev            # nodemon src/server.js
-npm run import:sample  # Import bundled 50-row sample
-npm run import         # node src/scripts/import.js --file <csv>
-npm run import:force   # Import with --replace
+### Role Hierarchy
+```
+Administrator
+    ↳ Teacher
+        ↳ Student
 ```
 
+Higher roles inherit all permissions of lower roles.
+
+## 🔐 Security & Privacy
+
+### Authentication Security
+- JWT tokens with 15-minute access token expiration
+- Refresh token rotation with database-backed storage
+- Password hashing using bcryptjs (12 salt rounds)
+- HTTPS-only cookie settings in production
+- SameSite=Strict attribute on session cookies
+- Rate limiting on authentication endpoints (100 requests/15min)
+
+### Data Protection
+- All SQL queries use parameterized statements to prevent injection
+- Origin/Referer header validation for CSRF protection
+- Input validation and sanitization at API boundary
+- Output encoding to prevent XSS in React templates
+- SQL STRICT mode enforcement prevents invalid data storage
+- Audit logs track creation/modification/deletion of sensitive entities
+- Database connection pooling prevents resource exhaustion
+
+### Privacy Protections
+- Prediction history stores only allowlisted behavioral values
+- Saved What-If scenarios contain no raw request data or metadata
+- Model snapshots store only performance metrics and version hashes
+- No storage of passwords, tokens, cookies, or request headers
+- Personal data accessible only to authorized roles
+- Anonymized analytics where possible
+- Data minimization principle applied to all stored entities
+
+### ML-Specific Protections
+- Prediction events store inputs/outputs but not full student records
+- Model versioning uses deterministic hashes of metrics + artifacts
+- Drift calculation uses bounded, standardized metrics
+- Feedback collection limited to accuracy metrics only
+- No collection of sensitive personal information in ML pipeline
+
+## ⚠️ Known Limitations & Gotchas
+
+### Database & Import
+- **MySQL STRICT Mode**: Invalid numeric/date values cause batch insert failures → importer falls back to row-by-row processing and logs errors to `import_errors.log`
+- **Column Name Sanitization**: Reserved MySQL words (`order`, `group`, etc.) are prefixed with `col_`; all names converted to lowercase snake_case
+- **Two-Pass Type Inference**: First 100 rows sampled for type detection; overflow values in later rows are coerced (NULL for dates, 0/1 for booleans)
+- **ID Reservation**: Column named `id` in CSV becomes `col_id` to avoid conflict with surrogate primary key
+- **Existing Databases**: Databases named `ffms` and `finsight` are preserved and unaffected by application operations
+- **Weekly-check-in migration**: `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` syntax incompatible with some MySQL versions; verify tables report `ready` before use
+
+### Machine Learning Pipeline
+- **Fixed Feature Schema**: ML pipeline uses exactly 10 predefined features regardless of CSV columns:
+  ```
+  gender, age, study_hours, attendance_percent, sleep_hours,
+  previous_gpa, parental_education_level, internet_access,
+  extracurricular_activities, part_time_job
+  ```
+- **Target Variables**: Models predict only `final_score` (regression) and `grade` (classification)
+- **Training/Inference Mismatch**: Current implementation uses different features for training vs. inference (known issue requiring pipeline alignment)
+- **Drift Baseline Missing**: Initial `metrics.json` lacks baseline for drift calculation; first training establishes baseline
+- **Non-Atomic Retraining**: Model files updated sequentially during retraining; brief window where predictor/preprocessor versions may mismatch
+- **Connection Hardcoding**: `ml/fetch_data.py` uses hardcoded database credentials (should use environment variables)
+- **Missing Dependency**: `ml/fetch_data.py` imports SQLAlchemy but it's not in `requirements.txt` (workaround: uses direct mysql2 via Node.js subprocess)
+
+### Frontend & UX
+- **CDN Dependencies**: Tailwind CSS and Chart.js loaded from public CDNs → requires internet connectivity
+- **Notification Polling**: Updates via HTTP polling every 60 seconds (not real-time WebSocket)
+- **Teacher Scope**: Teachers have organization-wide access to analytics and ML monitoring (not classroom-limited)
+- **Vite Hot Module Reloading**: CSS changes may require full refresh during development
+- **Mobile Layout**: Some complex tables (e.g., ML monitoring) may require horizontal scrolling on narrow screens
+
+### Testing & CI
+- **Test Coverage**: Unit tests for services and utilities; integration tests for API endpoints
+- **Frontend Testing**: Vitest with React Testing Library for component testing
+- **ML Testing**: Limited due to non-deterministic nature; focuses on pipeline integrity
+- **CI Pipeline**: GitHub Actions runs on Ubuntu with Node.js 22; tests backend and frontend suites
+- **Artifact Exclusion**: `node_modules`, `frontend/dist`, ML model artifacts, and cached data are gitignored
+
+## 🔍 Current Development Focus
+
+The application implements a traditional machine learning pipeline (not LLM fine-tuning) for tabular student performance data. Active development areas include:
+
+1. **ML Pipeline Alignment**: Harmonizing feature sets between training and inference
+2. **Notification Enhancements**: Real-time updates via WebSocket migration
+3. **Role-Based Scope Refinement**: Implementing classroom/section-based teacher restrictions
+4. **Performance Optimization**: Query optimization and caching strategies
+5. **Internationalization Expansion**: Adding additional language support beyond EN/VI
+6. **Accessibility Audits**: WCAG 2.1 AA compliance verification
+7. **ML Experiment Tracking**: Integrating MLflow for comprehensive model versioning
+
+## 🤝 Contributing
+
+We welcome contributions to improve the application! Please follow these guidelines:
+
+### Getting Started
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes
+4. Ensure your code passes existing tests
+5. Submit a pull request with clear description of changes
+
+### Development Practices
+- Follow existing code style and conventions
+- Write unit tests for new functionality
+- Update documentation as needed
+- Keep pull requests focused on single concerns
+- Test changes in development environment before submitting
+
+### Reporting Issues
+- Use GitHub Issues for bug reports and feature requests
+- Include steps to reproduce, expected vs actual behavior
+- Screenshots and console logs are helpful for UI issues
+- Label issues appropriately (bug, enhancement, question, etc.)
+
+### Code Review
+- All PRs require review from maintainers
+- Be responsive to reviewer feedback
+- Ensure CI checks pass before requesting review
+- Keep PR scope manageable for efficient review
+
+## 📄 License
+
+This project is distributed under the MIT License. See the `LICENSE` file for details.
+
+*Note: A root LICENSE file should be present in the repository. If missing, the MIT license terms apply by declaration in package.json.*
+
+## 🙏 Acknowledgments
+
+- [Kaggle Student Performance Dataset](https://www.kaggle.com/datasets/harshadapatil31/student-performance-and-study-habits-dataset) for the foundational data
+- The open-source projects and libraries that make this application possible
+- Contributors and users who provide feedback and improvements
+- Educational institutions that inspire the mission of improving learning outcomes through data-driven insights
+
 ---
 
-##  Learn More
-
-- `CLAUDE.md` — Full project instructions for AI assistants
-- `ml/README.md` — Detailed ML pipeline documentation
-- `schema_map.json` — Current column contract (auto-generated)
-
----
-
-## License
-
-MIT
+*Last updated: August 2026*  
+*For support, please open an issue in the GitHub repository.*
