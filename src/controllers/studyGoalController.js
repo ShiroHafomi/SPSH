@@ -638,6 +638,54 @@ async function apiDeleteCheckIn(req, res) {
   }
 }
 
+/**
+ * POST /api/student/me/goals/from-scenario/:scenarioId
+ * Create a study goal from a saved What-If scenario.
+ */
+async function apiCreateGoalFromScenario(req, res) {
+  try {
+    const scenarioId = parsePositiveSafeInteger(req.params.scenarioId);
+
+    if (!scenarioId) {
+      return res.status(400).json({ error: 'Invalid scenario ID.' });
+    }
+
+    const studentId = req.user.studentId;
+
+    if (!studentId) {
+      return res.status(400).json({ error: 'No student record linked to this account.' });
+    }
+
+    // Create the goal from the scenario
+    const goal = await studyGoalService.createGoalFromScenario({
+      studentId,
+      scenarioId
+    });
+
+    // Log audit event
+    await logAuditEvent({
+      userId: req.user.id,
+      action: 'CREATE_GOAL_FROM_SCENARIO',
+      resourceType: 'study_goal',
+      resourceId: goal.id,
+      metadata: { studentId, scenarioId },
+      ipAddress: req.ip || req.headers['x-forwarded-for'] || 'unknown',
+      userAgent: req.headers['user-agent'],
+    });
+
+    res.status(201).json({ goal });
+  } catch (err) {
+    if (err?.code === 'ACTIVE_GOAL_EXISTS') {
+      return res.status(400).json({
+        error: 'Cannot create a new active goal. You already have an active goal.',
+        code: 'ACTIVE_GOAL_EXISTS',
+      });
+    }
+    console.error('[apiCreateGoalFromScenario]', err);
+    return res.status(500).json({ error: 'Failed to create goal from scenario.' });
+  }
+}
+
 module.exports = {
   apiListGoals,
   apiListGoalsWithProgress,
@@ -649,4 +697,5 @@ module.exports = {
   apiCreateCheckIn,
   apiUpdateCheckIn,
   apiDeleteCheckIn,
+  apiCreateGoalFromScenario,
 };
