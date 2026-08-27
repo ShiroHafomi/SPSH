@@ -85,6 +85,14 @@ async function main() {
     console.error('   ML prediction events table: FAILED —', err.message);
   }
 
+  // Auto-create study sessions table
+  try {
+    await ensureStudySessionsTable();
+    console.log('   Study sessions table: ready');
+  } catch (err) {
+    console.error('   Study sessions table: FAILED —', err.message);
+  }
+
   if (!dbReady) {
     console.warn(
       '\n  Database not ready — the app will start but show an error page.' +

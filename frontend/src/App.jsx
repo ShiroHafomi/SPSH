@@ -26,6 +26,7 @@ import AdminAtRisk from './pages/AdminAtRisk';
 import AdminAITools from './pages/AdminAITools';
 import StudentGoals from './pages/StudentGoals';
 import StudentGoalsProgress from './pages/StudentGoalsProgress';
+import StudyPlanner from './pages/StudyPlanner';
 import Notifications from './pages/Notifications';
 import MlMonitoring from './pages/MlMonitoring';
 
@@ -111,6 +112,7 @@ function App() {
                 <Route path="/student" element={<StudentDashboard />} />
                 <Route path="/goals" element={<StudentGoals />} />
                 <Route path="/student/notifications" element={<Notifications />} />
+                <Route path="/student/study-planner" element={<StudyPlanner />} />
               </Route>
 
               {/* Shared routes - any authenticated user (floating Navbar via MainLayout) */}

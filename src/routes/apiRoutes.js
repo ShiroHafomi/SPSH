@@ -77,6 +77,15 @@ const {
   apiStudentUpdateProfile,
 } = require('../controllers/studentController');
 
+// Study Sessions
+const {
+  apiListStudySessions,
+  apiCreateStudySession,
+  apiUpdateStudySession,
+  apiUpdateStudySessionStatus,
+  apiDeleteStudySession,
+} = require('../controllers/studySessionController');
+
 // Study Goals
 const {
   apiListGoals,
@@ -247,6 +256,13 @@ studentRouter.use(requireAuth, requireRole('student'));
 // Profile
 studentRouter.get('/me/profile', apiStudentProfile);
 studentRouter.put('/me/profile', apiStudentUpdateProfile);
+
+// Study Sessions
+studentRouter.get('/me/study-sessions', apiListStudySessions);
+studentRouter.post('/me/study-sessions', authenticatedLimit(studentAiLimiter), apiCreateStudySession);
+studentRouter.patch('/me/study-sessions/:id', apiUpdateStudySession);
+studentRouter.patch('/me/study-sessions/:id/status', apiUpdateStudySessionStatus);
+studentRouter.delete('/me/study-sessions/:id', apiDeleteStudySession);
 
 // What-If Simulator
 studentRouter.post(
