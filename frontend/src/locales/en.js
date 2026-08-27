@@ -89,6 +89,7 @@ const en = {
     whatIfSimulator: 'What-If Simulator',
     myPortal: 'My Portal',
     goals: 'Study Goals',
+    studyPlanner: 'Study Planner',
     role: {
       admin: 'Admin',
       teacher: 'Teacher',
@@ -754,6 +755,23 @@ const en = {
     reopenSession: 'Reopen Session',
     minutes: 'minutes',
     hours: 'hours',
+    actionFailed: 'Action failed',
+    actions: 'Actions',
+    endAfterStart: 'End time must be after start time',
+    invalidDateTime: 'Invalid date or time',
+    saveFailed: 'Save failed',
+    sessionNotFound: 'Session not found',
+    reopened: 'Session reopened',
+    confirmCompleteMessage: 'Are you sure you want to mark this session as completed?',
+    confirmDeleteMessage: 'Are you sure you want to delete this session? This action cannot be undone.',
+    confirmReopenMessage: 'Are you sure you want to reopen this session?',
+    confirmSkipMessage: 'Are you sure you want to mark this session as skipped?',
+    couldNotCalculateDuration: 'Could not calculate duration',
+    created: 'Session created',
+    deleted: 'Session deleted',
+    updated: 'Session updated',
+    filters: 'Filters',
+    optional: 'Optional'
   },
 
   notifications: {
@@ -847,6 +865,7 @@ const en = {
   },
 
   goals: {
+    studyPlanner: 'Study Planner',
     title: 'Study Goals',
     subtitle: 'Set academic targets, record your progress, and review guidance from your teacher.',
     activeGoals: 'Active goals',
