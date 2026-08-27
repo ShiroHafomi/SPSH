@@ -82,6 +82,20 @@ export function AdminLayout() {
               {t('admin.aiTools')}
             </Link>
             <Link
+              to="/admin/ml-monitoring"
+              className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${
+                location.pathname === '/admin/ml-monitoring'
+                  ? 'bg-primary-100 text-primary-800 dark:bg-primary-900/40 dark:text-primary-200'
+                  : 'text-primary-600 dark:text-gray-400 hover:bg-primary-50 dark:hover:bg-gray-800 hover:text-primary-700 dark:hover:text-gray-200'
+              }`}
+              onClick={closeSidebar}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3v18h18M7 16l4-4 3 3 5-7" />
+              </svg>
+              {t('mlMonitoring.nav')}
+            </Link>
+            <Link
               to="/admin/users"
               className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-colors text-primary-600 dark:text-gray-400 hover:bg-primary-50 dark:hover:bg-gray-800 hover:text-primary-700 dark:hover:text-gray-200"
               onClick={closeSidebar}

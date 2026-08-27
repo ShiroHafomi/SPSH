@@ -27,6 +27,7 @@ import AdminAITools from './pages/AdminAITools';
 import StudentGoals from './pages/StudentGoals';
 import StudentGoalsProgress from './pages/StudentGoalsProgress';
 import Notifications from './pages/Notifications';
+import MlMonitoring from './pages/MlMonitoring';
 
 /**
  * Routing map
@@ -72,6 +73,7 @@ function App() {
                 <Route path="/admin/students/:studentId/goals" element={<StudentGoalsProgress mode="admin" />} />
                 <Route path="/admin/at-risk" element={<AdminAtRisk />} />
                 <Route path="/admin/ai-tools" element={<AdminAITools />} />
+                <Route path="/admin/ml-monitoring" element={<MlMonitoring apiRole="admin" />} />
                 <Route path="/admin/users" element={<AdminUsers />} />
                 <Route path="/admin/notifications" element={<Notifications />} />
               </Route>
@@ -88,6 +90,7 @@ function App() {
                 <Route path="/teacher/students/:id/edit" element={<StudentForm />} />
                 <Route path="/teacher/students/:studentId/goals" element={<StudentGoalsProgress mode="teacher" />} />
                 <Route path="/teacher/at-risk" element={<AdminAtRisk />} />
+                <Route path="/teacher/ml-monitoring" element={<MlMonitoring apiRole="teacher" />} />
               </Route>
 
               {/* Teacher notification center - Teacher only (own sidebar + header) */}
