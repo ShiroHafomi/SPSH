@@ -80,6 +80,7 @@ const {
 // Study Sessions
 const {
   apiListStudySessions,
+  apiGetStudySessionSummary,
   apiCreateStudySession,
   apiUpdateStudySession,
   apiUpdateStudySessionStatus,
@@ -98,6 +99,7 @@ const {
   apiCreateCheckIn,
   apiUpdateCheckIn,
   apiDeleteCheckIn,
+  apiCreateGoalFromScenario,
 } = require('../controllers/studyGoalController');
 const {
   apiAdminListStudentGoals,
@@ -259,6 +261,7 @@ studentRouter.put('/me/profile', apiStudentUpdateProfile);
 
 // Study Sessions
 studentRouter.get('/me/study-sessions', apiListStudySessions);
+studentRouter.get('/me/study-sessions/summary', apiGetStudySessionSummary);
 studentRouter.post('/me/study-sessions', authenticatedLimit(studentAiLimiter), apiCreateStudySession);
 studentRouter.patch('/me/study-sessions/:id', apiUpdateStudySession);
 studentRouter.patch('/me/study-sessions/:id/status', apiUpdateStudySessionStatus);

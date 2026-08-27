@@ -879,7 +879,6 @@ const en = {
     confirmGoalCreation: 'Confirm Goal Creation',
     goalCreationInProgress: 'Creating goal...',
     goalCreatedFromScenario: 'Goal created from scenario successfully',
-  },
     noActiveGoals: 'No active goals yet',
     noGoals: 'No study goals yet',
     noGoalsDesc: 'Create a goal to start tracking academic progress.',
@@ -897,7 +896,18 @@ const en = {
       targetAttendance: 'Target attendance must be between 0 and 100.',
       deadline: 'Enter a valid deadline.',
     },
-  },
+
+    noActiveGoals: 'No active goals yet',
+    noGoals: 'No study goals yet',
+    noGoalsDesc: 'Create a goal to start tracking academic progress.',
+    noStudentGoalsDesc: 'This student has not created any study goals.',
+    loadFailed: 'Unable to load study goals.',
+    retryLoad: 'Retry loading goals',
+    viewProgress: 'View progress',
+    viewProgressAria: 'View study-goal progress for {name}',
+    studentProgress: 'Study-goal progress for {name}',
+    studentProgressDesc: 'Review goals, weekly check-ins, and progress trends.',
+    noTargets: 'No measurable targets set',
 
   checkins: {
     title: 'Weekly check-ins',
@@ -931,6 +941,8 @@ const en = {
       currentScore: 'Current score must be between 0 and 100.',
       studentNote: 'Student note cannot exceed 1000 characters.',
     },
+  },
+
   },
 
   progress: {
