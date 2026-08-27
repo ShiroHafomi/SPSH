@@ -2,7 +2,7 @@
 
 A full-stack web application for analyzing and predicting student performance based on study habits. Built with a React/Vite frontend and Express/MySQL backend, featuring machine learning predictions, notification center, role-based access control, and schema-agnostic design that adapts to any CSV dataset.
 
-## 📊 Features
+## Features
 
 - **Authentication System**: Secure login/registration with JWT tokens, password hashing (bcryptjs), and role-based access (admin/teacher/student)
 - **CRUD Operations**: Create, read, update, delete student records with form validation
@@ -32,7 +32,7 @@ A full-stack web application for analyzing and predicting student performance ba
 - **Responsive Design**: Mobile-friendly interface with Tailwind CSS
 - **Production Ready**: Environment configuration, process management, and build optimization
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 ### Frontend
 - **React 18.3** with **Vite 5.4** build tool
@@ -77,7 +77,7 @@ A full-stack web application for analyzing and predicting student performance ba
 - **Audit tables** for tracking changes to critical entities
 - **Connection pooling** with configurable limits
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 ├─ README.md
@@ -200,14 +200,14 @@ A full-stack web application for analyzing and predicting student performance ba
        └─ resetDb.js            # development database reset utility
 ```
 
-## ⚙️ Prerequisites
+## Prerequisites
 
 - **Node.js 22** (or compatible LTS version)
 - **MySQL 8.0+** (local or remote instance)
 - **Python 3.11** (for ML pipeline - optional if using pre-trained models)
 - **Git** (for version control)
 
-## 🔧 Installation & Setup
+## Installation & Setup
 
 ### 1. Environment Configuration
 
@@ -270,7 +270,7 @@ ADMIN_NAME="Administrator" \
 npm run seed:admin
 ```
 
-## 🚀 Running the Application
+## Running the Application
 
 ### Development Mode
 
@@ -310,7 +310,7 @@ The production server serves the React frontend from Express on http://localhost
 npm run setup
 ```
 
-## 📚 API Overview
+## API Overview
 
 All API endpoints require authentication unless otherwise noted. Responses are JSON-formatted.
 
@@ -377,7 +377,7 @@ All API endpoints require authentication unless otherwise noted. Responses are J
 | GET | `/api/weekly-checkins` = Yes | List weekly check-ins |
 | POST | `/api/weekly-checkins` = Yes | Create new weekly check-in |
 
-## 👥 User Roles & Permissions
+## User Roles & Permissions
 
 ### Student
 - Access to personal dashboard and profile
@@ -412,7 +412,7 @@ Administrator
 
 Higher roles inherit all permissions of lower roles.
 
-## 🔐 Security & Privacy
+## Security & Privacy
 
 ### Authentication Security
 - JWT tokens with 15-minute access token expiration
@@ -447,7 +447,7 @@ Higher roles inherit all permissions of lower roles.
 - Feedback collection limited to accuracy metrics only
 - No collection of sensitive personal information in ML pipeline
 
-## ⚠️ Known Limitations & Gotchas
+## Known Limitations & Gotchas
 
 ### Database & Import
 - **MySQL STRICT Mode**: Invalid numeric/date values cause batch insert failures → importer falls back to row-by-row processing and logs errors to `import_errors.log`
@@ -485,7 +485,7 @@ Higher roles inherit all permissions of lower roles.
 - **CI Pipeline**: GitHub Actions runs on Ubuntu with Node.js 22; tests backend and frontend suites
 - **Artifact Exclusion**: `node_modules`, `frontend/dist`, ML model artifacts, and cached data are gitignored
 
-## 🔍 Current Development Focus
+## Current Development Focus
 
 The application implements a traditional machine learning pipeline (not LLM fine-tuning) for tabular student performance data. Active development areas include:
 
@@ -497,7 +497,7 @@ The application implements a traditional machine learning pipeline (not LLM fine
 6. **Accessibility Audits**: WCAG 2.1 AA compliance verification
 7. **ML Experiment Tracking**: Integrating MLflow for comprehensive model versioning
 
-## 🤝 Contributing
+## Contributing
 
 We welcome contributions to improve the application! Please follow these guidelines:
 
@@ -527,13 +527,13 @@ We welcome contributions to improve the application! Please follow these guideli
 - Ensure CI checks pass before requesting review
 - Keep PR scope manageable for efficient review
 
-## 📄 License
+## License
 
 This project is distributed under the MIT License. See the `LICENSE` file for details.
 
 *Note: A root LICENSE file should be present in the repository. If missing, the MIT license terms apply by declaration in package.json.*
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [Kaggle Student Performance Dataset](https://www.kaggle.com/datasets/harshadapatil31/student-performance-and-study-habits-dataset) for the foundational data
 - The open-source projects and libraries that make this application possible
