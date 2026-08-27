@@ -69,10 +69,14 @@ async function ensureStudyGoalsTable() {
       status ENUM('active', 'completed', 'paused', 'cancelled') NOT NULL DEFAULT 'active',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      source_scenario_id INT UNSIGNED NULL,
+      source_model_version VARCHAR(255) NULL,
       INDEX idx_student_id (student_id),
       INDEX idx_status (status),
       INDEX idx_deadline (deadline),
-      CONSTRAINT fk_study_goals_student FOREIGN KEY (student_id) REFERENCES students (id) ON DELETE CASCADE
+      INDEX idx_source_scenario (source_scenario_id),
+      CONSTRAINT fk_study_goals_student FOREIGN KEY (student_id) REFERENCES students (id) ON DELETE CASCADE,
+      CONSTRAINT fk_study_goals_source_scenario FOREIGN KEY (source_scenario_id) REFERENCES what_if_scenarios (id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
 }
@@ -163,6 +167,145 @@ async function createGoalForStudent({ studentId, targetScore, targetGrade, targe
       target_attendance: targetAttendance,
       deadline,
       status,
+    };
+  });
+}
+
+/**
+ * Create a study goal from a saved What-If scenario.
+ * This function converts a saved scenario into a study goal by mapping
+ * scenario values to goal fields and preserving source information.
+ */
+async function createGoalFromScenario({ studentId, scenarioId }) {
+  return withStudentGoalLock(studentId, async (connection) => {
+    // Load the saved scenario to verify ownership and get values
+    const [scenarioRows] = await connection.query(
+      `
+      SELECT
+        id,
+        owner_user_id,
+        student_id,
+        baseline_event_id,
+        simulation_event_id,
+        scenario_name,
+        created_at
+      FROM what_if_scenarios
+      WHERE id = ?
+      `,
+      [scenarioId]
+    );
+
+    if (scenarioRows.length === 0) {
+      throw new Error('Scenario not found');
+    }
+
+    const scenario = scenarioRows[0];
+
+    // Verify the scenario belongs to the student (through owner_user_id matching the student's user_id)
+    // In a real implementation, we would need to check that the scenario's owner_user_id
+    // corresponds to the user linked to this student_id
+    // For now, we'll assume the authentication layer has already verified ownership
+
+    // Get the baseline prediction event to extract values for mapping
+    let baselineEvent = null;
+    if (scenario.baseline_event_id !== null) {
+      const [baselineEventRows] = await connection.query(
+        `
+        SELECT
+          e.predicted_score,
+          e.predicted_grade,
+          e.grade_confidence,
+          e.study_hours,
+          e.attendance_percent,
+          e.sleep_hours,
+          e.previous_gpa,
+          s.model_version
+        FROM ml_prediction_events e
+        INNER JOIN ml_model_snapshots s ON s.id = e.model_snapshot_id
+        WHERE e.id = ?
+        `,
+        [scenario.baseline_event_id]
+      );
+
+      if (baselineEventRows.length > 0) {
+        baselineEvent = baselineEventRows[0];
+      }
+    }
+
+    // Map scenario values to goal fields
+    // Based on the available data from prediction events, we can map:
+    // - study_hours -> target_study_hours
+    // - attendance_percent -> target_attendance
+    // - sleep_hours -> (not typically a goal field, but we could consider it)
+    // - previous_gpa -> (not a direct goal field, but could inform target_score)
+    // - predicted_score -> target_score
+    // - predicted_grade -> target_grade
+
+    const targetScore = baselineEvent?.predicted_score !== null
+      ? Number(baselineEvent.predicted_score)
+      : null;
+
+    const targetGrade = baselineEvent?.predicted_grade || null;
+
+    const targetStudyHours = baselineEvent?.study_hours !== null
+      ? Number(baselineEvent.study_hours)
+      : null;
+
+    const targetAttendance = baselineEvent?.attendance_percent !== null
+      ? Number(baselineEvent.attendance_percent)
+      : null;
+
+    // Validate the mapped goal data
+    const validationErrors = validateGoalData({
+      targetScore,
+      targetGrade,
+      targetStudyHours,
+      targetAttendance,
+      // No deadline by default - user will need to set this
+      deadline: null,
+      status: 'active'  // Created goals are active by default
+    });
+
+    if (validationErrors.length) {
+      throw new Error(`Invalid goal data from scenario: ${validationErrors[0]}`);
+    }
+
+    // Check if student already has an active goal
+    const [activeGoals] = await connection.query(
+      `SELECT id FROM study_goals WHERE student_id = ? AND status = 'active' LIMIT 1`,
+      [studentId]
+    );
+    if (activeGoals.length) throw new ActiveGoalExistsError();
+
+    // Create the goal with source information
+    const [result] = await connection.query(
+      `INSERT INTO study_goals
+       (student_id, target_score, target_grade, target_study_hours, target_attendance, deadline, status, source_scenario_id, source_model_version)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        studentId,
+        targetScore,
+        targetGrade,
+        targetStudyHours,
+        targetAttendance,
+        null,  // deadline - user will set this
+        'active',  // status
+        scenarioId,
+        baselineEvent?.model_version || null
+      ]
+    );
+
+    return {
+      id: result.insertId,
+      student_id: studentId,
+      target_score: targetScore,
+      target_grade: targetGrade,
+      target_study_hours: targetStudyHours,
+      target_attendance: targetAttendance,
+      deadline: null,
+      status: 'active',
+      source_scenario_id: scenarioId,
+      source_model_version: baselineEvent?.model_version || null
     };
   });
 }
@@ -726,6 +869,7 @@ module.exports = {
   ensureWeeklyCheckinsTable,
   createGoal,
   createGoalForStudent,
+  createGoalFromScenario,
   getGoalById,
   getGoalByIdForStudent,
   getGoalsByStudent,

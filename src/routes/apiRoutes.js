@@ -269,6 +269,11 @@ studentRouter.post('/me/goals', apiCreateGoal);
 studentRouter.get('/me/goals/:goalId', apiGetGoal);
 studentRouter.put('/me/goals/:goalId', apiUpdateGoal);
 studentRouter.delete('/me/goals/:goalId', apiDeleteGoal);
+studentRouter.post(
+  '/me/goals/from-scenario/:scenarioId',
+  authenticatedLimit(studentAiLimiter),
+  apiCreateGoalFromScenario
+);
 
 // Weekly Check-ins
 studentRouter.get('/me/goals/:goalId/checkins', apiListCheckIns);
