@@ -99,6 +99,16 @@ export const api = {
     });
     return handleResponse(response);
   },
+
+  async patch(path, body) {
+    const response = await fetch(`${API_BASE}${path}`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(body),
+    });
+    return handleResponse(response);
+  },
 };
 
 export { ApiError };

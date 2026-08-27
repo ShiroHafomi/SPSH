@@ -99,6 +99,7 @@ const vi = {
     whatIfSimulator: 'Mô phỏng What-If',
     myPortal: 'Cổng thông tin cá nhân',
     goals: 'Mục tiêu học tập',
+    studyPlanner: 'Lập kế hoạch học tập',
     role: {
       admin: 'Quản trị',
       teacher: 'Giáo viên',
@@ -746,6 +747,23 @@ const vi = {
     reopenSession: 'Mở lại buổi học',
     minutes: 'phút',
     hours: 'giờ',
+    actionFailed: 'Thao tác thất bại',
+    actions: 'Thao tác',
+    endAfterStart: 'Thời gian kết thúc phải sau thời gian bắt đầu',
+    invalidDateTime: 'Ngày hoặc thời gian không hợp lệ',
+    saveFailed: 'Lưu thất bại',
+    sessionNotFound: 'Không tìm thấy buổi học',
+    reopened: 'Buổi học đã được mở lại',
+    confirmCompleteMessage: 'Bạn có chắc chắn muốn đánh dấu buổi học này là đã hoàn thành?',
+    confirmDeleteMessage: 'Bạn có chắc chắn muốn xóa buổi học này? Hành động này không thể hoàn tác.',
+    confirmReopenMessage: 'Bạn có chắc chắn muốn mở lại buổi học này?',
+    confirmSkipMessage: 'Bạn có chắc chắn muốn đánh dấu buổi học này là đã bỏ qua?',
+    couldNotCalculateDuration: 'Không thể tính thời lượng',
+    created: 'Buổi học đã được tạo',
+    deleted: 'Buổi học đã được xóa',
+    updated: 'Buổi học đã được cập nhật',
+    filters: 'Bộ lọc',
+    optional: 'Tùy chọn'
   },
 
   notifications: {
@@ -839,6 +857,7 @@ const vi = {
   },
 
   goals: {
+    studyPlanner: 'Lập kế hoạch học tập',
     title: 'Mục tiêu học tập',
     subtitle: 'Đặt mục tiêu học tập, ghi nhận tiến độ và xem hướng dẫn từ giáo viên.',
     activeGoals: 'Mục tiêu đang hoạt động',
