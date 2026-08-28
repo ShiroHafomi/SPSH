@@ -4,7 +4,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { api, ApiError } from '../api';
@@ -45,11 +45,57 @@ function createFieldSchema(col) {
       schema = z.string();
   }
   if (!col.nullable) {
-    schema = schema.min(1, '"{col.displayLabel}" is required');
+    const requiredMessage = `"${col.displayLabel}" is required`;
+    schema = col.inferredType === 'boolean'
+      ? schema.refine((value) => value !== '', requiredMessage)
+      : schema.min(1, requiredMessage);
   } else {
     schema = schema.optional().or(z.literal(''));
   }
   return schema;
+}
+
+const NON_EDITABLE_FIELDS = new Set(['id', 'created_at', 'updated_at']);
+
+function mapServerErrorsToFields(rawErrors, columns) {
+  const supportedFields = new Map();
+  columns.forEach((col) => {
+    if (NON_EDITABLE_FIELDS.has(col.name)) return;
+    supportedFields.set(col.name, col.name);
+    if (typeof col.displayLabel === 'string') {
+      supportedFields.set(col.displayLabel, col.name);
+    }
+  });
+
+  const errors = Array.isArray(rawErrors)
+    ? rawErrors
+    : rawErrors && typeof rawErrors === 'object'
+      ? Object.entries(rawErrors).map(([field, message]) => ({ field, message }))
+      : [];
+  const fieldErrors = new Map();
+
+  errors.forEach((entry) => {
+    let candidate;
+    let message;
+
+    if (typeof entry === 'string') {
+      candidate = entry.match(/^"([^"]+)"/)?.[1];
+      message = entry;
+    } else if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+      candidate = entry.field ?? entry.name;
+      if (!candidate && Array.isArray(entry.path)) {
+        candidate = entry.path[0];
+      }
+      message = Array.isArray(entry.message) ? entry.message[0] : entry.message ?? entry.error;
+    }
+
+    const field = typeof candidate === 'string' ? supportedFields.get(candidate) : undefined;
+    if (field && typeof message === 'string' && message.trim()) {
+      fieldErrors.set(field, message);
+    }
+  });
+
+  return fieldErrors;
 }
 
 export default function StudentForm() {
@@ -100,12 +146,12 @@ export default function StudentForm() {
   const formSchema = useMemo(() => z.object(fieldSchemas), [fieldSchemas]);
 
   const {
+    control,
     register,
     handleSubmit,
-    setValue,
+    setError,
     formState: { errors, isSubmitting },
     reset,
-    watch,
   } = useForm({
     resolver: zodResolver(formSchema),
     defaultValues: initialValues,
@@ -131,9 +177,11 @@ export default function StudentForm() {
       }
       navigate('/students');
     } catch (err) {
-      if (err instanceof ApiError && err.errors) {
-        // Server-side validation errors could be set here
-        console.error('Validation errors:', err.errors);
+      if (err instanceof ApiError) {
+        const serverErrors = err.data?.fields ?? err.errors;
+        mapServerErrorsToFields(serverErrors, columns).forEach((message, field) => {
+          setError(field, { type: 'server', message });
+        });
       }
       addFlash(err.message, 'error');
     } finally {
@@ -218,24 +266,30 @@ export default function StudentForm() {
     const config = getFieldConfig(col);
     const error = errors[col.name];
     const required = !col.nullable;
-    const fieldProps = register(col.name);
-
-    // Check if value exists and is truthy for conditional rendering
-    const showOptionalHint = col.nullable && !isEdit;
 
     if (config.type === 'radio') {
       return (
-        <RadioGroup
+        <Controller
           name={col.name}
-          label={col.displayLabel}
-          error={error?.message}
-          required={required}
-          options={config.options}
-          disabled={config.disabled}
-          inline
+          control={control}
+          render={({ field }) => (
+            <RadioGroup
+              name={field.name}
+              label={col.displayLabel}
+              error={error?.message}
+              required={required}
+              options={config.options}
+              disabled={config.disabled}
+              value={field.value == null ? '' : String(field.value)}
+              onChange={field.onChange}
+              inline
+            />
+          )}
         />
       );
     }
+
+    const fieldProps = register(col.name);
 
     if (config.type === 'select') {
       return (
