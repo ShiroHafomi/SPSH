@@ -18,8 +18,8 @@ export function StudentLayout() {
     <div className="min-h-screen bg-primary-50 dark:bg-gray-950">
       <aside
         id="student-sidebar"
-        className={`fixed inset-y-0 left-0 z-40 w-64 bg-white dark:bg-gray-900 border-r border-primary-100 dark:border-gray-800 transform transition-transform duration-300 lg:translate-x-0 ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        className={`fixed inset-y-0 left-0 z-40 w-64 bg-white dark:bg-gray-900 border-r border-primary-100 dark:border-gray-800 transform transition-transform duration-300 lg:visible lg:translate-x-0 ${
+          sidebarOpen ? 'visible translate-x-0' : 'invisible -translate-x-full'
         }`}
       >
         <div className="flex flex-col h-full">
@@ -47,7 +47,7 @@ export function StudentLayout() {
               onClick={closeSidebar}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 001-1h2a1 1 0 001 1v4a1 1 0 001 1m-6 0h6" />
               </svg>
               {t('student.overview')}
             </Link>
@@ -66,11 +66,40 @@ export function StudentLayout() {
               {t('nav.goals')}
             </Link>
             <Link
+              to="/student/assignments"
+              className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${
+                location.pathname === '/student/assignments'
+                  ? 'bg-primary-100 text-primary-800 dark:bg-primary-900/40 dark:text-primary-200'
+                  : 'text-primary-600 dark:text-gray-400 hover:bg-primary-50 dark:hover:bg-gray-800 hover:text-primary-700 dark:hover:text-gray-200'
+              }`}
+              onClick={closeSidebar}
+              aria-current={location.pathname === '/student/assignments' ? 'page' : undefined}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2m-6 0a2 2 0 002 2h2a2 2 0 002-2m-6 8l2 2 4-4" />
+              </svg>
+              {t('nav.assignments')}
+            </Link>
+            <Link
+              to="/student/study-planner"
+              className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${
+                location.pathname === '/student/study-planner'
+                  ? 'bg-primary-100 text-primary-800 dark:bg-primary-900/40 dark:text-primary-200'
+                  : 'text-primary-600 dark:text-gray-400 hover:bg-primary-50 dark:hover:bg-gray-800 hover:text-primary-700 dark:hover:text-gray-200'
+              }`}
+              onClick={closeSidebar}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V9a2 2 0 002-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+              </svg>
+              {t('nav.studyPlanner')}
+            </Link>
+            <Link
               to="/predictor"
               className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-colors text-primary-600 dark:text-gray-400 hover:bg-primary-50 dark:hover:bg-gray-800 hover:text-primary-700 dark:hover:text-gray-200"
               onClick={closeSidebar}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548-.548A3.374 3.374 0 0014 14.469V17a1 1 0 01-.553.894l-.491.246a1.5 1.5 0 00-.553 1.679l.216.871a2 2 0 01-1.935 2.41H13.5" />
               </svg>
               {t('nav.aiCounselor')}
@@ -90,7 +119,6 @@ export function StudentLayout() {
               {t('notifications.title')}
             </Link>
           </nav>
-
           {/* Footer */}
           <div className="p-4 border-t border-primary-100 dark:border-gray-800">
             <p className="text-xs text-primary-400 dark:text-gray-500 text-center">

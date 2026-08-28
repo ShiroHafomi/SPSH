@@ -26,7 +26,10 @@ import AdminAtRisk from './pages/AdminAtRisk';
 import AdminAITools from './pages/AdminAITools';
 import StudentGoals from './pages/StudentGoals';
 import StudentGoalsProgress from './pages/StudentGoalsProgress';
+import StudyPlanner from './pages/StudyPlanner';
+import Assignments from './pages/Assignments';
 import Notifications from './pages/Notifications';
+import MlMonitoring from './pages/MlMonitoring';
 
 /**
  * Routing map
@@ -72,6 +75,7 @@ function App() {
                 <Route path="/admin/students/:studentId/goals" element={<StudentGoalsProgress mode="admin" />} />
                 <Route path="/admin/at-risk" element={<AdminAtRisk />} />
                 <Route path="/admin/ai-tools" element={<AdminAITools />} />
+                <Route path="/admin/ml-monitoring" element={<MlMonitoring apiRole="admin" />} />
                 <Route path="/admin/users" element={<AdminUsers />} />
                 <Route path="/admin/notifications" element={<Notifications />} />
               </Route>
@@ -88,6 +92,7 @@ function App() {
                 <Route path="/teacher/students/:id/edit" element={<StudentForm />} />
                 <Route path="/teacher/students/:studentId/goals" element={<StudentGoalsProgress mode="teacher" />} />
                 <Route path="/teacher/at-risk" element={<AdminAtRisk />} />
+                <Route path="/teacher/ml-monitoring" element={<MlMonitoring apiRole="teacher" />} />
               </Route>
 
               {/* Teacher notification center - Teacher only (own sidebar + header) */}
@@ -108,6 +113,8 @@ function App() {
                 <Route path="/student" element={<StudentDashboard />} />
                 <Route path="/goals" element={<StudentGoals />} />
                 <Route path="/student/notifications" element={<Notifications />} />
+                <Route path="/student/study-planner" element={<StudyPlanner />} />
+                <Route path="/student/assignments" element={<Assignments />} />
               </Route>
 
               {/* Shared routes - any authenticated user (floating Navbar via MainLayout) */}

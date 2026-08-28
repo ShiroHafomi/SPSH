@@ -11,6 +11,8 @@ const { ensureStudyGoalsTable, ensureWeeklyCheckinsTable } = require('./services
 const { ensureNotificationTables } = require('./services/notificationService');
 const { ensureModelSnapshotsTable } = require('./services/modelSnapshotService');
 const { ensurePredictionEventsTable } = require('./services/predictionHistoryService');
+const { ensureStudySessionsTable } = require('./services/studySessionService');
+const { ensureStudentAssignmentsTable } = require('./services/assignmentService');
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -83,6 +85,22 @@ async function main() {
     console.log('   ML prediction events table: ready');
   } catch (err) {
     console.error('   ML prediction events table: FAILED —', err.message);
+  }
+
+  // Auto-create study sessions table
+  try {
+    await ensureStudySessionsTable();
+    console.log('   Study sessions table: ready');
+  } catch (err) {
+    console.error('   Study sessions table: FAILED —', err.message);
+  }
+
+  // Auto-create personal assignments after the students table dependency.
+  try {
+    await ensureStudentAssignmentsTable();
+    console.log('   Student assignments table: ready');
+  } catch (err) {
+    console.error('   Student assignments table: FAILED —', err.message);
   }
 
   if (!dbReady) {

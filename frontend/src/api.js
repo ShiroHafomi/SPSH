@@ -1,11 +1,12 @@
 const API_BASE = '/api';
 
 class ApiError extends Error {
-  constructor(message, status, errors = []) {
+  constructor(message, status, errors = [], data = null) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.errors = errors;
+    this.data = data;
   }
 }
 
@@ -18,10 +19,11 @@ async function handleResponse(response, { redirectOnUnauthorized = true } = {}) 
       ? 'Unauthorized. Please log in first.'
       : 'Something went wrong. Please try again.';
     let errors = [];
+    let data = null;
 
     if (isJson) {
       try {
-        const data = await response.json();
+        data = await response.json();
         message = data.error || message;
         errors = data.errors || (data.error ? [data.error] : []);
       } catch {
@@ -38,7 +40,7 @@ async function handleResponse(response, { redirectOnUnauthorized = true } = {}) 
       }
     }
 
-    throw new ApiError(message, response.status, errors);
+    throw new ApiError(message, response.status, errors, data);
   }
 
   if (isJson) {
@@ -93,6 +95,16 @@ export const api = {
   async put(path, body) {
     const response = await fetch(`${API_BASE}${path}`, {
       method: 'PUT',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(body),
+    });
+    return handleResponse(response);
+  },
+
+  async patch(path, body) {
+    const response = await fetch(`${API_BASE}${path}`, {
+      method: 'PATCH',
       headers: getAuthHeaders(),
       credentials: 'include',
       body: JSON.stringify(body),

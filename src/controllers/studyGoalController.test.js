@@ -7,6 +7,7 @@ const { pool } = require('../config/db');
 const studyGoalService = require('../services/studyGoalService');
 const goalNotificationService = require('../services/goalNotificationService');
 const {
+  apiGetGoal,
   apiListGoalsWithProgress,
   apiCreateCheckIn,
   apiUpdateCheckIn,
@@ -135,16 +136,19 @@ test('student check-in updates reject teacher feedback before database work', as
 });
 
 test('goal completion event runs only after a real persisted transition', async () => {
-  const serviceOriginals = preserve(studyGoalService, ['getGoalById', 'updateGoal']);
+  const serviceOriginals = preserve(studyGoalService, [
+    'getGoalByIdForStudent',
+    'updateGoalForStudent',
+  ]);
   const notificationOriginals = preserve(goalNotificationService, ['notifyGoalCompleted']);
   const calls = [];
   let event;
-  studyGoalService.getGoalById = async () => calls.length === 0
+  studyGoalService.getGoalByIdForStudent = async () => calls.length === 0
     ? (calls.push('before'), { id: 8, student_id: 42, status: 'active' })
     : { id: 8, student_id: 42, status: 'completed' };
-  studyGoalService.updateGoal = async () => {
+  studyGoalService.updateGoalForStudent = async () => {
     calls.push('update');
-    return true;
+    return { found: true, updated: true };
   };
   goalNotificationService.notifyGoalCompleted = async (payload) => {
     calls.push('notification');
@@ -166,11 +170,18 @@ test('goal completion event runs only after a real persisted transition', async 
 });
 
 test('already completed or failed goal writes create no completion event', async () => {
-  const serviceOriginals = preserve(studyGoalService, ['getGoalById', 'updateGoal']);
+  const serviceOriginals = preserve(studyGoalService, [
+    'getGoalByIdForStudent',
+    'updateGoalForStudent',
+  ]);
   const notificationOriginals = preserve(goalNotificationService, ['notifyGoalCompleted']);
   let events = 0;
-  studyGoalService.getGoalById = async () => ({ id: 8, student_id: 42, status: 'completed' });
-  studyGoalService.updateGoal = async () => true;
+  studyGoalService.getGoalByIdForStudent = async () => ({
+    id: 8,
+    student_id: 42,
+    status: 'completed',
+  });
+  studyGoalService.updateGoalForStudent = async () => ({ found: true, updated: true });
   goalNotificationService.notifyGoalCompleted = async () => { events += 1; };
   pool.query = async () => [{ affectedRows: 1 }];
 
@@ -180,8 +191,12 @@ test('already completed or failed goal writes create no completion event', async
     assert.equal(completedRes.statusCode, 200);
     assert.equal(events, 0);
 
-    studyGoalService.getGoalById = async () => ({ id: 8, student_id: 42, status: 'active' });
-    studyGoalService.updateGoal = async () => false;
+    studyGoalService.getGoalByIdForStudent = async () => ({
+      id: 8,
+      student_id: 42,
+      status: 'active',
+    });
+    studyGoalService.updateGoalForStudent = async () => ({ found: false, updated: false });
     const failedRes = createResponse();
     await apiUpdateGoal(createRequest({ body: { status: 'completed' } }), failedRes);
     assert.equal(failedRes.statusCode, 404);
@@ -194,14 +209,18 @@ test('already completed or failed goal writes create no completion event', async
 
 test('check-in creation persists before a best-effort progress attention event', async () => {
   const serviceOriginals = preserve(studyGoalService, [
-    'getGoalById',
+    'getGoalByIdForStudent',
     'getCheckInByGoalAndWeek',
     'createCheckIn',
   ]);
   const notificationOriginals = preserve(goalNotificationService, ['notifyProgressAttention']);
   const order = [];
   let notificationEvent;
-  studyGoalService.getGoalById = async () => ({ id: 8, student_id: 42, status: 'active' });
+  studyGoalService.getGoalByIdForStudent = async () => ({
+    id: 8,
+    student_id: 42,
+    status: 'active',
+  });
   studyGoalService.getCheckInByGoalAndWeek = async () => null;
   studyGoalService.createCheckIn = async () => {
     order.push('write');
@@ -241,20 +260,22 @@ test('check-in creation persists before a best-effort progress attention event',
 
 test('check-in updates use the freshly persisted revision for progress attention', async () => {
   const serviceOriginals = preserve(studyGoalService, [
+    'getCheckInByIdForGoalAndStudent',
     'getCheckInById',
-    'getGoalById',
     'updateCheckIn',
   ]);
   const notificationOriginals = preserve(goalNotificationService, ['notifyProgressAttention']);
   let checkInReads = 0;
   let notificationEvent;
+  studyGoalService.getCheckInByIdForGoalAndStudent = async () => ({
+    id: 99,
+    goal_id: 8,
+    notification_revision: 2,
+  });
   studyGoalService.getCheckInById = async () => {
     checkInReads += 1;
-    return checkInReads === 1
-      ? { id: 99, goal_id: 8, notification_revision: 2 }
-      : { id: 99, goal_id: 8, notification_revision: 3 };
+    return { id: 99, goal_id: 8, notification_revision: 3 };
   };
-  studyGoalService.getGoalById = async () => ({ id: 8, student_id: 42, status: 'active' });
   studyGoalService.updateCheckIn = async () => true;
   goalNotificationService.notifyProgressAttention = async (event) => {
     notificationEvent = event;
@@ -282,13 +303,17 @@ test('check-in updates use the freshly persisted revision for progress attention
 
 test('notification failures preserve successful check-in responses', async () => {
   const serviceOriginals = preserve(studyGoalService, [
-    'getGoalById',
+    'getGoalByIdForStudent',
     'getCheckInByGoalAndWeek',
     'createCheckIn',
   ]);
   const notificationOriginals = preserve(goalNotificationService, ['notifyProgressAttention']);
   const originalConsoleError = console.error;
-  studyGoalService.getGoalById = async () => ({ id: 8, student_id: 42, status: 'active' });
+  studyGoalService.getGoalByIdForStudent = async () => ({
+    id: 8,
+    student_id: 42,
+    status: 'active',
+  });
   studyGoalService.getCheckInByGoalAndWeek = async () => null;
   studyGoalService.createCheckIn = async () => ({
     id: 99,
@@ -319,5 +344,62 @@ test('notification failures preserve successful check-in responses', async () =>
     Object.assign(studyGoalService, serviceOriginals);
     Object.assign(goalNotificationService, notificationOriginals);
     console.error = originalConsoleError;
+  }
+});
+
+test('student goal IDs must be complete positive safe integers', async () => {
+  const originals = preserve(studyGoalService, ['getGoalByIdForStudent']);
+  let calls = 0;
+  studyGoalService.getGoalByIdForStudent = async () => { calls += 1; };
+
+  try {
+    const res = createResponse();
+    await apiGetGoal(createRequest({ params: { goalId: '8not-an-id' } }), res);
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.body.error, 'Invalid goal ID.');
+    assert.equal(calls, 0);
+  } finally {
+    Object.assign(studyGoalService, originals);
+  }
+});
+
+test('student check-in updates persist a valid changed week start', async () => {
+  const originals = preserve(studyGoalService, [
+    'getCheckInByIdForGoalAndStudent',
+    'getCheckInByGoalAndWeek',
+    'updateCheckIn',
+    'getCheckInById',
+  ]);
+  const notificationOriginals = preserve(goalNotificationService, ['notifyProgressAttention']);
+  const originalPoolQuery = pool.query;
+  let updates;
+  studyGoalService.getCheckInByIdForGoalAndStudent = async () => ({
+    id: 99,
+    goal_id: 8,
+    week_start: '2026-08-03',
+  });
+  studyGoalService.getCheckInByGoalAndWeek = async () => null;
+  studyGoalService.updateCheckIn = async (_checkInId, nextUpdates) => {
+    updates = nextUpdates;
+    return true;
+  };
+  studyGoalService.getCheckInById = async () => ({ id: 99, week_start: '2026-08-10' });
+  goalNotificationService.notifyProgressAttention = async () => {};
+  pool.query = async () => [{ affectedRows: 1 }];
+
+  try {
+    const res = createResponse();
+    await apiUpdateCheckIn(createRequest({
+      body: { week_start: '2026-08-10', current_score: null },
+    }), res);
+
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(updates, { weekStart: '2026-08-10', currentScore: null });
+    assert.deepEqual(res.body, { checkIn: { id: 99, week_start: '2026-08-10' } });
+  } finally {
+    Object.assign(studyGoalService, originals);
+    Object.assign(goalNotificationService, notificationOriginals);
+    pool.query = originalPoolQuery;
   }
 });

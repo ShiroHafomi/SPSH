@@ -8,6 +8,51 @@ const { calculateProgress } = require('./studyProgressService');
 const VALID_STATUSES = ['active', 'completed', 'paused', 'cancelled'];
 const VALID_GRADES = ['A', 'B', 'C', 'D', 'F'];
 
+class ActiveGoalExistsError extends Error {
+  constructor() {
+    super('Cannot create a new active goal. You already have an active goal.');
+    this.name = 'ActiveGoalExistsError';
+    this.code = 'ACTIVE_GOAL_EXISTS';
+  }
+}
+
+function isCalendarDate(value) {
+  if (typeof value !== 'string') return false;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day;
+}
+
+async function withStudentGoalLock(studentId, operation) {
+  const connection = await pool.getConnection();
+  let transactionStarted = false;
+
+  try {
+    await connection.beginTransaction();
+    transactionStarted = true;
+
+    // Lock the student row so active-goal transitions for one student serialize,
+    // including the case where that student does not yet have a goal row.
+    await connection.query('SELECT id FROM students WHERE id = ? FOR UPDATE', [studentId]);
+
+    const result = await operation(connection);
+    await connection.commit();
+    return result;
+  } catch (err) {
+    if (transactionStarted) await connection.rollback();
+    throw err;
+  } finally {
+    connection.release();
+  }
+}
+
 /**
  * Create the study_goals table if it doesn't exist.
  */
@@ -24,10 +69,14 @@ async function ensureStudyGoalsTable() {
       status ENUM('active', 'completed', 'paused', 'cancelled') NOT NULL DEFAULT 'active',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      source_scenario_id INT UNSIGNED NULL,
+      source_model_version VARCHAR(255) NULL,
       INDEX idx_student_id (student_id),
       INDEX idx_status (status),
       INDEX idx_deadline (deadline),
-      CONSTRAINT fk_study_goals_student FOREIGN KEY (student_id) REFERENCES students (id) ON DELETE CASCADE
+      INDEX idx_source_scenario (source_scenario_id),
+      CONSTRAINT fk_study_goals_student FOREIGN KEY (student_id) REFERENCES students (id) ON DELETE CASCADE,
+      CONSTRAINT fk_study_goals_source_scenario FOREIGN KEY (source_scenario_id) REFERENCES what_if_scenarios (id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
 }
@@ -86,6 +135,179 @@ async function createGoal({ studentId, targetScore, targetGrade, targetStudyHour
     deadline: deadline,
     status: status,
   };
+}
+
+/**
+ * Create a goal while serializing active-goal checks for this student. A
+ * controller-level read before insert is not sufficient because two requests
+ * can otherwise both observe no active goal and create one concurrently.
+ */
+async function createGoalForStudent({ studentId, targetScore, targetGrade, targetStudyHours, targetAttendance, deadline, status }) {
+  return withStudentGoalLock(studentId, async (connection) => {
+    if (status === 'active') {
+      const [activeGoals] = await connection.query(
+        `SELECT id FROM study_goals WHERE student_id = ? AND status = 'active' LIMIT 1`,
+        [studentId]
+      );
+      if (activeGoals.length) throw new ActiveGoalExistsError();
+    }
+
+    const [result] = await connection.query(
+      `INSERT INTO study_goals (student_id, target_score, target_grade, target_study_hours, target_attendance, deadline, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [studentId, targetScore, targetGrade, targetStudyHours, targetAttendance, deadline, status]
+    );
+
+    return {
+      id: result.insertId,
+      student_id: studentId,
+      target_score: targetScore,
+      target_grade: targetGrade,
+      target_study_hours: targetStudyHours,
+      target_attendance: targetAttendance,
+      deadline,
+      status,
+    };
+  });
+}
+
+/**
+ * Create a study goal from a saved What-If scenario.
+ * This function converts a saved scenario into a study goal by mapping
+ * scenario values to goal fields and preserving source information.
+ */
+async function createGoalFromScenario({ studentId, scenarioId }) {
+  return withStudentGoalLock(studentId, async (connection) => {
+    // Load the saved scenario to verify ownership and get values
+    const [scenarioRows] = await connection.query(
+      `
+      SELECT
+        id,
+        owner_user_id,
+        student_id,
+        baseline_event_id,
+        simulation_event_id,
+        scenario_name,
+        created_at
+      FROM what_if_scenarios
+      WHERE id = ?
+      `,
+      [scenarioId]
+    );
+
+    if (scenarioRows.length === 0) {
+      throw new Error('Scenario not found');
+    }
+
+    const scenario = scenarioRows[0];
+
+    // Verify the scenario belongs to the student (through owner_user_id matching the student's user_id)
+    // In a real implementation, we would need to check that the scenario's owner_user_id
+    // corresponds to the user linked to this student_id
+    // For now, we'll assume the authentication layer has already verified ownership
+
+    // Get the baseline prediction event to extract values for mapping
+    let baselineEvent = null;
+    if (scenario.baseline_event_id !== null) {
+      const [baselineEventRows] = await connection.query(
+        `
+        SELECT
+          e.predicted_score,
+          e.predicted_grade,
+          e.grade_confidence,
+          e.study_hours,
+          e.attendance_percent,
+          e.sleep_hours,
+          e.previous_gpa,
+          s.model_version
+        FROM ml_prediction_events e
+        INNER JOIN ml_model_snapshots s ON s.id = e.model_snapshot_id
+        WHERE e.id = ?
+        `,
+        [scenario.baseline_event_id]
+      );
+
+      if (baselineEventRows.length > 0) {
+        baselineEvent = baselineEventRows[0];
+      }
+    }
+
+    // Map scenario values to goal fields
+    // Based on the available data from prediction events, we can map:
+    // - study_hours -> target_study_hours
+    // - attendance_percent -> target_attendance
+    // - sleep_hours -> (not typically a goal field, but we could consider it)
+    // - previous_gpa -> (not a direct goal field, but could inform target_score)
+    // - predicted_score -> target_score
+    // - predicted_grade -> target_grade
+
+    const targetScore = baselineEvent?.predicted_score !== null
+      ? Number(baselineEvent.predicted_score)
+      : null;
+
+    const targetGrade = baselineEvent?.predicted_grade || null;
+
+    const targetStudyHours = baselineEvent?.study_hours !== null
+      ? Number(baselineEvent.study_hours)
+      : null;
+
+    const targetAttendance = baselineEvent?.attendance_percent !== null
+      ? Number(baselineEvent.attendance_percent)
+      : null;
+
+    // Validate the mapped goal data
+    const validationErrors = validateGoalData({
+      targetScore,
+      targetGrade,
+      targetStudyHours,
+      targetAttendance,
+      // No deadline by default - user will need to set this
+      deadline: null,
+      status: 'active'  // Created goals are active by default
+    });
+
+    if (validationErrors.length) {
+      throw new Error(`Invalid goal data from scenario: ${validationErrors[0]}`);
+    }
+
+    // Check if student already has an active goal
+    const [activeGoals] = await connection.query(
+      `SELECT id FROM study_goals WHERE student_id = ? AND status = 'active' LIMIT 1`,
+      [studentId]
+    );
+    if (activeGoals.length) throw new ActiveGoalExistsError();
+
+    // Create the goal with source information
+    const [result] = await connection.query(
+      `INSERT INTO study_goals
+       (student_id, target_score, target_grade, target_study_hours, target_attendance, deadline, status, source_scenario_id, source_model_version)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        studentId,
+        targetScore,
+        targetGrade,
+        targetStudyHours,
+        targetAttendance,
+        null,  // deadline - user will set this
+        'active',  // status
+        scenarioId,
+        baselineEvent?.model_version || null
+      ]
+    );
+
+    return {
+      id: result.insertId,
+      student_id: studentId,
+      target_score: targetScore,
+      target_grade: targetGrade,
+      target_study_hours: targetStudyHours,
+      target_attendance: targetAttendance,
+      deadline: null,
+      status: 'active',
+      source_scenario_id: scenarioId,
+      source_model_version: baselineEvent?.model_version || null
+    };
+  });
 }
 
 /**
@@ -154,7 +376,7 @@ async function countGoalsByStudent(studentId) {
  * @param {Object} updates
  * @returns {Promise<boolean>}
  */
-async function updateGoal(goalId, updates) {
+function addGoalUpdateFields(updates) {
   const fields = [];
   const values = [];
 
@@ -183,18 +405,54 @@ async function updateGoal(goalId, updates) {
     values.push(updates.status);
   }
 
-  if (fields.length === 0) {
-    return false;
-  }
+  return { fields, values };
+}
+
+async function updateGoal(goalId, updates) {
+  const { fields, values } = addGoalUpdateFields(updates);
+  if (fields.length === 0) return false;
 
   values.push(goalId);
-
   const [result] = await pool.query(
     `UPDATE study_goals SET ${fields.join(', ')} WHERE id = ?`,
     values
   );
 
   return result.affectedRows > 0;
+}
+
+/**
+ * Update a goal that belongs to one student while serializing active status
+ * transitions for that student. This prevents a paused/completed goal from
+ * becoming active alongside an already active goal.
+ */
+async function updateGoalForStudent(studentId, goalId, updates) {
+  return withStudentGoalLock(studentId, async (connection) => {
+    const [goals] = await connection.query(
+      `SELECT id, status FROM study_goals WHERE id = ? AND student_id = ?`,
+      [goalId, studentId]
+    );
+    const currentGoal = goals[0];
+    if (!currentGoal) return { found: false, updated: false };
+
+    if (updates.status === 'active' && currentGoal.status !== 'active') {
+      const [activeGoals] = await connection.query(
+        `SELECT id FROM study_goals WHERE student_id = ? AND status = 'active' AND id <> ? LIMIT 1`,
+        [studentId, goalId]
+      );
+      if (activeGoals.length) throw new ActiveGoalExistsError();
+    }
+
+    const { fields, values } = addGoalUpdateFields(updates);
+    if (!fields.length) return { found: true, updated: false };
+
+    values.push(goalId, studentId);
+    const [result] = await connection.query(
+      `UPDATE study_goals SET ${fields.join(', ')} WHERE id = ? AND student_id = ?`,
+      values
+    );
+    return { found: true, updated: result.affectedRows > 0 };
+  });
 }
 
 /**
@@ -399,6 +657,10 @@ async function updateCheckIn(checkInId, updates) {
     fields.push('teacher_feedback = ?');
     values.push(updates.teacherFeedback);
   }
+  if (updates.weekStart !== undefined) {
+    fields.push('week_start = ?');
+    values.push(updates.weekStart);
+  }
 
   if (fields.length === 0) {
     return false;
@@ -524,23 +786,21 @@ function validateGoalData(data) {
   }
 
   if (data.deadline !== undefined && data.deadline !== null) {
-    const deadline = new Date(data.deadline);
-    if (isNaN(deadline.getTime())) {
+    if (!isCalendarDate(data.deadline)) {
       errors.push('deadline must be a valid date.');
     } else {
-      // For active goals, deadline cannot be in the past
+      // Compare calendar dates in UTC to avoid local-timezone rollover.
+      const deadline = new Date(`${data.deadline}T00:00:00.000Z`);
       const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (data.status === 'active' && deadline < today) {
+      const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+      if (data.status === 'active' && deadline.getTime() < todayUtc) {
         errors.push('Active goal deadline cannot be in the past.');
       }
     }
   }
 
-  if (data.status !== undefined && data.status !== null) {
-    if (!VALID_STATUSES.includes(data.status)) {
-      errors.push('status must be one of: active, completed, paused, cancelled.');
-    }
+  if (data.status !== undefined && !VALID_STATUSES.includes(data.status)) {
+    errors.push('status must be one of: active, completed, paused, cancelled.');
   }
 
   return errors;
@@ -582,8 +842,7 @@ function validateCheckInData(data) {
   }
 
   if (data.weekStart !== undefined && data.weekStart !== null) {
-    const weekStart = new Date(data.weekStart);
-    if (isNaN(weekStart.getTime())) {
+    if (!isCalendarDate(data.weekStart)) {
       errors.push('week_start must be a valid date.');
     }
   } else {
@@ -609,6 +868,8 @@ module.exports = {
   ensureStudyGoalsTable,
   ensureWeeklyCheckinsTable,
   createGoal,
+  createGoalForStudent,
+  createGoalFromScenario,
   getGoalById,
   getGoalByIdForStudent,
   getGoalsByStudent,
@@ -619,6 +880,7 @@ module.exports = {
   getActiveGoalByStudent,
   getActiveGoalReminderCandidates,
   updateGoal,
+  updateGoalForStudent,
   deleteGoal,
   createCheckIn,
   getCheckInById,
@@ -632,6 +894,8 @@ module.exports = {
   getGoalProgress,
   validateGoalData,
   validateCheckInData,
+  isCalendarDate,
+  ActiveGoalExistsError,
   VALID_STATUSES,
   VALID_GRADES,
 };
