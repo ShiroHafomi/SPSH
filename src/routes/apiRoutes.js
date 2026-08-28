@@ -7,6 +7,7 @@ const { requireAuth, requireRole, sessionAuth, optionalAuth } = require('../midd
 const {
   adminAiLimiter,
   adminBulkAiLimiter,
+  assignmentMutationLimiter,
   authenticatedRateLimitKey,
   loginLimiter,
   notificationMutationLimiter,
@@ -86,6 +87,15 @@ const {
   apiUpdateStudySessionStatus,
   apiDeleteStudySession,
 } = require('../controllers/studySessionController');
+
+// Personal Assignments
+const {
+  apiCreateAssignment,
+  apiDeleteAssignment,
+  apiGetAssignment,
+  apiListAssignments,
+  apiUpdateAssignment,
+} = require('../controllers/assignmentController');
 
 // Study Goals
 const {
@@ -258,6 +268,25 @@ studentRouter.use(requireAuth, requireRole('student'));
 // Profile
 studentRouter.get('/me/profile', apiStudentProfile);
 studentRouter.put('/me/profile', apiStudentUpdateProfile);
+
+// Personal Assignments
+studentRouter.get('/me/assignments', apiListAssignments);
+studentRouter.post(
+  '/me/assignments',
+  authenticatedLimit(assignmentMutationLimiter),
+  apiCreateAssignment
+);
+studentRouter.get('/me/assignments/:assignmentId', apiGetAssignment);
+studentRouter.patch(
+  '/me/assignments/:assignmentId',
+  authenticatedLimit(assignmentMutationLimiter),
+  apiUpdateAssignment
+);
+studentRouter.delete(
+  '/me/assignments/:assignmentId',
+  authenticatedLimit(assignmentMutationLimiter),
+  apiDeleteAssignment
+);
 
 // Study Sessions
 studentRouter.get('/me/study-sessions', apiListStudySessions);
