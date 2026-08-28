@@ -18,8 +18,8 @@ export function StudentLayout() {
     <div className="min-h-screen bg-primary-50 dark:bg-gray-950">
       <aside
         id="student-sidebar"
-        className={`fixed inset-y-0 left-0 z-40 w-64 bg-white dark:bg-gray-900 border-r border-primary-100 dark:border-gray-800 transform transition-transform duration-300 lg:translate-x-0 ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        className={`fixed inset-y-0 left-0 z-40 w-64 bg-white dark:bg-gray-900 border-r border-primary-100 dark:border-gray-800 transform transition-transform duration-300 lg:visible lg:translate-x-0 ${
+          sidebarOpen ? 'visible translate-x-0' : 'invisible -translate-x-full'
         }`}
       >
         <div className="flex flex-col h-full">
@@ -64,6 +64,21 @@ export function StudentLayout() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6l4 2m4-2a8 8 0 11-16 0 8 8 0 0116 0zM9 3h6" />
               </svg>
               {t('nav.goals')}
+            </Link>
+            <Link
+              to="/student/assignments"
+              className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${
+                location.pathname === '/student/assignments'
+                  ? 'bg-primary-100 text-primary-800 dark:bg-primary-900/40 dark:text-primary-200'
+                  : 'text-primary-600 dark:text-gray-400 hover:bg-primary-50 dark:hover:bg-gray-800 hover:text-primary-700 dark:hover:text-gray-200'
+              }`}
+              onClick={closeSidebar}
+              aria-current={location.pathname === '/student/assignments' ? 'page' : undefined}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2m-6 0a2 2 0 002 2h2a2 2 0 002-2m-6 8l2 2 4-4" />
+              </svg>
+              {t('nav.assignments')}
             </Link>
             <Link
               to="/student/study-planner"

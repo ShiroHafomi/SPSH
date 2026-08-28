@@ -16,6 +16,7 @@ A full-stack web application for analyzing and predicting student performance ba
 - **Saved What-If Scenarios**: Persist successful simulations, mark preferred scenarios, and compare different approaches
 - **Notification Center**: Real-time alerts for study goals, weekly check-ins, teacher feedback, and risk alerts with preference controls
 - **Study Goals & Weekly Check-ins**: Set academic targets and track progress with completion analytics
+- **Personal Assignments & Deadlines**: Students can track their own coursework, priorities, deadlines, and completion state with timezone-safe overdue indicators
 - **Internationalization**: Full English/Vietnamese localization with synchronized key parity
 - **Role-Based Navigation**: 
   - Students: Personal dashboard, goal tracking, simulation tools
@@ -111,6 +112,7 @@ A full-stack web application for analyzing and predicting student performance ba
 │   │   │   ├─ Register.jsx
 │   │   │   ├─ Dashboard.jsx
 │   │   │   ├─ Notifications.jsx
+│   │   │   ├─ Assignments.jsx      # Student personal assignment tracker
 │   │   │   ├─ Students.jsx
 │   │   │   ├─ WhatIfSimulator.jsx
 │   │   │   ├─ SavedScenarios.jsx
@@ -123,6 +125,7 @@ A full-stack web application for analyzing and predicting student performance ba
 │   │   │   ├─ columns.js       # SQL injection prevention whitelist
 │   │   │   ├─ safeNavigation.js
 │   │   │   ├─ notifications.js # Notification formatting/parsing
+│   │   │   ├─ assignments.js   # Assignment validation, timezone, and list-state helpers
 │   │   │   ├─ schemaMap.js     # Load/validate schema_map.json
 │   │   │   ├─ locales/         # English/Vietnamese translation files
 │   │   │   │   ├─ en.js
@@ -180,8 +183,10 @@ A full-stack web application for analyzing and predicting student performance ba
    │   ├─ mlMonitoring.js       # ML monitoring utilities (drift calculation)
    │   └─ predictionHistory.js  # prediction event history utilities
    ├─ controllers/
-   │   └─ apiController.js      # all API handlers (JSON responses)
+   │   ├─ apiController.js      # shared API handlers (JSON responses)
+   │   └─ assignmentController.js # assignment API validation and ownership boundary
    ├─ services/
+   │   ├─ assignmentService.js  # assignment table, SQL, lifecycle, and deadlines
    │   ├─ authService.js        # ALL SQL for users table + auth
    │   ├─ studentService.py     # ALL SQL for students (parameterized only)
    │   ├─ goalsService.js       # study goals CRUD
@@ -377,12 +382,56 @@ All API endpoints require authentication unless otherwise noted. Responses are J
 | GET | `/api/weekly-checkins` = Yes | List weekly check-ins |
 | POST | `/api/weekly-checkins` = Yes | Create new weekly check-in |
 
+### Personal Assignments — Phase 1
+
+Personal assignment tracking is available only to authenticated users with the `student` role and a linked student record. The frontend route is `/student/assignments`; every API query and mutation resolves ownership from the authenticated account instead of accepting a student ID from the client. Assignment data is removed when its owning user account is deleted.
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/student/me/assignments` | Student | List the current student's assignments, pagination, and full-result summary |
+| POST | `/api/student/me/assignments` | Student | Create a personal assignment |
+| GET | `/api/student/me/assignments/:assignmentId` | Student | Get one owned assignment |
+| PATCH | `/api/student/me/assignments/:assignmentId` | Student | Update an owned assignment using its optimistic `version` |
+| DELETE | `/api/student/me/assignments/:assignmentId?version=:version` | Student | Delete an owned assignment only at the expected optimistic `version` |
+
+Assignments support `todo`, `in_progress`, and `done` statuses and `low`, `medium`, and `high` priorities. The list API accepts `q`, `subject`, `status`, `priority`, `overdue`, `from`, `to`, `page`, `size`, and an allowlisted `sort` value. Search covers title and subject. Date filters apply to `due_at` as a half-open UTC range; the frontend converts inclusive viewing dates using the browser's viewing timezone. Pagination defaults to 20 items and is capped at 100. Summary counts (`todo`, `inProgress`, `done`, and `overdue`) cover the complete filtered result, not only the current page. Overdue is a subset of unfinished assignments and must not be added to the status totals.
+
+A deadline is accepted only as a timestamp with an explicit UTC offset, stored as a UTC instant, and displayed in the assignment's selected IANA timezone together with that timezone. Past deadlines are valid. The server returns an `asOf` snapshot and computes time-dependent fields dynamically:
+
+```text
+isOverdue = status != done AND due_at < asOf
+completedLate = status == done AND completed_at > due_at
+```
+
+No background job stores or changes an overdue status. The visible frontend refreshes deadline indicators periodically and refreshes the list when the tab regains focus or visibility.
+
+Entering `done` records `completed_at` using server time. Repeating `done` preserves the first completion time. Reopening requires UI confirmation and clears `completed_at`. A completed assignment must be reopened in a separate update before its deadline can change. Title or description edits do not reset completion, and changing a deadline does not complete the assignment. Updates and deletions require the current optimistic `version`, so a stale confirmation cannot overwrite or delete newer work. Assignment operations do not update grades, machine-learning inputs, Study Goals, or Study Planner session minutes.
+
+Primary implementation and test files:
+
+- `src/services/assignmentService.js` and `src/services/assignmentService.test.js`
+- `src/controllers/assignmentController.js` and `src/controllers/assignmentController.test.js`
+- `frontend/src/pages/Assignments.jsx`
+- `frontend/src/utils/assignments.js` and `frontend/src/utils/assignments.test.js`
+- `frontend/src/locales/assignmentLocaleParity.test.js`
+
+Run the relevant suites and production build with:
+
+```bash
+npm test
+npm --prefix frontend test
+npm --prefix frontend run build
+```
+
+Phase 1 does **not** include teacher assignment distribution, student submissions or file uploads, grading, automatic reminders, external calendar synchronization, or automatic changes to Study Goals or machine-learning data.
+
 ## User Roles & Permissions
 
 ### Student
 - Access to personal dashboard and profile
 - CRUD operations on own student record (if linked)
 - Study goal creation and tracking
+- Personal assignment and deadline tracking at `/student/assignments`
 - Weekly check-in submission
 - What-If simulation and scenario saving
 - Notification center with preference controls
