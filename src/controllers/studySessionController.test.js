@@ -4,43 +4,35 @@ const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const studySessionController = require('./studySessionController');
 const studySessionService = require('../services/studySessionService');
+const { logAuditEvent: realLogAuditEvent } = require('../services/authService');
 
-// Mock the service and audit log
-const studySessionServiceMock = {
-  getStudySessionsByStudent: async () => [],
-  countStudySessionsByStudent: async () => 0,
-  getWeeklyStudySessionSummary: async () => ({}),
-  createStudySession: async () => ({}),
-  updateStudySessionForStudent: async () => ({ found: true, updated: true, session: {} }),
-  transitionStudySessionStatus: async () => ({ found: true, valid: true, session: {} }),
-  deleteStudySessionForStudent: async () => ({ found: true, deleted: true })
-};
-
+const studySessionServiceMock = {};
 const logAuditEventMock = async () => {};
 
-let originalStudySessionService;
-let originalLogAuditEvent;
-
 beforeEach(() => {
-  originalStudySessionService = require('../services/studySessionService');
-  // Set up the mock service with the required constants
-  studySessionServiceMock.VALID_STATUSES = ['planned', 'completed', 'skipped'];
-  studySessionServiceMock.MIN_ACTUAL_MINUTES = 1;
-  studySessionServiceMock.MAX_ACTUAL_MINUTES = 720;
-  studySessionServiceMock.parseUtcInstant = (value) => {
-    if (value === "invalid") return null;
-    if (value === "2023-01-01T00:00:00Z") return new Date("2023-01-01T00:00:00Z");
-    if (value === "2023-02-01T00:00:00Z") return new Date("2023-02-01T00:00:00Z");
-    return new Date(value);
-  };
+  Object.assign(studySessionServiceMock, {
+    VALID_STATUSES: ['planned', 'completed', 'skipped'],
+    MIN_ACTUAL_MINUTES: 1,
+    MAX_ACTUAL_MINUTES: 720,
+    parseUtcInstant: (value) => {
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? null : date;
+    },
+    getStudySessionsByStudent: async () => [],
+    countStudySessionsByStudent: async () => 0,
+    getWeeklyStudySessionSummary: async () => ({}),
+    createStudySession: async () => ({}),
+    updateStudySessionForStudent: async () => ({ found: true, updated: true, session: {} }),
+    transitionStudySessionStatus: async () => ({ found: true, valid: true, session: {} }),
+    deleteStudySessionForStudent: async () => ({ found: true, deleted: true }),
+  });
   studySessionController.__setStudySessionService(studySessionServiceMock);
-  originalLogAuditEvent = studySessionController.logAuditEvent;
-  studySessionController.logAuditEvent = logAuditEventMock;
+  studySessionController.__setLogAuditEvent(logAuditEventMock);
 });
 
 afterEach(() => {
-  studySessionController.__setStudySessionService(originalStudySessionService);
-  studySessionController.logAuditEvent = originalLogAuditEvent;
+  studySessionController.__setStudySessionService(studySessionService);
+  studySessionController.__setLogAuditEvent(realLogAuditEvent);
 });
 
 function createResponse() {
@@ -72,7 +64,7 @@ function createRequest(userOverrides = {}, queryOverrides = {}, bodyOverrides = 
 describe('StudySessionController', () => {
   describe('apiListStudySessions', () => {
     it('should return 400 if no studentId', async () => {
-      const req = createRequest({ userOverrides: { studentId: null } });
+      const req = createRequest({ studentId: null });
       const res = createResponse();
 
       await studySessionController.apiListStudySessions(req, res);
@@ -92,7 +84,7 @@ describe('StudySessionController', () => {
     });
 
     it('should return 400 for subject too long', async () => {
-      const req = createRequest({}, {}, { subject: 'A'.repeat(81) });
+      const req = createRequest({}, { subject: 'A'.repeat(81) });
       const res = createResponse();
 
       await studySessionController.apiListStudySessions(req, res);
@@ -112,7 +104,7 @@ describe('StudySessionController', () => {
     });
 
     it('should return 400 for date window too large', async () => {
-      const req = createRequest({}, { startDate: '2023-01-01T00:00:00Z', endDate: '2023-02-01T00:00:00Z' }); // 31 days
+      const req = createRequest({}, { startDate: '2023-01-01T00:00:00Z', endDate: '2023-02-02T00:00:00Z' }); // 32 days
       const res = createResponse();
 
       await studySessionController.apiListStudySessions(req, res);
@@ -146,7 +138,7 @@ describe('StudySessionController', () => {
 
   describe('apiGetStudySessionSummary', () => {
     it('should return 400 if no studentId', async () => {
-      const req = createRequest({ userOverrides: { studentId: null } });
+      const req = createRequest({ studentId: null });
       const res = createResponse();
 
       await studySessionController.apiGetStudySessionSummary(req, res);
@@ -181,7 +173,7 @@ describe('StudySessionController', () => {
 
   describe('apiCreateStudySession', () => {
     it('should return 400 if no studentId', async () => {
-      const req = createRequest({ userOverrides: { studentId: null } });
+      const req = createRequest({ studentId: null });
       const res = createResponse();
 
       await studySessionController.apiCreateStudySession(req, res);
@@ -201,6 +193,10 @@ describe('StudySessionController', () => {
     });
 
     it('should return 400 for validation error', async () => {
+      studySessionServiceMock.createStudySession = async () => {
+        throw new Error('Invalid study session data: title cannot be empty or only whitespace');
+      };
+
       const req = createRequest({}, {}, { title: '' });
       const res = createResponse();
 
@@ -232,7 +228,7 @@ describe('StudySessionController', () => {
 
   describe('apiUpdateStudySession', () => {
     it('should return 400 if no studentId', async () => {
-      const req = createRequest({ userOverrides: { studentId: null } });
+      const req = createRequest({ studentId: null });
       const res = createResponse();
 
       await studySessionController.apiUpdateStudySession(req, res);
@@ -315,7 +311,7 @@ describe('StudySessionController', () => {
 
   describe('apiUpdateStudySessionStatus', () => {
     it('should return 400 if no studentId', async () => {
-      const req = createRequest({ userOverrides: { studentId: null } });
+      const req = createRequest({ studentId: null });
       const res = createResponse();
 
       await studySessionController.apiUpdateStudySessionStatus(req, res);
@@ -430,7 +426,7 @@ describe('StudySessionController', () => {
 
   describe('apiDeleteStudySession', () => {
     it('should return 400 if no studentId', async () => {
-      const req = createRequest({ userOverrides: { studentId: null } });
+      const req = createRequest({ studentId: null });
       const res = createResponse();
 
       await studySessionController.apiDeleteStudySession(req, res);

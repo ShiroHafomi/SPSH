@@ -3,10 +3,14 @@
  * Derives student identity from authenticated state; never trusts the body.
  */
 let studySessionService = require('../services/studySessionService');
-const { logAuditEvent } = require('../services/authService');
+let { logAuditEvent } = require('../services/authService');
 
 function __setStudySessionService(service) {
   studySessionService = service;
+}
+
+function __setLogAuditEvent(handler) {
+  logAuditEvent = handler;
 }
 
 // Fields a client may set when creating/updating a session.
@@ -207,7 +211,7 @@ async function apiCreateStudySession(req, res) {
 
     const unknown = firstUnknownField(req.body, CREATE_FIELDS);
     if (unknown) {
-      return res.status(400).json({ error: `Unexpected field: ${unknown}` });
+      return res.status(400).json({ error: `Unknown field: ${unknown}` });
     }
 
     const {
@@ -268,7 +272,7 @@ async function apiUpdateStudySession(req, res) {
 
     const unknown = firstUnknownField(req.body, UPDATE_FIELDS);
     if (unknown) {
-      return res.status(400).json({ error: `Unexpected field: ${unknown}` });
+      return res.status(400).json({ error: `Unknown field: ${unknown}` });
     }
 
     const updates = {
@@ -331,7 +335,7 @@ async function apiUpdateStudySessionStatus(req, res) {
 
     const unknown = firstUnknownField(req.body, STATUS_FIELDS);
     if (unknown) {
-      return res.status(400).json({ error: `Unexpected field: ${unknown}` });
+      return res.status(400).json({ error: `Unknown field: ${unknown}` });
     }
 
     const { status, actual_minutes } = req.body;
@@ -424,4 +428,5 @@ module.exports = {
   apiUpdateStudySessionStatus,
   apiDeleteStudySession,
   __setStudySessionService,
+  __setLogAuditEvent,
 };

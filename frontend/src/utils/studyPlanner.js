@@ -68,6 +68,8 @@ export function parseSessionInstant(value) {
 
   if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d{1,6})?$/.test(s)) {
     s = `${s.replace(' ', 'T')}Z`;
+  } else if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(s)) {
+    return null;
   }
 
   const date = new Date(s);
@@ -138,46 +140,28 @@ export function zonedDateTimeToUtc(dateOnly, timeOnly, timeZone) {
   const timeMatch = /^(\d{2}):(\d{2})$/.exec(String(timeOnly || '').trim());
   if (!dateMatch || !timeMatch || !timeZone) return null;
 
-  try {
-    const naiveUtc = Date.UTC(
-      Number(dateMatch[1]),
-      Number(dateMatch[2]) - 1,
-      Number(dateMatch[3]),
-      Number(timeMatch[1]),
-      Number(timeMatch[2])
-    );
-    const offset = getTimeZoneOffsetMs(timeZone, new Date(naiveUtc));
-    const result = new Date(naiveUtc - offset);
-    return Number.isNaN(result.getTime()) ? null : result;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Convert a wall-clock date + time in a specific IANA timezone into a UTC Date.
- * Returns null when inputs are malformed or the timezone is invalid.
- *
- * @param {string} dateOnly "YYYY-MM-DD"
- * @param {string} timeOnly "HH:mm"
- * @param {string} timeZone IANA identifier
- * @returns {Date|null}
- */
-export function zonedDateTimeToUtc(dateOnly, timeOnly, timeZone) {
-  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateOnly || '').trim());
-  const timeMatch = /^(\d{2}):(\d{2})$/.exec(String(timeOnly || '').trim());
-  if (!dateMatch || !timeMatch || !timeZone) return null;
+  const year = Number(dateMatch[1]);
+  const month = Number(dateMatch[2]);
+  const day = Number(dateMatch[3]);
+  const hour = Number(timeMatch[1]);
+  const minute = Number(timeMatch[2]);
+  if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59) return null;
 
   try {
-    const naiveUtc = Date.UTC(
-      Number(dateMatch[1]),
-      Number(dateMatch[2]) - 1,
-      Number(dateMatch[3]),
-      Number(timeMatch[1]),
-      Number(timeMatch[2])
-    );
-    const offset = getTimeZoneOffsetMs(timeZone, new Date(naiveUtc));
-    const result = new Date(naiveUtc - offset);
+    const naiveUtc = Date.UTC(year, month - 1, day, hour, minute);
+    const normalized = new Date(naiveUtc);
+    if (
+      normalized.getUTCFullYear() !== year
+      || normalized.getUTCMonth() !== month - 1
+      || normalized.getUTCDate() !== day
+    ) {
+      return null;
+    }
+
+    let resultMs = naiveUtc - getTimeZoneOffsetMs(timeZone, normalized);
+    const resolvedOffset = getTimeZoneOffsetMs(timeZone, new Date(resultMs));
+    resultMs = naiveUtc - resolvedOffset;
+    const result = new Date(resultMs);
     return Number.isNaN(result.getTime()) ? null : result;
   } catch {
     return null;

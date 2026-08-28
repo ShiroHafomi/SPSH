@@ -2,32 +2,29 @@
 
 const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
+const { pool } = require('../config/db');
 const studySessionService = require('./studySessionService');
 
-// Mock the pool
-const poolMock = {
-  queryImplementation: async (...args) => {
-    // Default implementation, can be overridden in tests
-    return [[]];
-  },
-  query: async (...args) => {
-    return poolMock.queryImplementation(...args);
-  }
+const originalPoolQuery = pool.query;
+const queryImplementations = [];
+
+async function queryMock(...args) {
+  const implementation = queryImplementations.shift();
+  assert.ok(implementation, `Unexpected pool.query call: ${args[0]}`);
+  return implementation(...args);
+}
+
+queryMock.mockImplementationOnce = (implementation) => {
+  queryImplementations.push(implementation);
 };
 
-// We'll replace the pool in the service with our mock
-let originalPool;
 beforeEach(() => {
-  originalPool = studySessionService.pool;
-  studySessionService.pool = poolMock;
-  // Reset mock implementation to default
-  poolMock.queryImplementation = async (...args) => {
-    return [[]];
-  };
+  queryImplementations.length = 0;
+  pool.query = queryMock;
 });
 
 afterEach(() => {
-  studySessionService.pool = originalPool;
+  pool.query = originalPoolQuery;
 });
 
 describe('StudySessionService', () => {
@@ -124,7 +121,7 @@ describe('StudySessionService', () => {
     });
 
     it('should validate planned duration', () => {
-      const data = {
+      let data = {
         title: 'Study Session',
         subject: 'Math',
         starts_at: '2023-01-01T10:00:00Z',
@@ -132,7 +129,7 @@ describe('StudySessionService', () => {
         timezone: 'America/New_York',
         status: 'planned',
       };
-      const errors = studySessionService.validateStudySessionData(data);
+      let errors = studySessionService.validateStudySessionData(data);
       assert.deepStrictEqual(errors, ['planned duration must be between 5 and 480 minutes']);
 
       data.ends_at = '2023-01-02T10:00:00Z'; // 24 hours
@@ -268,14 +265,14 @@ describe('StudySessionService', () => {
   describe('createStudySession', () => {
     it('should create a study session with valid data', async () => {
       const insertId = 1;
-      poolMock.query.mockImplementationOnce(async () => [{ insertId }]);
-      poolMock.query.mockImplementationOnce(async () => [[{
+      queryMock.mockImplementationOnce(async () => [{ insertId }]);
+      queryMock.mockImplementationOnce(async () => [[{
         id: insertId,
         student_id: 1,
         title: 'Study Session',
         subject: 'Math',
-        starts_at: '2023-01-01 10:00:00',
-        ends_at: '2023-01-01 11:00:00',
+        starts_at: new Date('2023-01-01T10:00:00Z'),
+        ends_at: new Date('2023-01-01T11:00:00Z'),
         timezone: 'America/New_York',
         status: 'planned',
         actual_minutes: null,
@@ -299,9 +296,9 @@ describe('StudySessionService', () => {
       assert.strictEqual(session.id, insertId);
       assert.strictEqual(session.title, 'Study Session');
       assert.strictEqual(session.subject, 'Math');
-      // Check that datetimes are converted to ISO string in the returned object
-      assert.strictEqual(session.starts_at, '2023-01-01T10:00:00.000Z');
-      assert.strictEqual(session.ends_at, '2023-01-01T11:00:00.000Z');
+      // mysql2 returns DATETIME columns as Date objects; JSON serialization emits ISO UTC.
+      assert.strictEqual(session.starts_at.toISOString(), '2023-01-01T10:00:00.000Z');
+      assert.strictEqual(session.ends_at.toISOString(), '2023-01-01T11:00:00.000Z');
     });
 
     it('should throw error for invalid data', async () => {
@@ -333,8 +330,8 @@ describe('StudySessionService', () => {
           student_id: 1,
           title: 'Study Session 1',
           subject: 'Math',
-          starts_at: '2023-01-01 10:00:00',
-          ends_at: '2023-01-01 11:00:00',
+          starts_at: new Date('2023-01-01T10:00:00Z'),
+          ends_at: new Date('2023-01-01T11:00:00Z'),
           timezone: 'America/New_York',
           status: 'planned',
           actual_minutes: null,
@@ -347,18 +344,17 @@ describe('StudySessionService', () => {
           student_id: 1,
           title: 'Study Session 2',
           subject: 'Science',
-          starts_at: '2023-01-02 10:00:00',
-          ends_at: '2023-01-02 11:00:00',
+          starts_at: new Date('2023-01-02T10:00:00Z'),
+          ends_at: new Date('2023-01-02T11:00:00Z'),
           timezone: 'America/New_York',
           status: 'completed',
           actual_minutes: 60,
-          completed_at: '2023-01-02 11:00:00',
+          completed_at: new Date('2023-01-02T11:00:00Z'),
           created_at: new Date(),
           updated_at: new Date(),
         }
       ];
-      poolMock.query.mockImplementationOnce(async () => [mockSessions]);
-      poolMock.query.mockImplementationOnce(async () => [[{ total: 2 }]]);
+      queryMock.mockImplementationOnce(async () => [mockSessions]);
 
       const sessions = await studySessionService.getStudySessionsByStudent(1, {
         startDate: '2023-01-01T00:00:00Z',
@@ -370,8 +366,8 @@ describe('StudySessionService', () => {
       });
 
       assert.strictEqual(sessions.length, 2);
-      // Check that datetimes are converted to ISO string
-      assert.strictEqual(sessions[0].starts_at, '2023-01-01T10:00:00.000Z');
+      // mysql2 Date values serialize to ISO UTC at the JSON boundary.
+      assert.strictEqual(sessions[0].starts_at.toISOString(), '2023-01-01T10:00:00.000Z');
       assert.strictEqual(sessions[1].status, 'completed');
       assert.strictEqual(sessions[1].actual_minutes, 60);
     });
@@ -387,7 +383,7 @@ describe('StudySessionService', () => {
         total_scheduled_minutes: 120,
         total_actual_minutes: 60
       }];
-      poolMock.query.mockImplementationOnce(async () => [mockRow]);
+      queryMock.mockImplementationOnce(async () => [mockRow]);
 
       const summary = await studySessionService.getWeeklyStudySessionSummary(1, {
         startDate: '2023-01-01T00:00:00Z',
@@ -411,8 +407,8 @@ describe('StudySessionService', () => {
         student_id: 1,
         title: 'Study Session',
         subject: 'Math',
-        starts_at: '2023-01-01T10:00:00',
-        ends_at: '2023-01-01T11:00:00',
+        starts_at: new Date('2023-01-01T10:00:00Z'),
+        ends_at: new Date('2023-01-01T11:00:00Z'),
         timezone: 'America/New_York',
         status: 'planned',
         actual_minutes: null,
@@ -420,13 +416,14 @@ describe('StudySessionService', () => {
         created_at: new Date(),
         updated_at: new Date(),
       };
-      poolMock.query.mockImplementationOnce(async () => [[currentSession]]);
-      poolMock.query.mockImplementationOnce(async () => [{ affectedRows: 1 }]);
-      poolMock.query.mockImplementationOnce(async () => [[{
+      queryMock.mockImplementationOnce(async () => [[currentSession]]);
+      queryMock.mockImplementationOnce(async () => [[currentSession]]);
+      queryMock.mockImplementationOnce(async () => [{ affectedRows: 1 }]);
+      queryMock.mockImplementationOnce(async () => [[{
         ...currentSession,
         status: 'completed',
         actual_minutes: 60,
-        completed_at: studySessionService.toMysqlUtc(now)
+        completed_at: now
       }]]);
 
       const result = await studySessionService.transitionStudySessionStatus(
@@ -445,6 +442,8 @@ describe('StudySessionService', () => {
     });
 
     it('should reject transition to completed without actual_minutes', async () => {
+      queryMock.mockImplementationOnce(async () => [[{ status: 'planned' }]]);
+
       const result = await studySessionService.transitionStudySessionStatus(
         1,
         1,
@@ -464,8 +463,8 @@ describe('StudySessionService', () => {
         student_id: 1,
         title: 'Study Session',
         subject: 'Math',
-        starts_at: '2023-01-01T10:00:00',
-        ends_at: '2023-01-01T11:00:00',
+        starts_at: new Date('2023-01-01T10:00:00Z'),
+        ends_at: new Date('2023-01-01T11:00:00Z'),
         timezone: 'America/New_York',
         status: 'planned',
         actual_minutes: null,
@@ -473,7 +472,7 @@ describe('StudySessionService', () => {
         created_at: new Date(),
         updated_at: new Date(),
       };
-      poolMock.query.mockImplementationOnce(async () => [[currentSession]]);
+      queryMock.mockImplementationOnce(async () => [[currentSession]]);
 
       const result = await studySessionService.transitionStudySessionStatus(
         1,
@@ -488,24 +487,24 @@ describe('StudySessionService', () => {
     });
 
     it('should transition from completed to planned (reopen)', async () => {
-      const now = new Date();
       const currentSession = {
         id: 1,
         student_id: 1,
         title: 'Study Session',
         subject: 'Math',
-        starts_at: '2023-01-01T10:00:00',
-        ends_at: '2023-01-01T11:00:00',
+        starts_at: new Date('2023-01-01T10:00:00Z'),
+        ends_at: new Date('2023-01-01T11:00:00Z'),
         timezone: 'America/New_York',
         status: 'completed',
         actual_minutes: 60,
-        completed_at: '2023-01-01T11:00:00',
+        completed_at: new Date('2023-01-01T11:00:00Z'),
         created_at: new Date(),
         updated_at: new Date(),
       };
-      poolMock.query.mockImplementationOnce(async () => [[currentSession]]);
-      poolMock.query.mockImplementationOnce(async () => [{ affectedRows: 1 }]);
-      poolMock.query.mockImplementationOnce(async () => [[{
+      queryMock.mockImplementationOnce(async () => [[currentSession]]);
+      queryMock.mockImplementationOnce(async () => [[currentSession]]);
+      queryMock.mockImplementationOnce(async () => [{ affectedRows: 1 }]);
+      queryMock.mockImplementationOnce(async () => [[{
         ...currentSession,
         status: 'planned',
         actual_minutes: null,
@@ -544,8 +543,8 @@ describe('StudySessionService', () => {
         created_at: new Date(),
         updated_at: new Date(),
       };
-      poolMock.query.mockImplementationOnce(async () => [[session]]);
-      poolMock.query.mockImplementationOnce(async () => [{ affectedRows: 1 }]);
+      queryMock.mockImplementationOnce(async () => [[session]]);
+      queryMock.mockImplementationOnce(async () => [{ affectedRows: 1 }]);
 
       const result = await studySessionService.deleteStudySessionForStudent(1, 1);
 
@@ -554,7 +553,7 @@ describe('StudySessionService', () => {
     });
 
     it('should return not found if session does not belong to student', async () => {
-      poolMock.query.mockImplementationOnce(async () => [[]]); // no session found
+      queryMock.mockImplementationOnce(async () => [[]]); // no session found
 
       const result = await studySessionService.deleteStudySessionForStudent(1, 1);
 
