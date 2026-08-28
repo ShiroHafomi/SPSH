@@ -1,3 +1,5 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
 import en from './en.js';
 import vi from './vi.js';
 
@@ -12,21 +14,17 @@ function flatten(obj, prefix = '') {
 }
 
 describe('StudyPlanner locale parity', () => {
-  it('should have matching keys in en and vi for studyPlanner namespace', () => {
-    const enStudyPlanner = en.studyPlanner;
-    const viStudyPlanner = vi.studyPlanner;
+  it('has matching keys in en and vi for the studyPlanner namespace', () => {
+    const enKeys = flatten(en.studyPlanner).sort();
+    const viKeys = flatten(vi.studyPlanner).sort();
 
-    const enKeys = flatten(enStudyPlanner).sort();
-    const viKeys = flatten(viStudyPlanner).sort();
-
-    expect(enKeys).toEqual(viKeys);
+    assert.deepStrictEqual(enKeys, viKeys);
   });
 
-  it('should have matching nav.studyPlanner key', () => {
-    expect(en.nav.studyPlanner).toBeDefined();
-    expect(vi.nav.studyPlanner).toBeDefined();
-    // We don't compare the values because they are translated strings
-    expect(typeof en.nav.studyPlanner).toBe('string');
-    expect(typeof vi.nav.studyPlanner).toBe('string');
+  it('has matching nav.studyPlanner keys', () => {
+    assert.strictEqual(typeof en.nav.studyPlanner, 'string');
+    assert.strictEqual(typeof vi.nav.studyPlanner, 'string');
+    assert.ok(en.nav.studyPlanner.length > 0);
+    assert.ok(vi.nav.studyPlanner.length > 0);
   });
 });
