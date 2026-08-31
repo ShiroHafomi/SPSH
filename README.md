@@ -36,13 +36,14 @@ A full-stack web application for analyzing and predicting student performance ba
 ## Technology Stack
 
 ### Frontend
-- **React 18.3** with **Vite 5.4** build tool
-- **React Router 6.26** for hash-based routing
-- **Tailwind CSS 3.4** via Play CDN (utility-first styling)
-- **Chart.js 4.4** with **react-chartjs-2 5.2** for data visualization
-- **Lucide React** for consistent iconography
-- **Axios** for HTTP client with automatic JWT handling
-- **i18next** for internationalization (English/Vietnamese)
+- **React 18.3** with **Vite 5.4** as the active SPA in `frontend/`
+- **React Router 6.26** with browser-history routing and role-protected route groups
+- **Tailwind CSS 3.4** compiled through PostCSS using semantic design-token aliases
+- **Chart.js 4.4** with **react-chartjs-2 5.2** for responsive data visualization
+- **Lucide React** plus the shared SVG icon registry for consistent iconography
+- Native **Fetch API** wrapper with session-cookie credentials
+- Custom English/Vietnamese `LanguageProvider` with synchronized locale objects
+- Node's built-in **`node:test`** runner for frontend utility and contract tests
 
 ### Backend
 - **Node.js 22** runtime
@@ -78,6 +79,48 @@ A full-stack web application for analyzing and predicting student performance ba
 - **Audit tables** for tracking changes to critical entities
 - **Connection pooling** with configurable limits
 
+## UI Refresh — Consistent Education Dashboard
+
+The active interface is the React/Vite SPA under `frontend/`; the Express server serves its production build and exposes the existing API. `frontend/src/App.jsx` preserves the established URLs and authorization gates while all authenticated route groups render through the shared `AppShell` in `frontend/src/components/AppShell.jsx`.
+
+### Application shell and navigation
+
+- Desktop users receive one persistent left sidebar with grouped, role-specific destinations, a clear active-route state, page context, notification access, language/theme controls, account identity, and logout.
+- Student navigation is generated independently from teacher and admin navigation. Hiding a destination is not treated as authorization; `ProtectedRoute` continues to enforce each route's roles.
+- Tablet and mobile widths use an accessible drawer with a backdrop, Escape and outside-interaction closing, focus trapping/restoration, body-scroll locking, and route-change closing.
+- The shell owns the single document `<main>` landmark and skip link. Pages should render sections and headers inside that landmark rather than nesting another `<main>`.
+
+### Theme and design tokens
+
+`frontend/src/index.css` defines the light and dark semantic tokens, and `frontend/tailwind.config.js` exposes them as Tailwind aliases:
+
+```text
+canvas / surface / surface-muted
+ink / ink-muted / divider
+action / action-muted / action-strong
+success / warning / danger / focus-ring
+```
+
+The explicit light or dark choice is stored in `localStorage`. When no valid choice has been saved, `useTheme` follows `prefers-color-scheme`; both modes set the browser `color-scheme`. Motion is reduced when the user requests `prefers-reduced-motion`.
+
+### Shared UI conventions
+
+- Reuse `Button`, `Input`, `Select`, `Checkbox`, `RadioGroup`, `Card`, `KPICard`, `Table`, `Modal`, `ConfirmDialog`, `EmptyState`, `ErrorState`, skeletons, and layout helpers from `frontend/src/components/ui/`.
+- Interactive controls use visible focus states and at least 44px touch targets. Modal and drawer flows preserve keyboard focus.
+- Wide tables scroll inside their own contained region; page layouts must not create document-wide horizontal scrolling.
+- User-facing copy belongs in both `frontend/src/locales/en.js` and `frontend/src/locales/vi.js`. Add parity coverage when introducing a namespace or shared key set.
+- Charts consume `frontend/src/utils/chartTheme.js` for fixed series identity, light/dark contrast, locale-aware numeric formatting, responsive legends/tooltips, reduced motion, and consistent mark sizing. Keep missing values as missing rather than converting them to zero, and provide a textual summary or data table when a chart is the only visual representation.
+
+Future authenticated pages should be added to the appropriate role group in `frontend/src/components/appShell.js`, protected independently in `App.jsx`, and composed from the shared semantic components instead of introducing another application shell.
+
+Verify frontend changes with:
+
+```bash
+npm --prefix frontend test
+npm --prefix frontend run build
+git diff --check
+```
+
 ## Project Structure
 
 ```
@@ -90,62 +133,37 @@ A full-stack web application for analyzing and predicting student performance ba
 │   └─ sample_students.csv      # Sample data (50 rows, gitignored)
 ├─ public/
 │   └─ vite.svg                 # Vite logo
-├─ frontend/                    # React/Vite SPA
+├─ frontend/                    # Active React/Vite SPA
 │   ├─ package.json
 │   ├─ vite.config.js
+│   ├─ tailwind.config.js       # Semantic token aliases and component theme
 │   ├─ index.html
-│   ├─ src/
-│   │   ├─ main.jsx             # Entry point
-│   │   ├─ App.jsx              # Root component with routing
-│   │   ├─ api.js               # HTTP client wrapper
-│   │   ├─ hooks/               # Custom React hooks
-│   │   │   ├─ useNotifications.jsx
-│   │   │   └─ ...
-│   │   ├─ components/          # Reusable UI components
-│   │   │   ├─ layouts/         # Role-based layouts (AdminLayout.jsx, etc.)
-│   │   │   ├─ notifications/   # Notification bell, item, preferences
-│   │   │   ├─ forms/           # Dynamic form components
-│   │   │   ├─ charts/          # Chart wrappers
-│   │   │   └─ ...
-│   │   ├─ pages/               # Route components
-│   │   │   ├─ Login.jsx
-│   │   │   ├─ Register.jsx
-│   │   │   ├─ Dashboard.jsx
-│   │   │   ├─ Notifications.jsx
-│   │   │   ├─ Assignments.jsx      # Student personal assignment tracker
-│   │   │   ├─ Students.jsx
-│   │   │   ├─ WhatIfSimulator.jsx
-│   │   │   ├─ SavedScenarios.jsx
-│   │   │   ├─ StudentProfile.jsx
-│   │   │   ├─ AdminUsers.jsx
-│   │   │   ├─ MlMonitoring.jsx
-│   │   │   └─ ...
-│   │   ├─ utils/               # Utility functions
-│   │   │   ├─ chartConfig.js   # Schema-agnostic chart assignment
-│   │   │   ├─ columns.js       # SQL injection prevention whitelist
-│   │   │   ├─ safeNavigation.js
-│   │   │   ├─ notifications.js # Notification formatting/parsing
-│   │   │   ├─ assignments.js   # Assignment validation, timezone, and list-state helpers
-│   │   │   ├─ schemaMap.js     # Load/validate schema_map.json
-│   │   │   ├─ locales/         # English/Vietnamese translation files
-│   │   │   │   ├─ en.js
-│   │   │   │   ├─ vi.js
-│   │   │   │   ├─ mlMonitoringLocaleParity.test.js
-│   │   │   │   └─ notificationLocaleParity.test.js
-│   │   │   └─ whatIf/          # What-If scenario utilities
-│   │   │       ├─ Comparison.jsx
-│   │   │       └─ ...
-│   │   ├─ views/               # Legacy view components (being phased out)
-│   │   │   ├─ login.js
-│   │   │   ├─ register.js
-│   │   │   ├─ dashboard.js
-│   │   │   ├─ students.js
-│   │   │   ├─ studentForm.js
-│   │   │   └─ adminUsers.js
-│   │   └─ locales/             # Legacy flat locale files (being migrated)
-│   │       ├─ en.js
-│   │       └─ vi.js
-│   └─ tests/                   # Vitest/react-testing-library tests
+│   └─ src/
+│       ├─ main.jsx             # BrowserRouter entry point
+│       ├─ App.jsx              # Providers, protected role groups, and routes
+│       ├─ api.js               # Fetch wrapper with session credentials
+│       ├─ index.css            # Light/dark tokens and global component styles
+│       ├─ components/
+│       │   ├─ AppShell.jsx     # Shared responsive authenticated shell
+│       │   ├─ appShell.js      # Role navigation and route-state utilities
+│       │   ├─ notifications/   # Bell, items, and preference dialog
+│       │   ├─ goals/           # Goal progress UI and accessible charts
+│       │   └─ ui/              # Buttons, fields, cards, tables, modals, feedback states
+│       ├─ hooks/
+│       │   ├─ useAuth.jsx
+│       │   ├─ useLanguage.jsx
+│       │   ├─ useNotifications.jsx
+│       │   └─ useTheme.jsx
+│       ├─ pages/               # Existing student, teacher, admin, and shared routes
+│       ├─ locales/
+│       │   ├─ en.js
+│       │   ├─ vi.js
+│       │   └─ *LocaleParity.test.js
+│       └─ utils/
+│           ├─ chartTheme.js    # Shared Chart.js colors, marks, formatting, and motion
+│           ├─ assignments.js   # Assignment validation, timezone, and list-state helpers
+│           ├─ notifications.js # Notification formatting and trusted navigation
+│           └─ *.test.js        # Node test files colocated with utilities
 ├─ ml/                          # Machine Learning pipeline
 │   ├─ requirements.txt
 │   ├─ fetch_data.py            # MySQL → CSV cache
@@ -521,18 +539,17 @@ Higher roles inherit all permissions of lower roles.
 - **Missing Dependency**: `ml/fetch_data.py` imports SQLAlchemy but it's not in `requirements.txt` (workaround: uses direct mysql2 via Node.js subprocess)
 
 ### Frontend & UX
-- **CDN Dependencies**: Tailwind CSS and Chart.js loaded from public CDNs → requires internet connectivity
-- **Notification Polling**: Updates via HTTP polling every 60 seconds (not real-time WebSocket)
-- **Teacher Scope**: Teachers have organization-wide access to analytics and ML monitoring (not classroom-limited)
-- **Vite Hot Module Reloading**: CSS changes may require full refresh during development
-- **Mobile Layout**: Some complex tables (e.g., ML monitoring) may require horizontal scrolling on narrow screens
+- **Notification Polling**: Updates use visible-page HTTP polling at intervals of at least 60 seconds, not real-time push.
+- **Teacher Scope**: Teachers have organization-wide access to analytics and ML monitoring (not classroom-limited).
+- **Mobile Tables**: Wide data tables remain complete and scroll inside a labeled, contained region rather than hiding essential columns.
+- **Bundle Size**: The production build currently reports a non-blocking warning for a JavaScript chunk above 500 kB; route-level code splitting remains future work.
 
 ### Testing & CI
 - **Test Coverage**: Unit tests for services and utilities; integration tests for API endpoints
-- **Frontend Testing**: Vitest with React Testing Library for component testing
+- **Frontend Testing**: Node's built-in test runner covers pure UI state, formatting, locale parity, and API-contract utilities
 - **ML Testing**: Limited due to non-deterministic nature; focuses on pipeline integrity
 - **CI Pipeline**: GitHub Actions runs on Ubuntu with Node.js 22; tests backend and frontend suites
-- **Artifact Exclusion**: `node_modules`, `frontend/dist`, ML model artifacts, and cached data are gitignored
+- **Artifact Exclusion**: `node_modules`, ML model artifacts, and cached data are gitignored; do not include newly generated build output in feature changes
 
 ## Current Development Focus
 

@@ -20,16 +20,14 @@ import {
   Legend,
   Filler,
 } from 'chart.js';
-import { GRADE_COLORS, getChartOptions, getDoughnutOptions } from '../utils/chartTheme';
+import { CHART_THEME, GRADE_COLORS, formatChartValue, getChartOptions, getDoughnutOptions, getMultiSeriesColors } from '../utils/chartTheme';
+import { formatAdminMetric } from '../utils/adminAiTools.js';
 import {
   Card,
   KPICard,
   Button,
-  Badge,
   Icon,
-  getIcon,
   Flex,
-  Grid2,
   SkeletonCard,
   SkeletonChart,
 } from '../components/ui';
@@ -49,8 +47,10 @@ ChartJS.register(
 );
 
 export default function AdminDashboard() {
-  const { t } = useLanguage();
+  const { lang, t } = useLanguage();
   const { isDark } = useTheme();
+  const chartTheme = isDark ? CHART_THEME.dark : CHART_THEME.light;
+  const seriesColors = useMemo(() => getMultiSeriesColors(isDark), [isDark]);
   const { addFlash } = useFlash();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -95,18 +95,18 @@ export default function AdminDashboard() {
     labels: sortedGradeDist.map((d) => d.grade),
     datasets: [{
       data: sortedGradeDist.map((d) => d.count),
-      backgroundColor: sortedGradeDist.map((d) => GRADE_COLORS[d.grade]?.bg ?? 'rgba(148,163,184,0.8)'),
-      borderColor: sortedGradeDist.map((d) => GRADE_COLORS[d.grade]?.border ?? 'rgb(148,163,184)'),
-      borderWidth: 1,
-      hoverOffset: 8,
+      backgroundColor: sortedGradeDist.map((d) => GRADE_COLORS[d.grade]?.bg ?? chartTheme.primary.bg),
+      borderColor: chartTheme.background,
+      borderWidth: 2,
+      hoverOffset: 6,
     }],
   }), [sortedGradeDist]);
 
   const gradeDistributionOptions = useMemo(() => getDoughnutOptions(isDark, (ctx) => {
-    const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
-    const pct = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0;
-    return `Grade ${ctx.label}: ${ctx.raw} (${pct}%)`;
-  }), [isDark]);
+    const total = ctx.dataset.data.reduce((sum, value) => sum + value, 0);
+    const percentage = total > 0 ? (ctx.raw / total) * 100 : 0;
+    return `${t('common.grade')} ${ctx.label}: ${formatChartValue(ctx.raw, lang)} (${formatChartValue(percentage, lang)}%)`;
+  }), [isDark, lang, t]);
 
   // ── Attendance Distribution (Doughnut) ────────────────────────────────────────
   const attendanceVsScore = charts.attendanceVsScore || [];
@@ -125,81 +125,97 @@ export default function AdminDashboard() {
     datasets: [{
       data: attendanceCounts,
       backgroundColor: [
-        'rgba(239, 68, 68, 0.8)',
-        'rgba(249, 115, 22, 0.8)',
-        'rgba(234, 179, 8, 0.8)',
-        'rgba(34, 197, 94, 0.8)',
-        'rgba(16, 185, 129, 0.8)',
+        GRADE_COLORS.F.bg,
+        GRADE_COLORS.D.bg,
+        GRADE_COLORS.C.bg,
+        GRADE_COLORS.B.bg,
+        GRADE_COLORS.A.bg,
       ],
-      borderColor: [
-        'rgb(239, 68, 68)',
-        'rgb(249, 115, 22)',
-        'rgb(234, 179, 8)',
-        'rgb(34, 197, 94)',
-        'rgb(16, 185, 129)',
-      ],
-      borderWidth: 1,
-      hoverOffset: 8,
+      borderColor: chartTheme.background,
+      borderWidth: 2,
+      hoverOffset: 6,
     }],
   }), [attendanceCounts]);
 
   const attendanceDistributionOptions = useMemo(() => getDoughnutOptions(isDark, (ctx) => {
-    const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
-    const pct = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0;
-    return `${ctx.label}: ${ctx.raw} (${pct}%)`;
-  }), [isDark]);
+    const total = ctx.dataset.data.reduce((sum, value) => sum + value, 0);
+    const percentage = total > 0 ? (ctx.raw / total) * 100 : 0;
+    return `${ctx.label}: ${formatChartValue(ctx.raw, lang)} (${formatChartValue(percentage, lang)}%)`;
+  }), [isDark, lang]);
 
   // ── Part-Time Job Impact (Bar, vertical) ───────────────────────────────────
   const partTimeJob = charts.partTimeJobImpact || [];
   const partTimeJobData = useMemo(() => ({
     labels: partTimeJob.map((d) => d.category),
     datasets: [{
-      label: `Average ${t('admin.finalScore')}`,
-      data: partTimeJob.map((d) => Number(d.avgScore?.toFixed(1) || 0)),
-      backgroundColor: partTimeJob.map((_, i) => (i === 0 ? 'rgba(34, 197, 94, 0.8)' : 'rgba(239, 68, 68, 0.8)')),
-      borderRadius: 8,
-      borderSkipped: false,
+      label: t('common.averageScore'),
+      data: partTimeJob.map((d) => {
+        const score = Number(d.avgScore);
+        return Number.isFinite(score) ? Number(score.toFixed(1)) : null;
+      }),
+      backgroundColor: partTimeJob.map((d) => {
+        const hasPartTimeJob = ['yes', 'true', '1'].includes(String(d.category).trim().toLowerCase());
+        return hasPartTimeJob ? chartTheme.danger.bg : chartTheme.success.bg;
+      }),
+      borderColor: partTimeJob.map((d) => {
+        const hasPartTimeJob = ['yes', 'true', '1'].includes(String(d.category).trim().toLowerCase());
+        return hasPartTimeJob ? chartTheme.danger.border : chartTheme.success.border;
+      }),
+      borderWidth: 1,
     }],
-  }), [partTimeJob, t]);
+  }), [chartTheme, partTimeJob, t]);
 
   // ── Sleep Impact (Bar, vertical) ────────────────────────────────────────────
   const sleepImpact = charts.sleepImpact || [];
   const sleepImpactData = useMemo(() => ({
     labels: sleepImpact.map((d) => d.sleepBucket),
     datasets: [{
-      label: `Average ${t('admin.finalScore')}`,
-      data: sleepImpact.map((d) => Number(d.avgScore?.toFixed(1) || 0)),
-      backgroundColor: 'rgba(139, 92, 246, 0.8)',
-      borderRadius: 8,
-      borderSkipped: false,
+      label: t('common.averageScore'),
+      data: sleepImpact.map((d) => {
+        const score = Number(d.avgScore);
+        return Number.isFinite(score) ? Number(score.toFixed(1)) : null;
+      }),
+      backgroundColor: seriesColors[0].bg,
+      borderColor: seriesColors[0].border,
+      borderWidth: 1,
     }],
-  }), [sleepImpact, t]);
+  }), [seriesColors, sleepImpact, t]);
 
   // ── Gender Distribution (Bar, vertical) ─────────────────────────────────────
   const genderDist = charts.genderDistribution || [];
   const genderData = useMemo(() => ({
     labels: genderDist.map((d) => d.gender),
     datasets: [{
-      label: 'Count',
+      label: t('common.count'),
       data: genderDist.map((d) => d.count),
-      backgroundColor: genderDist.map((_, i) => (i % 2 === 0 ? 'rgba(236, 72, 153, 0.8)' : 'rgba(59, 130, 246, 0.8)')),
-      borderRadius: 8,
-      borderSkipped: false,
+      backgroundColor: genderDist.map((d) => {
+        const value = String(d.gender).trim().toLowerCase();
+        if (value === 'female') return seriesColors[4].bg;
+        if (value === 'male') return seriesColors[0].bg;
+        return seriesColors[2].bg;
+      }),
+      borderColor: genderDist.map((d) => {
+        const value = String(d.gender).trim().toLowerCase();
+        if (value === 'female') return seriesColors[4].border;
+        if (value === 'male') return seriesColors[0].border;
+        return seriesColors[2].border;
+      }),
+      borderWidth: 1,
     }],
-  }), [genderDist]);
+  }), [genderDist, seriesColors, t]);
 
   // ── Parental Education Distribution (Bar, vertical) ──────────────────────────
   const parentalEduDist = charts.parentalEduDistribution || [];
   const parentalEduData = useMemo(() => ({
     labels: parentalEduDist.map((d) => d.education),
     datasets: [{
-      label: 'Count',
+      label: t('common.count'),
       data: parentalEduDist.map((d) => d.count),
-      backgroundColor: 'rgba(245, 158, 11, 0.8)',
-      borderRadius: 8,
-      borderSkipped: false,
+      backgroundColor: seriesColors[2].bg,
+      borderColor: seriesColors[2].border,
+      borderWidth: 1,
     }],
-  }), [parentalEduDist]);
+  }), [parentalEduDist, seriesColors, t]);
 
   // Shared chart options
   const baseBar = useMemo(() => getChartOptions(isDark), [isDark]);
@@ -219,10 +235,10 @@ export default function AdminDashboard() {
 
   // KPI Cards configuration
   const kpiCards = [
-    { key: 'totalStudents', label: t('admin.totalStudents'), value: kpis.totalStudents?.toLocaleString() || '0', icon: 'users', variant: 'primary' },
-    { key: 'avgGpa', label: t('admin.averageGPA'), value: kpis.avgGpa?.toFixed(2) || '0.00', icon: 'award', variant: 'success' },
-    { key: 'passRate', label: t('admin.passRate'), value: `${(kpis.passRate || 0).toFixed(1)}%`, icon: 'trendingUp', variant: 'accent' },
-    { key: 'atRiskCount', label: t('admin.atRiskCount'), value: kpis.atRiskCount?.toLocaleString() || '0', icon: 'alertTriangle', variant: 'warning' },
+    { key: 'totalStudents', label: t('admin.totalStudents'), value: formatAdminMetric(kpis.totalStudents, 0), icon: 'users', variant: 'primary' },
+    { key: 'avgGpa', label: t('admin.averageGPA'), value: formatAdminMetric(kpis.avgGpa, 2), icon: 'award', variant: 'success' },
+    { key: 'passRate', label: t('admin.passRate'), value: formatAdminMetric(kpis.passRate, 1, '%'), icon: 'trendingUp', variant: 'accent' },
+    { key: 'atRiskCount', label: t('admin.atRiskCount'), value: formatAdminMetric(kpis.atRiskCount, 0), icon: 'alertTriangle', variant: 'warning' },
   ];
 
   // Key Insights computation
@@ -279,10 +295,12 @@ export default function AdminDashboard() {
 
     // 4. Part-time job impact gap
     if (partTimeJob.length === 2) {
-      const noJob = partTimeJob.find(d => d.category === 'No' || d.category === 'No ' || d.category.toLowerCase().includes('no'));
-      const hasJob = partTimeJob.find(d => d.category === 'Yes' || d.category === 'Yes ' || d.category.toLowerCase().includes('yes'));
-      if (noJob && hasJob && typeof noJob.avgScore === 'number' && typeof hasJob.avgScore === 'number') {
-        const gap = (noJob.avgScore - hasJob.avgScore).toFixed(1);
+      const noJob = partTimeJob.find(d => String(d.category).trim().toLowerCase() === 'no');
+      const hasJob = partTimeJob.find(d => String(d.category).trim().toLowerCase() === 'yes');
+      const noJobScore = Number(noJob?.avgScore);
+      const hasJobScore = Number(hasJob?.avgScore);
+      if (Number.isFinite(noJobScore) && Number.isFinite(hasJobScore)) {
+        const gap = (noJobScore - hasJobScore).toFixed(1);
         if (gap > 3) {
           list.push({
             key: 'partTimeJob',
@@ -299,7 +317,7 @@ export default function AdminDashboard() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6" role="status" aria-busy="true" aria-label={t('dashboard.loading')}>
         <div className="bento-grid-4">
           {[...Array(4)].map((_, i) => <SkeletonCard key={i} padding="lg" />)}
         </div>
@@ -367,7 +385,7 @@ export default function AdminDashboard() {
       </Flex>
 
       {/* KPI Cards */}
-      <div className="bento-grid-4">
+      <div className="bento-grid-4" role="region" aria-label={t('dashboard.keyMetrics')}>
         {kpiCards.map((kpi) => (
           <KPICard
             key={kpi.key}
@@ -403,10 +421,15 @@ export default function AdminDashboard() {
       </Card>
 
       {/* Charts Grid */}
-      <div className="bento-grid-2">
+      <div className="bento-grid-2" role="region" aria-label={t('dashboard.analyticsCharts')}>
         <Card padding="lg">
           <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-4">{t('admin.gradeDistribution')}</h3>
-          <div className="chart-container" style={{ height: '300px', position: 'relative' }}>
+          <div
+            className="chart-container"
+            style={{ height: '300px', position: 'relative' }}
+            role="img"
+            aria-label={t('dashboard.chartAria', { title: t('admin.gradeDistribution'), count: sortedGradeDist.length })}
+          >
             {sortedGradeDist.length > 0
               ? <Doughnut data={gradeDistributionData} options={gradeDistributionOptions} />
               : <EmptyChart message={t('admin.noDataAvailable')} />}
@@ -415,7 +438,12 @@ export default function AdminDashboard() {
 
         <Card padding="lg">
           <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-4">{t('admin.attendanceDistribution')}</h3>
-          <div className="chart-container" style={{ height: '300px', position: 'relative' }}>
+          <div
+            className="chart-container"
+            style={{ height: '300px', position: 'relative' }}
+            role="img"
+            aria-label={t('dashboard.chartAria', { title: t('admin.attendanceDistribution'), count: attendanceBuckets.length })}
+          >
             {attendanceVsScore.length > 0
               ? <Doughnut data={attendanceDistributionData} options={attendanceDistributionOptions} />
               : <EmptyChart message={t('admin.noDataAvailable')} />}
@@ -424,7 +452,12 @@ export default function AdminDashboard() {
 
         <Card padding="lg">
           <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-4">{t('admin.partTimeJobImpact')}</h3>
-          <div className="chart-container" style={{ height: '300px', position: 'relative' }}>
+          <div
+            className="chart-container"
+            style={{ height: '300px', position: 'relative' }}
+            role="img"
+            aria-label={t('dashboard.chartAria', { title: t('admin.partTimeJobImpact'), count: partTimeJob.length })}
+          >
             {partTimeJob.length > 0
               ? <Bar data={partTimeJobData} options={partTimeJobOptions} />
               : <EmptyChart message={t('admin.noDataAvailable')} />}
@@ -433,7 +466,12 @@ export default function AdminDashboard() {
 
         <Card padding="lg">
           <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-4">{t('admin.sleepImpact')}</h3>
-          <div className="chart-container" style={{ height: '300px', position: 'relative' }}>
+          <div
+            className="chart-container"
+            style={{ height: '300px', position: 'relative' }}
+            role="img"
+            aria-label={t('dashboard.chartAria', { title: t('admin.sleepImpact'), count: sleepImpact.length })}
+          >
             {sleepImpact.length > 0
               ? <Bar data={sleepImpactData} options={sleepImpactOptions} />
               : <EmptyChart message={t('admin.noDataAvailable')} />}
@@ -442,7 +480,12 @@ export default function AdminDashboard() {
 
         <Card padding="lg" className="lg:col-span-2">
           <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-4">{t('admin.genderDistribution')}</h3>
-          <div className="chart-container" style={{ height: '300px', position: 'relative' }}>
+          <div
+            className="chart-container"
+            style={{ height: '300px', position: 'relative' }}
+            role="img"
+            aria-label={t('dashboard.chartAria', { title: t('admin.genderDistribution'), count: genderDist.length })}
+          >
             {genderDist.length > 0
               ? <Bar data={genderData} options={genderOptions} />
               : <EmptyChart message={t('admin.noDataAvailable')} />}
@@ -451,7 +494,12 @@ export default function AdminDashboard() {
 
         <Card padding="lg" className="lg:col-span-2">
           <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-4">{t('admin.parentalEduDistribution')}</h3>
-          <div className="chart-container" style={{ height: '300px', position: 'relative' }}>
+          <div
+            className="chart-container"
+            style={{ height: '300px', position: 'relative' }}
+            role="img"
+            aria-label={t('dashboard.chartAria', { title: t('admin.parentalEduDistribution'), count: parentalEduDist.length })}
+          >
             {parentalEduDist.length > 0
               ? <Bar data={parentalEduData} options={parentalEduOptions} />
               : <EmptyChart message={t('admin.noDataAvailable')} />}

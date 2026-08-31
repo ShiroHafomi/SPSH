@@ -5,7 +5,7 @@
 import { useAuth, homeForRole } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
 import { useLanguage } from '../hooks/useLanguage';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { NotificationBell } from './NotificationBell';
 import {
   Button,
@@ -21,6 +21,7 @@ export function Navbar() {
   const { lang, toggleLang, langFlag } = useLanguage();
   const { t } = useLanguage();
   const location = useLocation();
+  const navigate = useNavigate();
 
   if (!user) return null;
 
@@ -63,34 +64,19 @@ export function Navbar() {
 
   // Language dropdown items
   const langItems = [
-    { key: 'en', label: 'English', flag: '🇺🇸', onClick: () => { if (lang !== 'en') toggleLang(); } },
-    { key: 'vi', label: 'Tiếng Việt', flag: '🇻🇳', onClick: () => { if (lang !== 'vi') toggleLang(); } },
+    { key: 'en', label: 'English', flag: 'EN', onClick: () => { if (lang !== 'en') toggleLang(); } },
+    { key: 'vi', label: 'Tiếng Việt', flag: 'VI', onClick: () => { if (lang !== 'vi') toggleLang(); } },
   ];
 
-  // User menu dropdown items
   const userMenuItems = [
     { type: 'header', label: t('nav.account') },
-    {
-      key: 'profile',
-      label: t('nav.profile'),
-      icon: 'user',
-      onClick: () => { /* TODO: profile page */ },
-    },
-    {
-      key: 'settings',
-      label: t('nav.settings'),
-      icon: 'settings',
-      onClick: () => { /* TODO: settings page */ },
-    },
-    { type: 'divider' },
     ...(isAdmin || user.role === 'teacher' ? [
+      { type: 'divider' },
       {
         key: 'users',
         label: user.role === 'admin' ? t('nav.users') : t('nav.students'),
         icon: 'users',
-        onClick: () => {
-          user.role === 'admin' ? window.location.href = '/admin/users' : window.location.href = '/teacher/students';
-        },
+        onClick: () => navigate(user.role === 'admin' ? '/admin/users' : '/teacher/students'),
       },
     ] : []),
     { type: 'divider' },
@@ -106,7 +92,7 @@ export function Navbar() {
   return (
     <nav className="fixed top-4 left-4 right-4 z-50 max-w-7xl mx-auto bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border border-primary-100 dark:border-gray-800 rounded-3xl shadow-clay-sm">
       <div className="flex items-center justify-between px-5 py-3">
-        <Link to="/dashboard" variant="ghost" className="flex items-center gap-2.5 font-bold text-primary-950 dark:text-gray-100">
+        <Link to={homeForRole(user.role)} className="flex items-center gap-2.5 font-bold text-primary-950 dark:text-gray-100">
           <div className="w-8 h-8 rounded-xl bg-primary-600 flex items-center justify-center">
             <Icon name="graduationCap" className="w-4 h-4 text-white" />
           </div>
@@ -136,7 +122,7 @@ export function Navbar() {
             align="right"
             items={userMenuItems}
             trigger={({ isOpen }) => (
-              <div className="flex items-center gap-2.5" onClick={() => {}}>
+              <div className="flex items-center gap-2.5">
                 <Avatar
                   name={user.name}
                   size="default"

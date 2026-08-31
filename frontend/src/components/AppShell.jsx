@@ -26,10 +26,7 @@ const FOCUSABLE_SELECTOR = [
 function FlashArea() {
   const { messages, removeFlash } = useFlash();
   return (
-    <FlashContainer
-      messages={messages}
-      onRemove={(index) => removeFlash(messages[index]?.id)}
-    />
+    <FlashContainer messages={messages} onRemove={removeFlash} />
   );
 }
 

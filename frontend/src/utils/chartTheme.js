@@ -1,70 +1,60 @@
-/**
- * Shared Chart.js theme + option builders.
- *
- * Single source of truth for every Chart.js chart in the app so light/dark
- * mode, color palette, fonts, and tooltip styling stay consistent across
- * Dashboard, TeacherDashboard, AdminDashboard and any other chart-bearing page.
- *
- * Palette is WCAG-AA compliant and colorblind-friendly.
- *
- * Usage:
- *   import { getChartOptions, getDoughnutOptions, getScatterOptions,
- *            getHorizontalBarOptions, MULTI_SERIES_COLORS, GRADE_COLORS } from '../utils/chartTheme';
- *   const { isDark } = useTheme();
- *   <Bar data={data} options={getChartOptions(isDark)} />
- */
-import { formatLabel } from './formatLabel';
+import { formatLabel } from './formatLabel.js';
 
 const FIRA_SANS = "'Fira Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 const FIRA_MONO = "'Fira Code', 'Monaco', 'Consolas', monospace";
 
-/**
- * Professional color palette - WCAG AA compliant, colorblind-friendly.
- */
 export const CHART_THEME = {
   light: {
     background: '#ffffff',
     surface: '#f8fafc',
     text: '#0f172a',
-    textMuted: '#64748b',
-    border: '#e2e8f0',
-    grid: 'rgba(100, 116, 139, 0.08)',
-    primary: { bg: 'rgba(99, 102, 241, 0.12)', border: 'rgb(99, 102, 241)', hover: 'rgba(99, 102, 241, 0.2)', solid: 'rgb(99, 102, 241)' },
-    success: { bg: 'rgba(16, 185, 129, 0.12)', border: 'rgb(16, 185, 129)', hover: 'rgba(16, 185, 129, 0.2)', solid: 'rgb(16, 185, 129)' },
-    warning: { bg: 'rgba(245, 158, 11, 0.12)', border: 'rgb(245, 158, 11)', hover: 'rgba(245, 158, 11, 0.2)', solid: 'rgb(245, 158, 11)' },
-    danger: { bg: 'rgba(239, 68, 68, 0.12)', border: 'rgb(239, 68, 68)', hover: 'rgba(239, 68, 68, 0.2)', solid: 'rgb(239, 68, 68)' },
-    info: { bg: 'rgba(6, 182, 212, 0.12)', border: 'rgb(6, 182, 212)', hover: 'rgba(6, 182, 212, 0.2)', solid: 'rgb(6, 182, 212)' },
+    textMuted: '#475569',
+    border: '#cbd5e1',
+    grid: 'rgba(100, 116, 139, 0.12)',
+    primary: { bg: 'rgba(37, 99, 235, 0.12)', border: '#2563eb', hover: 'rgba(37, 99, 235, 0.2)', solid: '#2563eb' },
+    success: { bg: 'rgba(21, 128, 61, 0.12)', border: '#15803d', hover: 'rgba(21, 128, 61, 0.2)', solid: '#15803d' },
+    warning: { bg: 'rgba(180, 83, 9, 0.12)', border: '#b45309', hover: 'rgba(180, 83, 9, 0.2)', solid: '#b45309' },
+    danger: { bg: 'rgba(185, 28, 28, 0.12)', border: '#b91c1c', hover: 'rgba(185, 28, 28, 0.2)', solid: '#b91c1c' },
+    info: { bg: 'rgba(15, 118, 110, 0.12)', border: '#0f766e', hover: 'rgba(15, 118, 110, 0.2)', solid: '#0f766e' },
   },
   dark: {
-    background: '#0f172a',
+    background: '#111827',
     surface: '#1e293b',
-    text: '#f1f5f9',
-    textMuted: '#94a3b8',
+    text: '#f8fafc',
+    textMuted: '#cbd5e1',
     border: '#334155',
-    grid: 'rgba(148, 163, 184, 0.12)',
-    primary: { bg: 'rgba(99, 102, 241, 0.18)', border: 'rgb(129, 140, 248)', hover: 'rgba(99, 102, 241, 0.28)', solid: 'rgb(129, 140, 248)' },
-    success: { bg: 'rgba(16, 185, 129, 0.18)', border: 'rgb(52, 211, 153)', hover: 'rgba(16, 185, 129, 0.28)', solid: 'rgb(52, 211, 153)' },
-    warning: { bg: 'rgba(245, 158, 11, 0.18)', border: 'rgb(251, 191, 36)', hover: 'rgba(245, 158, 11, 0.28)', solid: 'rgb(251, 191, 36)' },
-    danger: { bg: 'rgba(239, 68, 68, 0.18)', border: 'rgb(248, 113, 113)', hover: 'rgba(239, 68, 68, 0.28)', solid: 'rgb(248, 113, 113)' },
-    info: { bg: 'rgba(6, 182, 212, 0.18)', border: 'rgb(56, 189, 248)', hover: 'rgba(6, 182, 212, 0.28)', solid: 'rgb(56, 189, 248)' },
+    grid: 'rgba(148, 163, 184, 0.16)',
+    primary: { bg: 'rgba(96, 165, 250, 0.16)', border: '#60a5fa', hover: 'rgba(96, 165, 250, 0.26)', solid: '#60a5fa' },
+    success: { bg: 'rgba(74, 222, 128, 0.16)', border: '#4ade80', hover: 'rgba(74, 222, 128, 0.26)', solid: '#4ade80' },
+    warning: { bg: 'rgba(251, 191, 36, 0.16)', border: '#fbbf24', hover: 'rgba(251, 191, 36, 0.26)', solid: '#fbbf24' },
+    danger: { bg: 'rgba(248, 113, 113, 0.16)', border: '#f87171', hover: 'rgba(248, 113, 113, 0.26)', solid: '#f87171' },
+    info: { bg: 'rgba(45, 212, 191, 0.16)', border: '#2dd4bf', hover: 'rgba(45, 212, 191, 0.26)', solid: '#2dd4bf' },
   },
 };
 
-/**
- * Multi-series colors for grouped charts - distinct, accessible palette.
- */
-export const MULTI_SERIES_COLORS = [
-  { bg: 'rgba(99, 102, 241, 0.18)', border: 'rgb(99, 102, 241)', solid: 'rgb(99, 102, 241)' },   // Indigo
-  { bg: 'rgba(16, 185, 129, 0.18)', border: 'rgb(16, 185, 129)', solid: 'rgb(16, 185, 129)' },    // Emerald
-  { bg: 'rgba(244, 114, 182, 0.18)', border: 'rgb(244, 114, 182)', solid: 'rgb(244, 114, 182)' },  // Pink
-  { bg: 'rgba(245, 158, 11, 0.18)', border: 'rgb(245, 158, 11)', solid: 'rgb(245, 158, 11)' },     // Amber
-  { bg: 'rgba(6, 182, 212, 0.18)', border: 'rgb(6, 182, 212)', solid: 'rgb(6, 182, 212)' },        // Cyan
-  { bg: 'rgba(168, 85, 247, 0.18)', border: 'rgb(168, 85, 247)', solid: 'rgb(168, 85, 247)' },     // Purple
-];
+const CATEGORICAL_PALETTES = {
+  light: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'],
+  dark: ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'],
+};
 
-/**
- * Grade-specific colors for doughnut/bar charts - semantic meaning preserved.
- */
+function hexToRgba(hex, alpha) {
+  const value = hex.replace('#', '');
+  const red = Number.parseInt(value.slice(0, 2), 16);
+  const green = Number.parseInt(value.slice(2, 4), 16);
+  const blue = Number.parseInt(value.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+export function getMultiSeriesColors(isDark = false) {
+  return CATEGORICAL_PALETTES[isDark ? 'dark' : 'light'].map((solid) => ({
+    bg: hexToRgba(solid, 0.16),
+    border: solid,
+    solid,
+  }));
+}
+
+export const MULTI_SERIES_COLORS = getMultiSeriesColors(false);
+
 export const GRADE_COLORS = {
   A: { bg: 'rgba(16, 185, 129, 0.85)', border: 'rgb(16, 185, 129)', solid: 'rgb(16, 185, 129)' },
   B: { bg: 'rgba(56, 189, 248, 0.85)', border: 'rgb(56, 189, 248)', solid: 'rgb(56, 189, 248)' },
@@ -73,10 +63,6 @@ export const GRADE_COLORS = {
   F: { bg: 'rgba(239, 68, 68, 0.85)', border: 'rgb(239, 68, 68)', solid: 'rgb(239, 68, 68)' },
 };
 
-/**
- * Grade badge classes share the same semantic order as GRADE_COLORS while
- * delegating light/dark contrast to the component styles in index.css.
- */
 export const GRADE_BADGE_CLASSES = {
   A: 'grade-a',
   B: 'grade-b',
@@ -87,10 +73,117 @@ export const GRADE_BADGE_CLASSES = {
 
 export const getGradeBadgeClass = (grade) => GRADE_BADGE_CLASSES[grade] || 'badge-gray';
 
-/**
- * Get theme-aware base Chart.js options (vertical bar / line).
- * @param {boolean} isDark
- */
+function getDocumentLocale() {
+  if (typeof document === 'undefined') return 'en';
+  return document.documentElement.lang || 'en';
+}
+
+export function formatChartValue(value, locale = getDocumentLocale()) {
+  if (typeof value !== 'number') return value == null ? '' : String(value);
+  if (!Number.isFinite(value)) return '—';
+
+  try {
+    return new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value);
+  } catch {
+    return new Intl.NumberFormat('en', { maximumFractionDigits: 2 }).format(value);
+  }
+}
+
+function prefersReducedMotion() {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+export function getChartAnimation(reduceMotion = prefersReducedMotion()) {
+  return reduceMotion ? false : { duration: 500, easing: 'easeOutQuart' };
+}
+
+function getTooltipLabel(ctx) {
+  const label = ctx.dataset.label || '';
+  const parsed = ctx.parsed;
+  const value = parsed && typeof parsed === 'object'
+    ? (parsed.y ?? parsed.x)
+    : parsed;
+  const formattedValue = formatChartValue(value);
+  return label ? `${label}: ${formattedValue}` : formattedValue;
+}
+
+function getLegendOptions(theme, position = 'top') {
+  return {
+    display: true,
+    position,
+    align: 'start',
+    labels: {
+      usePointStyle: true,
+      pointStyle: 'circle',
+      boxWidth: 8,
+      boxHeight: 8,
+      padding: 16,
+      font: { size: 12, family: FIRA_SANS, weight: 500 },
+      color: theme.textMuted,
+    },
+  };
+}
+
+function getTooltipOptions(isDark, theme, labelCallback = getTooltipLabel) {
+  return {
+    backgroundColor: isDark ? 'rgba(17, 24, 39, 0.98)' : 'rgba(255, 255, 255, 0.98)',
+    titleColor: theme.text,
+    bodyColor: theme.textMuted,
+    borderColor: theme.border,
+    borderWidth: 1,
+    cornerRadius: 8,
+    displayColors: true,
+    usePointStyle: true,
+    padding: 12,
+    titleFont: { size: 13, weight: '600', family: FIRA_SANS },
+    bodyFont: { size: 12, family: FIRA_SANS },
+    callbacks: { label: labelCallback },
+  };
+}
+
+function getNumericScale(theme) {
+  return {
+    beginAtZero: true,
+    grid: { color: theme.grid, drawBorder: false, lineWidth: 1 },
+    border: { display: false },
+    ticks: {
+      font: { size: 11, family: FIRA_MONO },
+      color: theme.textMuted,
+      callback: (value) => formatChartValue(Number(value)),
+      maxTicksLimit: 6,
+      padding: 10,
+    },
+    title: {
+      display: false,
+      font: { size: 12, weight: '600', family: FIRA_SANS },
+      color: theme.textMuted,
+      padding: { bottom: 10 },
+    },
+  };
+}
+
+function getCategoryScale(theme) {
+  return {
+    grid: { display: false, drawBorder: false },
+    border: { display: false },
+    ticks: {
+      font: { size: 11, family: FIRA_SANS },
+      color: theme.textMuted,
+      maxRotation: 0,
+      autoSkip: true,
+      maxTicksLimit: 12,
+      padding: 8,
+    },
+    title: {
+      display: false,
+      font: { size: 12, weight: '600', family: FIRA_SANS },
+      color: theme.textMuted,
+      padding: { top: 10 },
+    },
+  };
+}
+
 export const getChartOptions = (isDark) => {
   const theme = isDark ? CHART_THEME.dark : CHART_THEME.light;
   return {
@@ -98,159 +191,103 @@ export const getChartOptions = (isDark) => {
     maintainAspectRatio: false,
     interaction: { mode: 'index', intersect: false },
     plugins: {
-      legend: {
-        display: true,
-        position: 'top',
-        align: 'end',
-        labels: {
-          usePointStyle: true,
-          pointStyle: 'circle',
-          padding: 20,
-          font: { size: 12, family: FIRA_SANS, weight: 500 },
-          color: theme.textMuted,
-        },
-      },
-      tooltip: {
-        backgroundColor: isDark ? 'rgba(15, 23, 42, 0.96)' : 'rgba(255, 255, 255, 0.96)',
-        titleColor: theme.text,
-        bodyColor: theme.textMuted,
-        borderColor: theme.border,
-        borderWidth: 1,
-        cornerRadius: 10,
-        displayColors: true,
-        padding: 14,
-        titleFont: { size: 13, weight: '600', family: FIRA_SANS },
-        bodyFont: { size: 12, family: FIRA_SANS },
-        callbacks: {
-          label: (ctx) => {
-            const label = ctx.dataset.label || '';
-            const value = ctx.parsed.y !== undefined ? ctx.parsed.y : ctx.parsed;
-            return `${label}: ${typeof value === 'number' ? value.toLocaleString() : value}`;
-          },
-        },
-      },
+      legend: getLegendOptions(theme),
+      tooltip: getTooltipOptions(isDark, theme),
     },
     scales: {
-      x: {
-        grid: { display: false, drawBorder: false, color: theme.grid },
-        ticks: {
-          font: { size: 11, family: FIRA_SANS },
-          color: theme.textMuted,
-          maxRotation: 0,
-          autoSkip: true,
-          maxTicksLimit: 12,
-        },
-        title: {
-          display: true,
-          font: { size: 12, weight: '600', family: FIRA_SANS },
-          color: theme.textMuted,
-          padding: { top: 12 },
-        },
+      x: getCategoryScale(theme),
+      y: getNumericScale(theme),
+    },
+    elements: {
+      bar: {
+        borderRadius: 4,
+        borderSkipped: 'start',
       },
-      y: {
-        beginAtZero: true,
-        grid: { color: theme.grid, drawBorder: false },
-        ticks: {
-          font: { size: 11, family: FIRA_MONO },
-          color: theme.textMuted,
-          callback: (value) => (value % 1 === 0 ? value : ''),
-          padding: 12,
-        },
-        title: {
-          display: true,
-          font: { size: 12, weight: '600', family: FIRA_SANS },
-          color: theme.textMuted,
-          padding: { bottom: 12 },
-        },
+      line: {
+        borderWidth: 2,
+        borderCapStyle: 'round',
+        borderJoinStyle: 'round',
+        tension: 0.25,
+      },
+      point: {
+        radius: 4,
+        hoverRadius: 6,
+        hitRadius: 12,
+        borderWidth: 2,
+        borderColor: theme.background,
       },
     },
-    animation: { duration: 750, easing: 'easeOutQuart' },
-    layout: { padding: { top: 8, right: 16, bottom: 8, left: 8 } },
+    datasets: {
+      bar: {
+        maxBarThickness: 24,
+        categoryPercentage: 0.78,
+        barPercentage: 0.8,
+      },
+    },
+    animation: getChartAnimation(),
+    layout: { padding: { top: 6, right: 10, bottom: 6, left: 4 } },
   };
 };
 
-/**
- * Doughnut chart options (grade distribution etc.).
- * @param {boolean} isDark
- * @param {(ctx:any)=>string} [labelCallback] - optional custom tooltip label
- */
 export const getDoughnutOptions = (isDark, labelCallback) => {
   const theme = isDark ? CHART_THEME.dark : CHART_THEME.light;
   return {
     responsive: true,
     maintainAspectRatio: false,
-    cutout: '62%',
+    cutout: '66%',
     plugins: {
-      legend: {
-        position: 'right',
-        labels: {
-          usePointStyle: true,
-          pointStyle: 'circle',
-          padding: 18,
-          font: { size: 12, family: FIRA_SANS, weight: 500 },
-          color: theme.text,
-        },
-      },
-      tooltip: {
-        backgroundColor: isDark ? 'rgba(15, 23, 42, 0.96)' : 'rgba(255, 255, 255, 0.96)',
-        titleColor: theme.text,
-        bodyColor: theme.textMuted,
-        borderColor: theme.border,
-        borderWidth: 1,
-        cornerRadius: 10,
-        padding: 14,
-        callbacks: {
-          label: labelCallback || ((ctx) => `Grade ${ctx.label}: ${ctx.parsed}%`),
-        },
-      },
+      legend: getLegendOptions(theme, 'bottom'),
+      tooltip: getTooltipOptions(
+        isDark,
+        theme,
+        labelCallback || ((ctx) => `${ctx.label}: ${formatChartValue(ctx.parsed)}%`),
+      ),
     },
-    animation: { animateRotate: true, animateScale: true, duration: 1000, easing: 'easeOutQuart' },
-    layout: { padding: { right: 24 } },
+    animation: getChartAnimation(),
+    layout: { padding: 8 },
   };
 };
 
-/**
- * Horizontal bar chart options (sleep impact, part-time impact, etc.).
- * @param {boolean} isDark
- * @param {string} [xTitle] - x-axis title (defaults to "Average Score")
- */
 export const getHorizontalBarOptions = (isDark, xTitle = 'Average Score') => {
   const base = getChartOptions(isDark);
-  const theme = isDark ? CHART_THEME.dark : CHART_THEME.light;
   return {
     ...base,
     indexAxis: 'y',
     plugins: { ...base.plugins, legend: { ...base.plugins.legend, display: false } },
     scales: {
-      x: { ...base.scales.x, beginAtZero: true, title: { ...base.scales.x.title, text: formatLabel(xTitle) } },
-      y: {
+      x: {
         ...base.scales.y,
         title: {
-          display: true,
-          font: { size: 12, weight: '600', family: FIRA_SANS },
-          color: theme.textMuted,
-          padding: { bottom: 12 },
+          ...base.scales.y.title,
+          display: Boolean(xTitle),
+          text: formatLabel(xTitle),
         },
+      },
+      y: {
+        ...base.scales.x,
+        title: { ...base.scales.x.title, display: false },
       },
     },
   };
 };
 
-/**
- * Scatter chart options (correlation/distribution).
- * @param {boolean} isDark
- * @param {string} xLabel
- * @param {string} yLabel
- */
 export const getScatterOptions = (isDark, xLabel, yLabel) => {
   const base = getChartOptions(isDark);
+  const theme = isDark ? CHART_THEME.dark : CHART_THEME.light;
+  const numericScale = getNumericScale(theme);
   return {
     ...base,
-    plugins: { ...base.plugins, legend: { display: false } },
+    interaction: { mode: 'nearest', intersect: false, axis: 'xy' },
+    plugins: { ...base.plugins, legend: { ...base.plugins.legend, display: false } },
     scales: {
-      ...base.scales,
-      x: { ...base.scales.x, title: { ...base.scales.x.title, text: formatLabel(xLabel) }, beginAtZero: true },
-      y: { ...base.scales.y, title: { ...base.scales.y.title, text: formatLabel(yLabel) }, beginAtZero: true },
+      x: {
+        ...numericScale,
+        title: { ...numericScale.title, display: Boolean(xLabel), text: formatLabel(xLabel) },
+      },
+      y: {
+        ...numericScale,
+        title: { ...numericScale.title, display: Boolean(yLabel), text: formatLabel(yLabel) },
+      },
     },
   };
 };

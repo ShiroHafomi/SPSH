@@ -15,6 +15,7 @@ import {
   Input,
   Badge,
   ConfirmDialog,
+  Modal,
   Icon,
   getIcon,
   SkeletonTableRow,
@@ -22,6 +23,13 @@ import {
   Tooltip,
 } from '../components/ui';
 import { useFlash } from '../components/ui/Toast';
+
+function normalizeBinaryInput(value, fallback) {
+  if (value == null || value === '') return fallback;
+  if (value === true || value === 1 || String(value).toLowerCase() === 'yes') return 'Yes';
+  if (value === false || value === 0 || String(value).toLowerCase() === 'no') return 'No';
+  return fallback;
+}
 
 export default function Students() {
   const { t } = useLanguage();
@@ -45,6 +53,7 @@ export default function Students() {
   const [aiEvalModal, setAiEvalModal] = useState({ open: false, student: null });
   const [aiEvalResult, setAiEvalResult] = useState(null);
   const [aiEvalLoading, setAiEvalLoading] = useState(false);
+  const [aiApplyLoading, setAiApplyLoading] = useState(false);
 
   const fetchStudents = useCallback(async () => {
     setLoading(true);
@@ -129,15 +138,15 @@ export default function Students() {
     try {
       const input = {
         gender: student.gender || 'Female',
-        age: student.age || 20,
-        study_hours_per_day: student.study_hours_per_day || 4,
-        attendance_percent: student.attendance_percent || 85,
-        sleep_hours: student.sleep_hours || 7,
-        previous_gpa: student.previous_gpa || 3.0,
+        age: student.age ?? 20,
+        study_hours_per_day: student.study_hours_per_day ?? 4,
+        attendance_percent: student.attendance_percent ?? 85,
+        sleep_hours: student.sleep_hours ?? 7,
+        previous_gpa: student.previous_gpa ?? 3.0,
         parental_education: student.parental_education || 'Bachelor',
-        internet_access: student.internet_access || 'Yes',
-        extracurricular: student.extracurricular || 'Yes',
-        part_time_job: student.part_time_job || 'No',
+        internet_access: normalizeBinaryInput(student.internet_access, 'Yes'),
+        extracurricular: normalizeBinaryInput(student.extracurricular, 'Yes'),
+        part_time_job: normalizeBinaryInput(student.part_time_job, 'No'),
       };
       const result = await api.post('/feedback', input);
       setAiEvalResult(result);
@@ -149,18 +158,25 @@ export default function Students() {
     }
   };
 
+  const closeAiEvalModal = useCallback(() => {
+    setAiEvalModal({ open: false, student: null });
+    setAiEvalResult(null);
+  }, []);
+
   const handleApplyToNotes = async () => {
-    if (!aiEvalResult?.feedback?.text || !aiEvalModal.student) return;
+    if (!aiEvalResult?.feedback?.text || !aiEvalModal.student || aiApplyLoading) return;
+    setAiApplyLoading(true);
     try {
       await api.post(`/students/${aiEvalModal.student.id}`, {
         notes: aiEvalResult.feedback.text,
       });
       addFlash(t('students.aiApplied'), 'success');
-      setAiEvalModal({ open: false, student: null });
-      setAiEvalResult(null);
+      closeAiEvalModal();
       fetchStudents();
     } catch (err) {
       addFlash(err.message, 'error');
+    } finally {
+      setAiApplyLoading(false);
     }
   };
 
@@ -411,32 +427,25 @@ export default function Students() {
         )}
       </Card>
 
-      {/* AI Eval Modal */}
-      {aiEvalModal.open && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-          onClick={() => setAiEvalModal({ open: false, student: null })}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="ai-eval-title"
-        >
-          <div
-            className="card-clay max-w-lg w-full max-h-[85vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between p-4 border-b border-primary-100 dark:border-gray-700">
-              <h3 id="ai-eval-title" className="text-lg font-bold text-primary-950 dark:text-gray-100">
-                {t('students.aiEvalTitle', { id: aiEvalModal.student?.id })}
-              </h3>
-              <button
-                onClick={() => setAiEvalModal({ open: false, student: null })}
-                className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg"
-                aria-label={t('common.close')}
-              >
-                <Icon name="x" className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-4 space-y-4">
+      <Modal
+        isOpen={aiEvalModal.open}
+        onClose={closeAiEvalModal}
+        title={t('students.aiEvalTitle', { id: aiEvalModal.student?.id })}
+        showCloseButton={!aiApplyLoading}
+        closeOnOverlayClick={!aiApplyLoading}
+        closeOnEscape={!aiApplyLoading}
+        footer={aiEvalResult ? (
+          <>
+            <Button variant="ghost" onClick={closeAiEvalModal} disabled={aiApplyLoading}>
+              {t('common.close')}
+            </Button>
+            <Button variant="primary" onClick={handleApplyToNotes} loading={aiApplyLoading}>
+              {t('students.applyToNotes')}
+            </Button>
+          </>
+        ) : null}
+      >
+        <div className="space-y-4">
               {aiEvalLoading ? (
                 <div className="space-y-3">
                   <div className="h-6 bg-primary-100 dark:bg-gray-700 rounded-xl w-3/4 animate-shimmer" />
@@ -452,7 +461,7 @@ export default function Students() {
                         {t('students.predictedScore')}
                       </p>
                       <p className="text-3xl font-bold text-primary-950 dark:text-gray-100 mt-1">
-                        {aiEvalResult.final_score?.toFixed(1)}
+                        {aiEvalResult.final_score == null ? '—' : Number(aiEvalResult.final_score).toFixed(1)}
                       </p>
                     </div>
                     <div className="p-4 bg-primary-50/60 dark:bg-gray-800 rounded-2xl text-center card-clay">
@@ -499,20 +508,10 @@ export default function Students() {
                       ))}
                     </div>
                   </div>
-                  <div className="flex gap-3 pt-3 border-t border-primary-100 dark:border-gray-700">
-                    <Button variant="primary" fullWidth onClick={handleApplyToNotes}>
-                      {t('students.applyToNotes')}
-                    </Button>
-                    <Button variant="secondary" onClick={() => setAiEvalModal({ open: false, student: null })}>
-                      {t('common.close')}
-                    </Button>
-                  </div>
                 </>
               ) : null}
-            </div>
-          </div>
         </div>
-      )}
+      </Modal>
 
       <ConfirmDialog
         isOpen={confirmDialog.open}

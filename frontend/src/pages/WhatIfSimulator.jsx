@@ -3,7 +3,6 @@ import { api } from '../api';
 import { useFlash } from '../components/FlashProvider';
 import { useLanguage } from '../hooks/useLanguage';
 import { useAuth } from '../hooks/useAuth';
-import { useNavigate } from 'react-router-dom';
 import { SkeletonCard } from '../components/Skeleton';
 import { renderIcon } from '../components/IconMap';
 import { GRADE_COLORS, getGradeBadgeClass } from '../utils/chartTheme';
@@ -28,84 +27,124 @@ const SEVERITY_COLORS = {
   info: 'border-primary-500 bg-primary-50 dark:bg-primary-950/30',
 };
 
+const PROFILE_FIELDS = Object.keys(DEFAULT_PROFILE);
+const GENDERS = ['Male', 'Female'];
+const PARENTAL_EDUCATION_LEVELS = ['High School', 'Bachelor', 'Master', 'PhD'];
+
+function normalizeProfile(student = {}) {
+  const normalizeBoolean = (value, fallback) => {
+    const normalized = String(value).toLowerCase();
+    if (value === true || value === 1 || normalized === 'yes') return 'Yes';
+    if (value === false || value === 0 || normalized === 'no') return 'No';
+    return fallback;
+  };
+  const normalizeNumber = (value, fallback) => {
+    if (value == null || value === '') return fallback;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : fallback;
+  };
+
+  return {
+    gender: GENDERS.includes(student.gender) ? student.gender : DEFAULT_PROFILE.gender,
+    age: normalizeNumber(student.age, DEFAULT_PROFILE.age),
+    study_hours_per_day: normalizeNumber(student.study_hours_per_day, DEFAULT_PROFILE.study_hours_per_day),
+    attendance_percent: normalizeNumber(student.attendance_percent, DEFAULT_PROFILE.attendance_percent),
+    sleep_hours: normalizeNumber(student.sleep_hours, DEFAULT_PROFILE.sleep_hours),
+    previous_gpa: normalizeNumber(student.previous_gpa, DEFAULT_PROFILE.previous_gpa),
+    parental_education: PARENTAL_EDUCATION_LEVELS.includes(student.parental_education)
+      ? student.parental_education
+      : DEFAULT_PROFILE.parental_education,
+    internet_access: normalizeBoolean(student.internet_access, DEFAULT_PROFILE.internet_access),
+    extracurricular: normalizeBoolean(student.extracurricular, DEFAULT_PROFILE.extracurricular),
+    part_time_job: normalizeBoolean(student.part_time_job, DEFAULT_PROFILE.part_time_job),
+  };
+}
+
+function buildProfilePayload(profile) {
+  return Object.fromEntries(PROFILE_FIELDS.map((field) => [field, profile[field]]));
+}
+
 export default function WhatIfSimulator() {
   const { addFlash } = useFlash();
   const { t } = useLanguage();
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [profile, setProfile] = useState(DEFAULT_PROFILE);
   const [baselineResult, setBaselineResult] = useState(null);
   const [whatIfResult, setWhatIfResult] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [simulationLoading, setSimulationLoading] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileReady, setProfileReady] = useState(false);
   const [whatIfFeature, setWhatIfFeature] = useState('study_hours_per_day');
   const [whatIfValue, setWhatIfValue] = useState(4);
   const debounceRef = useRef(null);
-
-  // Load student profile if user is a student
-  useEffect(() => {
-    if (user?.role === 'student') {
-      loadStudentProfile();
-    }
-  }, [user]);
-
-  const loadStudentProfile = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await api.get('/student/me/profile');
-      setProfile(res.student);
-      // Predict baseline
-      handlePredict(res.student);
-    } catch (err) {
-      console.error('Failed to load student profile:', err);
-      addFlash(t('student.profileLoadFailed'), 'error');
-      // Fall back to default profile
-      setProfile(DEFAULT_PROFILE);
-      handlePredict(DEFAULT_PROFILE);
-    } finally {
-      setLoading(false);
-    }
-  }, [user, addFlash, t]);
-
-  const handleChange = useCallback((field, value) => {
-    setProfile((prev) => ({ ...prev, [field]: value }));
-
-    // Reset what-if result when profile changes
-    setWhatIfResult(null);
-
-    // Trigger baseline prediction with debounce
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => handlePredict(profile), 800);
-  }, [profile]);
-
-  // Debounced baseline prediction
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => handlePredict(profile), 800);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [profile]);
+  const predictRequestRef = useRef(0);
 
   const handlePredict = useCallback(async (data) => {
+    const requestId = predictRequestRef.current + 1;
+    predictRequestRef.current = requestId;
     setLoading(true);
     try {
       const response = await api.post('/predict/baseline', data);
-      setBaselineResult(response);
+      if (predictRequestRef.current === requestId) setBaselineResult(response);
     } catch (err) {
-      addFlash(err.message, 'error');
-      setBaselineResult(null);
+      if (predictRequestRef.current === requestId) {
+        addFlash(err.message || t('student.simulationFailed'), 'error');
+        setBaselineResult(null);
+      }
     } finally {
-      setLoading(false);
+      if (predictRequestRef.current === requestId) setLoading(false);
     }
-  }, [addFlash]);
+  }, [addFlash, t]);
+
+  const loadStudentProfile = useCallback(async () => {
+    predictRequestRef.current += 1;
+    setLoading(true);
+    setProfileReady(false);
+    try {
+      const response = await api.get('/student/me/profile');
+      setProfile(normalizeProfile(response.student));
+    } catch (err) {
+      console.error('Failed to load student profile:', err);
+      addFlash(t('student.profileLoadFailed'), 'error');
+      setProfile(DEFAULT_PROFILE);
+    } finally {
+      setProfileReady(true);
+    }
+  }, [addFlash, t]);
+
+  useEffect(() => {
+    if (user?.role === 'student') {
+      loadStudentProfile();
+    } else {
+      setProfile(DEFAULT_PROFILE);
+      setProfileReady(true);
+    }
+  }, [loadStudentProfile, user?.role]);
+
+  useEffect(() => {
+    if (!profileReady) return undefined;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => handlePredict(profile), 800);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [handlePredict, profile, profileReady]);
+
+  const handleChange = useCallback((field, value) => {
+    predictRequestRef.current += 1;
+    setLoading(true);
+    setProfile((current) => ({ ...current, [field]: value }));
+    setWhatIfResult(null);
+  }, []);
 
   const handleWhatIfPredict = useCallback(async () => {
     if (!baselineResult) return;
 
-    setLoading(true);
+    setSimulationLoading(true);
     try {
-      // Create a modified profile for what-if analysis
       const modifiedProfile = { ...profile, [whatIfFeature]: whatIfValue };
 
-      // Convert numeric values appropriately
       if (whatIfFeature === 'age' || whatIfFeature === 'attendance_percent') {
         modifiedProfile[whatIfFeature] = parseInt(whatIfValue, 10);
       } else if (whatIfFeature === 'study_hours_per_day' || whatIfFeature === 'sleep_hours' || whatIfFeature === 'previous_gpa') {
@@ -115,90 +154,63 @@ export default function WhatIfSimulator() {
       const response = await api.post('/predict/simulation', modifiedProfile);
       setWhatIfResult(response);
     } catch (err) {
-      addFlash(err.message, 'error');
+      addFlash(err.message || t('student.simulationFailed'), 'error');
       setWhatIfResult(null);
     } finally {
-      setLoading(false);
+      setSimulationLoading(false);
     }
-  }, [profile, whatIfFeature, whatIfValue, baselineResult, addFlash]);
+  }, [profile, whatIfFeature, whatIfValue, baselineResult, addFlash, t]);
 
-  const handleCreateGoalFromScenario = useCallback(async () => {
-    // First, we need to get the current scenario from the baseline result
-    // We'll need to extract the scenario ID from the baseline event
-    // For now, we'll use a placeholder approach since we don't have direct access to the scenario ID
-    // In a real implementation, we would need to pass the scenario ID through the state
+  const handleSaveProfile = useCallback(async (event) => {
+    event.preventDefault();
+    if (user?.role !== 'student' || profileSaving) return;
 
-    // For this implementation, we'll assume we have access to the scenario ID
-    // In a real app, we would store the scenario ID when we load a saved scenario
-
-    // Since we don't have direct access to the scenario ID in this component,
-    // we'll need to get it from the baseline result or make an assumption
-
-    // For now, let's show a message that this feature needs to be implemented
-    // In a real implementation, we would call the API to create a goal from scenario
-
-    // This is a simplified version - in reality, we would need to:
-    // 1. Have the scenario ID available
-    // 2. Call POST /api/student/me/goals/from-scenario/:scenarioId
-
-    // For demonstration purposes, let's simulate the API call
-    setLoading(true);
+    setProfileSaving(true);
     try {
-      // In a real implementation, we would have the scenarioId from context
-      // For now, we'll use a placeholder
-      const scenarioId = 1; // This should be replaced with actual scenario ID
-
-      const response = await api.post(`/student/me/goals/from-scenario/${scenarioId}`);
-
-      addFlash(t('goals.goalCreatedFromScenario'), 'success');
-      // Navigate to the newly created goal
-      navigate(`/student/me/goals/${response.id}`);
+      const response = await api.put('/student/me/profile', buildProfilePayload(profile));
+      predictRequestRef.current += 1;
+      setLoading(true);
+      setProfile(normalizeProfile(response.student));
+      addFlash(t('student.profileSaved'), 'success');
     } catch (err) {
-      // Handle specific error cases
-      if (err.response && err.response.data && err.response.data.error === 'ACTIVE_GOAL_EXISTS') {
-        addFlash(t('goals.activeGoalExistsError'), 'error');
-      } else {
-        addFlash(err.message || 'Failed to create goal from scenario', 'error');
-      }
+      addFlash(err.message || t('student.profileSaveFailed'), 'error');
     } finally {
-      setLoading(false);
+      setProfileSaving(false);
     }
-  }, [addFlash, navigate, t]);
+  }, [addFlash, profile, profileSaving, t, user?.role]);
 
   const reset = useCallback(() => {
-    setProfile(DEFAULT_PROFILE);
+    predictRequestRef.current += 1;
+    setLoading(true);
     setBaselineResult(null);
     setWhatIfResult(null);
     if (user?.role === 'student') {
       loadStudentProfile();
+    } else {
+      setProfile(DEFAULT_PROFILE);
+      setProfileReady(true);
     }
-  }, [user, loadStudentProfile]);
+  }, [loadStudentProfile, user?.role]);
 
   const baselineGrade = baselineResult?.grade || '—';
   const baselineScore = baselineResult?.final_score;
-  const whatIfGrade = whatIfResult?.grade || '—';
-  const whatIfScore = whatIfResult?.final_score;
+  const whatIfFeatureLabel = t({
+    study_hours_per_day: 'student.studyHoursPerDay',
+    attendance_percent: 'student.attendancePercent',
+    sleep_hours: 'student.sleepHours',
+    previous_gpa: 'student.previousGPA',
+    age: 'common.age',
+  }[whatIfFeature]);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-primary-950 dark:text-gray-100">
-            {t('student.whatIfSimulator')}
-          </h2>
-          <p className="text-sm text-primary-400 dark:text-gray-500 mt-1">
-            {t('student.simulatorTitle')}
-          </p>
-        </div>
-        <label className="flex items-center gap-2 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={false} // Auto-predict not needed in simulator
-            onChange={(e) => {}} // Disabled
-            className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
-          />
-          <span className="text-sm text-primary-600 dark:text-primary-300">Auto-predict</span>
-        </label>
+      <div>
+        <h2 className="text-2xl font-bold text-primary-950 dark:text-gray-100">
+          {t('student.whatIfSimulator')}
+        </h2>
+        <p className="mt-1 text-sm text-primary-400 dark:text-gray-500">
+          {t('student.simulatorSubtitle')}
+        </p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-5">
@@ -226,8 +238,8 @@ export default function WhatIfSimulator() {
                     <p className="text-4xl font-bold text-primary-950 dark:text-gray-100">
                       {baselineScore != null ? baselineScore.toFixed(1) : '—'}
                     </p>
-                    <p className="text-xs text-primary-400 dark:text-gray-500 mt-1">
-                      out of 100
+                    <p className="mt-1 text-xs text-primary-400 dark:text-gray-500">
+                      {t('predictor.outOf100')}
                     </p>
                   </div>
                   <div className="p-6 rounded-2xl bg-primary-50/60 dark:bg-gray-800 text-center">
@@ -238,8 +250,8 @@ export default function WhatIfSimulator() {
                       {baselineGrade}
                     </span>
                     {baselineResult.grade_confidence != null && (
-                      <p className="text-xs text-primary-300 dark:text-gray-600 mt-2">
-                        {(baselineResult.grade_confidence * 100).toFixed(0)}% confidence
+                      <p className="mt-2 text-xs text-primary-300 dark:text-gray-600">
+                        {t('dashboard.confidence', { pct: (baselineResult.grade_confidence * 100).toFixed(0) })}
                       </p>
                     )}
                   </div>
@@ -322,11 +334,12 @@ export default function WhatIfSimulator() {
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-primary-600 dark:text-gray-300 mb-2">
-                        {t('student.studyHours')} {/* Study Hours / Day */}
+                      <label htmlFor="whatif-feature" className="mb-2 block text-sm font-medium text-primary-600 dark:text-gray-300">
+                        {t('student.testField')}
                       </label>
                       <select
                         id="whatif-feature"
+                        value={whatIfFeature}
                         className="input input-bordered w-full"
                         onChange={(e) => setWhatIfFeature(e.target.value)}
                       >
@@ -348,7 +361,7 @@ export default function WhatIfSimulator() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-primary-600 dark:text-gray-300 mb-2">
+                      <label htmlFor="whatif-value" className="mb-2 block text-sm font-medium text-primary-600 dark:text-gray-300">
                         {t('student.testValue')}
                       </label>
                       <div className="flex items-center gap-2">
@@ -363,60 +376,44 @@ export default function WhatIfSimulator() {
                     </div>
                     <div className="col-span-2">
                       <button
+                        type="button"
                         onClick={handleWhatIfPredict}
-                        disabled={loading}
+                        disabled={loading || simulationLoading}
                         className="btn-outline btn-primary w-full"
                       >
-                        {loading ? 'Analyzing...' : t('student.runSimulation')}
+                        {simulationLoading ? t('student.analyzing') : t('student.runSimulation')}
                       </button>
                     </div>
                   </div>
 
                   {whatIfResult && (
-                    <>
-                      <div className="mt-4 p-4 rounded-lg border border-primary-200 bg-primary-50">
-                        <h5 className="text-sm font-semibold text-primary-700 dark:text-gray-300 mb-2">
-                          {t('student.simulationResults')}
-                        </h5>
-                        <div className="space-y-2">
-                          <p className="text-xs text-primary-600 dark:text-gray-400">
-                            Changing <strong className="text-primary-900 dark:text-gray-100">{whatIfFeature.replace(/_/g, ' ')}</strong> to
-                            <span className="font-mono">{whatIfValue}</span>:
-                          </p>
-                          <div className="flex items-center gap-4">
-                            <div className="text-xs font-mono">
-                              Score: {whatIfResult.final_score?.toFixed(1) ?? '—'}
-                            </div>
-                            <div className="text-xs font-mono">
-                              Grade: <span className={`${getGradeBadgeClass(whatIfResult.grade)}`}>
-                                {whatIfResult.grade ?? '—'}
-                              </span>
-                            </div>
-                          </div>
-                          {whatIfResult.final_score !== null && baselineScore !== null && (
-                            <div className="text-xs text-primary-500 dark:text-gray-400 mt-1">
-                              {t('student.vsCurrent')}:
-                              {(whatIfResult.final_score - baselineScore).toFixed(1)}
-                              points
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Create Study Goal Button */}
-                      <div className="mt-6">
-                        <p className="text-xs text-primary-500 dark:text-gray-400 mb-2">
-                          {t('goals.predictionDisclaimer')}
+                    <div className="mt-4 rounded-lg border border-primary-200 bg-primary-50 p-4 dark:border-gray-700 dark:bg-gray-800">
+                      <h5 className="mb-2 text-sm font-semibold text-primary-700 dark:text-gray-300">
+                        {t('student.simulationResults')}
+                      </h5>
+                      <div className="space-y-2">
+                        <p className="text-xs text-primary-600 dark:text-gray-400">
+                          {t('student.simulationChange', { field: whatIfFeatureLabel, value: whatIfValue })}
                         </p>
-                        <button
-                          onClick={() => handleCreateGoalFromScenario()}
-                          disabled={loading || !user?.studentId}
-                          className="btn-primary w-full"
-                        >
-                          {t('goals.convertFromScenario')}
-                        </button>
+                        <div className="flex flex-wrap items-center gap-4">
+                          <div className="text-xs font-mono">
+                            {t('student.predictedScore')}: {whatIfResult.final_score?.toFixed(1) ?? '—'}
+                          </div>
+                          <div className="text-xs font-mono">
+                            {t('student.predictedGrade')}: <span className={getGradeBadgeClass(whatIfResult.grade)}>
+                              {whatIfResult.grade ?? '—'}
+                            </span>
+                          </div>
+                        </div>
+                        {whatIfResult.final_score != null && baselineScore != null && (
+                          <div className="mt-1 text-xs text-primary-500 dark:text-gray-400">
+                            {t('student.scoreDelta', {
+                              value: (whatIfResult.final_score - baselineScore).toFixed(1),
+                            })}
+                          </div>
+                        )}
                       </div>
-                    </>
+                    </div>
                   )}
                 </div>
               </div>
@@ -431,11 +428,7 @@ export default function WhatIfSimulator() {
               {t('student.editProfile')}
             </h3>
 
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              // In a real app, this would save to backend
-              addFlash(t('student.profileSaved'), 'success');
-            }} className="space-y-6">
+            <form onSubmit={handleSaveProfile} className="space-y-6">
               {/* Gender */}
               <fieldset>
                 <legend className="label">{t('common.gender')}</legend>
@@ -450,7 +443,9 @@ export default function WhatIfSimulator() {
                         onChange={(e) => handleChange('gender', e.target.value)}
                         className="w-4 h-4 text-primary-600 focus:ring-primary-500"
                       />
-                      <span className="text-sm text-primary-700 dark:text-gray-300">{g}</span>
+                      <span className="text-sm text-primary-700 dark:text-gray-300">
+                        {t(`student.${g.toLowerCase()}`)}
+                      </span>
                     </label>
                   ))}
                 </div>
@@ -462,8 +457,8 @@ export default function WhatIfSimulator() {
                 <input
                   type="number"
                   id="age"
-                  min={10}
-                  max={80}
+                  min={15}
+                  max={30}
                   value={profile.age}
                   onChange={(e) => handleChange('age', parseInt(e.target.value, 10) || 0)}
                   className="input"
@@ -479,14 +474,14 @@ export default function WhatIfSimulator() {
                   type="range"
                   id="study_hours"
                   min={0}
-                  max={16}
+                  max={24}
                   step={0.5}
                   value={profile.study_hours_per_day}
                   onChange={(e) => handleChange('study_hours_per_day', parseFloat(e.target.value))}
                   className="w-full accent-primary-600"
                 />
                 <div className="flex justify-between text-xs text-primary-300 dark:text-gray-600 mt-1">
-                  <span>0h</span><span>8h</span><span>16h</span>
+                  <span>0h</span><span>12h</span><span>24h</span>
                 </div>
               </div>
 
@@ -519,14 +514,14 @@ export default function WhatIfSimulator() {
                   type="range"
                   id="sleep"
                   min={0}
-                  max={12}
+                  max={24}
                   step={0.5}
                   value={profile.sleep_hours}
                   onChange={(e) => handleChange('sleep_hours', parseFloat(e.target.value))}
                   className="w-full h-6 accent-primary-600"
                 />
-                <div className="justify-between text-xs text-primary-300 dark:text-gray-600 mt-1">
-                  <span>0h</span><span>6h</span><span>12h</span>
+                <div className="mt-1 flex justify-between text-xs text-primary-300 dark:text-gray-600">
+                  <span>0h</span><span>12h</span><span>24h</span>
                 </div>
               </div>
 
@@ -563,7 +558,6 @@ export default function WhatIfSimulator() {
                   <option value="Bachelor">{t('student.bachelors')}</option>
                   <option value="Master">{t('student.masters')}</option>
                   <option value="PhD">{t('student.phd')}</option>
-                  <option value="None">None</option>
                 </select>
               </div>
 
@@ -574,7 +568,7 @@ export default function WhatIfSimulator() {
                 { key: 'part_time_job', label: t('student.partTimeJob') },
               ].map(({ key, label }) => (
                 <fieldset key={key}>
-                  <label className="label">{label}</label>
+                  <legend className="label">{label}</legend>
                   <div className="flex gap-4 mt-1">
                     {['Yes', 'No'].map((v) => (
                       <label key={v} className="flex items-center gap-2 cursor-pointer">
@@ -586,20 +580,23 @@ export default function WhatIfSimulator() {
                           onChange={(e) => handleChange(key, e.target.value)}
                           className="w-4 h-4 text-primary-600 focus:ring-primary-500"
                         />
-                        <span className="text-sm text-primary-700 dark:text-gray-300">{v}</span>
+                        <span className="text-sm text-primary-700 dark:text-gray-300">
+                          {t(`student.${v.toLowerCase()}`)}
+                        </span>
                       </label>
                     ))}
                   </div>
                 </fieldset>
               ))}
 
-              {/* Buttons */}
-              <div className="flex gap-3 pt-2 border-t border-primary-100 dark:border-gray-800">
-                <button type="submit" disabled={loading} className="btn-primary flex-1">
-                  {loading ? 'Saving...' : 'Save Profile'}
-                </button>
-                <button type="button" onClick={reset} className="btn-secondary">
-                  Reset
+              <div className="flex gap-3 border-t border-primary-100 pt-2 dark:border-gray-800">
+                {user?.role === 'student' && (
+                  <button type="submit" disabled={profileSaving} className="btn-primary flex-1">
+                    {profileSaving ? t('student.saving') : t('student.saveProfile')}
+                  </button>
+                )}
+                <button type="button" onClick={reset} disabled={profileSaving} className="btn-secondary">
+                  {t('common.reset')}
                 </button>
               </div>
             </form>
