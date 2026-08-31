@@ -1,13 +1,13 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth, homeForRole } from '../hooks/useAuth';
+import { useAuth } from '../hooks/useAuth';
 import { useFlash } from '../components/FlashProvider';
 import { useLanguage } from '../hooks/useLanguage';
 import { api } from '../api';
 import { renderIcon } from '../components/IconMap';
 import { MessageSquare, AlertTriangle, Users, CheckCircle, X, ChevronLeft, ChevronRight } from 'lucide-react';
-import { MULTI_SERIES_COLORS, GRADE_COLORS, getChartOptions, getGradeBadgeClass, getScatterOptions, getHorizontalBarOptions } from '../utils/chartTheme';
-import { formatLabel } from '../utils/formatLabel';
+import { GRADE_COLORS, getChartOptions, getHorizontalBarOptions, getMultiSeriesColors, getScatterOptions } from '../utils/chartTheme';
+import { formatAdminMetric } from '../utils/adminAiTools.js';
 import { useTheme } from '../hooks/useTheme';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, PointElement, ArcElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { Bar, Scatter } from 'react-chartjs-2';
@@ -64,6 +64,7 @@ export default function TeacherDashboard() {
   const [modalWhatIfFeature, setModalWhatIfFeature] = useState('study_hours_per_day');
   const [modalWhatIfValue, setModalWhatIfValue] = useState(4);
   const { isDark } = useTheme();
+  const seriesColors = useMemo(() => getMultiSeriesColors(isDark), [isDark]);
 
   // ─── Data fetching ────────────────────────────────────────────────────────────
   const fetchAnalytics = useCallback(async () => {
@@ -124,19 +125,20 @@ export default function TeacherDashboard() {
       analytics.charts.gradeDistribution && {
         chartType: 'bar',
         key: 'gradeDistribution',
+        title: t('teacher.gradeDistribution'),
         data: {
-          labels: analytics.charts.gradeDistribution.map(g => `Grade ${g.grade}`),
+          labels: analytics.charts.gradeDistribution.map(g => `${t('common.grade')} ${g.grade}`),
           datasets: [{
             label: t('teacher.gradeDistribution'),
             data: analytics.charts.gradeDistribution.map(g => g.count),
-            backgroundColor: analytics.charts.gradeDistribution.map(g => GRADE_COLORS[g.grade]?.bg || MULTI_SERIES_COLORS[0].bg),
-            borderColor: analytics.charts.gradeDistribution.map(g => GRADE_COLORS[g.grade]?.border || MULTI_SERIES_COLORS[0].border),
+            backgroundColor: analytics.charts.gradeDistribution.map(g => GRADE_COLORS[g.grade]?.bg || seriesColors[0].bg),
+            borderColor: analytics.charts.gradeDistribution.map(g => GRADE_COLORS[g.grade]?.border || seriesColors[0].border),
             borderWidth: 2,
             borderRadius: 8,
             borderSkipped: false,
-            maxBarThickness: 52,
-            hoverBackgroundColor: analytics.charts.gradeDistribution.map(g => GRADE_COLORS[g.grade]?.solid || MULTI_SERIES_COLORS[0].solid),
-            hoverBorderColor: analytics.charts.gradeDistribution.map(g => GRADE_COLORS[g.grade]?.border || MULTI_SERIES_COLORS[0].border),
+            maxBarThickness: 24,
+            hoverBackgroundColor: analytics.charts.gradeDistribution.map(g => GRADE_COLORS[g.grade]?.solid || seriesColors[0].solid),
+            hoverBorderColor: analytics.charts.gradeDistribution.map(g => GRADE_COLORS[g.grade]?.border || seriesColors[0].border),
           }],
         },
         options: getChartOptions(isDark),
@@ -144,15 +146,17 @@ export default function TeacherDashboard() {
       analytics.charts.attendanceVsScore && {
         chartType: 'scatter',
         key: 'attendanceVsScore',
+        title: t('teacher.attendanceVsScore'),
         data: {
           datasets: [{
-            label: `${t('common.attendance')} vs ${t('common.finalScore')}`,
+            label: `${t('common.attendance')} ${t('common.versus')} ${t('common.finalScore')}`,
             data: analytics.charts.attendanceVsScore.map(d => ({ x: d.x, y: d.y })),
-            backgroundColor: MULTI_SERIES_COLORS[0].solid + 'B3',
-            borderColor: MULTI_SERIES_COLORS[0].solid,
+            backgroundColor: seriesColors[0].solid + 'B3',
+            borderColor: seriesColors[0].solid,
             borderWidth: 2,
-            pointRadius: 7,
-            pointHoverRadius: 9,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            pointHitRadius: 12,
             pointBorderWidth: 2,
             pointBorderColor: isDark ? '#0f172a' : '#ffffff',
             pointStyle: 'circle',
@@ -163,45 +167,47 @@ export default function TeacherDashboard() {
       analytics.charts.sleepImpact && {
         chartType: 'bar',
         key: 'sleepImpact',
+        title: t('teacher.sleepImpact'),
         data: {
           labels: analytics.charts.sleepImpact.map(s => s.sleepBucket),
           datasets: [{
             label: t('teacher.sleepImpact'),
             data: analytics.charts.sleepImpact.map(s => s.avgScore),
-            backgroundColor: MULTI_SERIES_COLORS[1].bg,
-            borderColor: MULTI_SERIES_COLORS[1].border,
+            backgroundColor: seriesColors[1].bg,
+            borderColor: seriesColors[1].border,
             borderWidth: 2,
             borderRadius: 8,
             borderSkipped: false,
-            maxBarThickness: 40,
-            hoverBackgroundColor: MULTI_SERIES_COLORS[1].solid,
-            hoverBorderColor: MULTI_SERIES_COLORS[1].border,
+            maxBarThickness: 24,
+            hoverBackgroundColor: seriesColors[1].solid,
+            hoverBorderColor: seriesColors[1].border,
           }],
         },
-        options: getHorizontalBarOptions(isDark),
+        options: getHorizontalBarOptions(isDark, t('common.averageScore')),
       },
       analytics.charts.partTimeJobImpact && {
         chartType: 'bar',
         key: 'partTimeJobImpact',
+        title: t('teacher.partTimeJobImpact'),
         data: {
           labels: analytics.charts.partTimeJobImpact.map(j => j.category),
           datasets: [{
             label: t('teacher.partTimeJobImpact'),
             data: analytics.charts.partTimeJobImpact.map(j => j.avgScore),
-            backgroundColor: MULTI_SERIES_COLORS[3].bg,
-            borderColor: MULTI_SERIES_COLORS[3].border,
+            backgroundColor: seriesColors[3].bg,
+            borderColor: seriesColors[3].border,
             borderWidth: 2,
             borderRadius: 8,
             borderSkipped: false,
-            maxBarThickness: 40,
-            hoverBackgroundColor: MULTI_SERIES_COLORS[3].solid,
-            hoverBorderColor: MULTI_SERIES_COLORS[3].border,
+            maxBarThickness: 24,
+            hoverBackgroundColor: seriesColors[3].solid,
+            hoverBorderColor: seriesColors[3].border,
           }],
         },
-        options: getHorizontalBarOptions(isDark),
+        options: getHorizontalBarOptions(isDark, t('common.averageScore')),
       },
     ].filter(Boolean);
-  }, [analytics, isDark, t]);
+  }, [analytics, isDark, seriesColors, t]);
 
   const handleFilterChange = useCallback((key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }));
@@ -272,7 +278,7 @@ export default function TeacherDashboard() {
   // Loading skeleton
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-8 space-y-6" role="status" aria-label="Loading dashboard">
+      <div className="max-w-7xl mx-auto px-4 py-8 space-y-6" role="status" aria-busy="true" aria-label={t('dashboard.loading')}>
         <div className="animate-pulse space-y-6">
           <div className="h-8 bg-primary-200 dark:bg-gray-700 rounded-xl w-1/4" />
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -311,8 +317,8 @@ export default function TeacherDashboard() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-primary-200 dark:border-gray-700" role="tablist" aria-label="Dashboard sections">
-        <nav className="flex gap-1 overflow-x-auto scrollbar-thin" role="tablist">
+      <div className="border-b border-primary-200 dark:border-gray-700">
+        <nav className="flex gap-1 overflow-x-auto scrollbar-thin" role="tablist" aria-label={t('teacher.dashboardSections')}>
           {[
             { id: 'analytics', label: t('teacher.tabAnalytics'), icon: 'LayoutDashboard' },
             { id: 'students', label: t('teacher.tabStudents'), icon: 'Users' },
@@ -320,6 +326,7 @@ export default function TeacherDashboard() {
           ].map(tab => (
             <button
               key={tab.id}
+              type="button"
               role="tab"
               aria-selected={activeTab === tab.id}
               aria-controls={`panel-${tab.id}`}
@@ -345,7 +352,7 @@ export default function TeacherDashboard() {
       {activeTab === 'analytics' && analytics && (
         <div id="panel-analytics" role="tabpanel" aria-labelledby="tab-analytics" className="space-y-6 animate-slide-up">
           {/* KPI Cards */}
-          <section aria-label="Key Performance Indicators">
+          <section aria-label={t('dashboard.keyMetrics')}>
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 bento-grid-4">
               <Card className="p-6 kpi-card">
                 <div className="flex items-center gap-3">
@@ -354,7 +361,7 @@ export default function TeacherDashboard() {
                   </div>
                   <div>
                     <p className="kpi-label">{t('teacher.totalStudents')}</p>
-                    <p className="kpi-value tabular-nums">{analytics.kpis.totalStudents}</p>
+                    <p className="kpi-value tabular-nums">{analytics.kpis.totalStudents ?? '—'}</p>
                     <p className="text-xs text-primary-400 dark:text-gray-500">{t('teacher.kpiStudents')}</p>
                   </div>
                 </div>
@@ -366,7 +373,7 @@ export default function TeacherDashboard() {
                   </div>
                   <div>
                     <p className="kpi-label">{t('teacher.avgGPA')}</p>
-                    <p className="kpi-value tabular-nums">{analytics.kpis.avgGpa?.toFixed(2)}</p>
+                    <p className="kpi-value tabular-nums">{formatAdminMetric(analytics.kpis.avgGpa, 2)}</p>
                     <p className="text-xs text-primary-400 dark:text-gray-500">{t('teacher.kpiOutOfFour')}</p>
                   </div>
                 </div>
@@ -378,7 +385,7 @@ export default function TeacherDashboard() {
                   </div>
                   <div>
                     <p className="kpi-label">{t('teacher.passRate')}</p>
-                    <p className="kpi-value tabular-nums text-success-600 dark:text-success-400">{analytics.kpis.passRate?.toFixed(1)}%</p>
+                    <p className="kpi-value tabular-nums text-success-600 dark:text-success-400">{formatAdminMetric(analytics.kpis.passRate, 1, '%')}</p>
                     <p className="text-xs text-primary-400 dark:text-gray-500">{t('teacher.kpiGradeABC')}</p>
                   </div>
                 </div>
@@ -390,7 +397,7 @@ export default function TeacherDashboard() {
                   </div>
                   <div>
                     <p className="kpi-label">{t('teacher.atRiskCount')}</p>
-                    <p className="kpi-value tabular-nums text-danger-600 dark:text-danger-400">{analytics.kpis.atRiskCount}</p>
+                    <p className="kpi-value tabular-nums text-danger-600 dark:text-danger-400">{analytics.kpis.atRiskCount ?? '—'}</p>
                     <p className="text-xs text-primary-400 dark:text-gray-500">{t('teacher.kpiNeedsAttention')}</p>
                   </div>
                 </div>
@@ -399,16 +406,13 @@ export default function TeacherDashboard() {
           </section>
 
           {/* Charts */}
-          <section aria-label="Analytics Charts">
+          <section aria-label={t('dashboard.analyticsCharts')}>
             <div className="grid gap-6 lg:grid-cols-2">
               {charts.map((chart) => (
                 <Card key={chart.key} className="p-6">
                   <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
                     <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100">
-                      {formatLabel(chart.key === 'gradeDistribution' ? 'Grade Distribution' :
-                        chart.key === 'attendanceVsScore' ? 'Attendance vs Final Score' :
-                        chart.key === 'sleepImpact' ? 'Sleep Impact' :
-                        'Part-Time Job Impact')}
+                      {chart.title}
                     </h3>
                     {chart.chartType === 'scatter' && (
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 text-xs font-medium">
@@ -418,7 +422,18 @@ export default function TeacherDashboard() {
                       </span>
                     )}
                   </div>
-                  <div className="chart-container" style={{ height: '360px', position: 'relative' }} role="img" aria-label={formatLabel(chart.key)}>
+                  <div
+                    className="chart-container"
+                    style={{ height: '360px', position: 'relative' }}
+                    role="img"
+                    aria-label={t('dashboard.chartAria', {
+                      title: chart.title,
+                      count: chart.data.datasets.reduce(
+                        (total, dataset) => total + dataset.data.filter((value) => value != null).length,
+                        0
+                      ),
+                    })}
+                  >
                     {chart.chartType === 'bar' && <Bar data={chart.data} options={chart.options} />}
                     {chart.chartType === 'scatter' && <Scatter data={chart.data} options={chart.options} />}
                   </div>
@@ -427,9 +442,9 @@ export default function TeacherDashboard() {
               {!charts.length && (
                 <Card className="p-12 text-center lg:col-span-2">
                   <svg className="w-16 h-16 mx-auto text-primary-200 dark:text-gray-700 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" width="64" height="64" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-                  <p className="text-primary-400 dark:text-gray-500 font-medium text-lg">{t('dashboard.noChartData') || 'No chart data available'}</p>
+                  <p className="text-primary-400 dark:text-gray-500 font-medium text-lg">{t('dashboard.noChartData')}</p>
                   <p className="text-sm text-primary-300 dark:text-gray-600 mt-2 max-w-xs mx-auto">
-                    {t('dashboard.noChartDataDesc') || 'Import a dataset with numeric columns to see visualizations.'}
+                    {t('dashboard.noChartDataDesc')}
                   </p>
                 </Card>
               )}
@@ -529,17 +544,17 @@ export default function TeacherDashboard() {
                 {students.map((student, idx) => (
                   <TableRow key={student.id}>
                     <TableCell className="font-mono text-primary-950 dark:text-gray-100">{student.student_id}</TableCell>
-                    <TableCell className="font-medium text-primary-950 dark:text-gray-100">{student.name || '-'}</TableCell>
+                    <TableCell className="font-medium text-primary-950 dark:text-gray-100">{student.name || '—'}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className={`${getGradeBadge(student.grade).bg} ${getGradeBadge(student.grade).text} border-2 ${getGradeBadge(student.grade).border}`}>
                         {student.grade}
                       </Badge>
                     </TableCell>
-                    <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{student.final_score}</TableCell>
-                    <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{student.attendance_percent}%</TableCell>
-                    <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{student.study_hours_per_day}h</TableCell>
-                    <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{student.sleep_hours}h</TableCell>
-                    <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{student.previous_gpa}</TableCell>
+                    <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{formatAdminMetric(student.final_score, 1)}</TableCell>
+                    <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{formatAdminMetric(student.attendance_percent, 1, '%')}</TableCell>
+                    <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{formatAdminMetric(student.study_hours_per_day, 1, ` ${t('common.hoursShort')}`)}</TableCell>
+                    <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{formatAdminMetric(student.sleep_hours, 1, ` ${t('common.hoursShort')}`)}</TableCell>
+                    <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{formatAdminMetric(student.previous_gpa, 2)}</TableCell>
                     <TableCell>
                       {atRiskStudents.find(s => s.id === student.id) && (
                         <Badge className={`${getRiskBadge(atRiskStudents.find(s => s.id === student.id)?.risk_level).bg} ${getRiskBadge(atRiskStudents.find(s => s.id === student.id)?.risk_level).text}`}>
@@ -608,13 +623,13 @@ export default function TeacherDashboard() {
                 <p className="text-sm text-primary-600 dark:text-gray-400" aria-live="polite">
                   {t('common.showing', { start: (pagination.page - 1) * pagination.size + 1, end: Math.min(pagination.page * pagination.size, pagination.total), total: pagination.total })}
                 </p>
-                <div className="flex gap-2" role="navigation" aria-label="Pagination">
+                <nav className="flex gap-2" aria-label={t('table.pagination')}>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handlePageChange(pagination.page - 1)}
                     disabled={pagination.page === 1}
-                    aria-label="Previous page"
+                    aria-label={t('table.previousPage')}
                     aria-disabled={pagination.page === 1}
                   >
                     <ChevronLeft className="w-4 h-4" aria-hidden="true" />
@@ -625,13 +640,13 @@ export default function TeacherDashboard() {
                     size="sm"
                     onClick={() => handlePageChange(pagination.page + 1)}
                     disabled={pagination.page === pagination.totalPages}
-                    aria-label="Next page"
+                    aria-label={t('table.nextPage')}
                     aria-disabled={pagination.page === pagination.totalPages}
                   >
                     <span className="hidden sm:inline">{t('common.next')}</span>
                     <ChevronRight className="w-4 h-4" aria-hidden="true" />
                   </Button>
-                </div>
+                </nav>
               </div>
             )}
           </Card>
@@ -670,15 +685,15 @@ export default function TeacherDashboard() {
                   {atRiskStudents.map((student, idx) => (
                     <TableRow key={student.id}>
                       <TableCell className="font-mono text-primary-950 dark:text-gray-100">{student.student_id}</TableCell>
-                      <TableCell className="font-medium text-primary-950 dark:text-gray-100">{student.name || '-'}</TableCell>
+                      <TableCell className="font-medium text-primary-950 dark:text-gray-100">{student.name || '—'}</TableCell>
                       <TableCell>
                         <Badge className={`${getRiskBadge(student.risk_level).bg} ${getRiskBadge(student.risk_level).text}`}>
                           {t(`common.risk${student.risk_level}`)}
                         </Badge>
                       </TableCell>
-                      <TableCell align="right" className="font-bold font-mono tabular-nums text-primary-950 dark:text-gray-100">{student.risk_score}</TableCell>
+                      <TableCell align="right" className="font-bold font-mono tabular-nums text-primary-950 dark:text-gray-100">{formatAdminMetric(student.risk_score, 1)}</TableCell>
                       <TableCell>
-                        <div className="flex flex-wrap gap-1" role="list" aria-label="Risk factors">
+                        <div className="flex flex-wrap gap-1" role="list" aria-label={t('common.riskFactors')}>
                           {student.risk_factors?.map((factor, fi) => {
                               const factorColors = {
                                 attendance: { border: 'border-danger-500', text: 'text-danger-600 dark:text-danger-400' },
@@ -707,11 +722,11 @@ export default function TeacherDashboard() {
                           {student.grade}
                         </Badge>
                       </TableCell>
-                      <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{student.final_score}</TableCell>
-                      <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{student.attendance_percent}%</TableCell>
-                      <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{student.study_hours_per_day}h</TableCell>
-                      <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{student.previous_gpa}</TableCell>
-                      <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{student.sleep_hours}h</TableCell>
+                      <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{formatAdminMetric(student.final_score, 1)}</TableCell>
+                      <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{formatAdminMetric(student.attendance_percent, 1, '%')}</TableCell>
+                      <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{formatAdminMetric(student.study_hours_per_day, 1, ` ${t('common.hoursShort')}`)}</TableCell>
+                      <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{formatAdminMetric(student.previous_gpa, 2)}</TableCell>
+                      <TableCell align="right" className="font-mono tabular-nums text-primary-950 dark:text-gray-100">{formatAdminMetric(student.sleep_hours, 1, ` ${t('common.hoursShort')}`)}</TableCell>
                       <TableCell align="right">
                         <Button
                           variant="ghost"

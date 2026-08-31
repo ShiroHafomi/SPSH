@@ -4,7 +4,7 @@ import { Calendar, Plus, Trash2, Check, RefreshCw, Loader2, Moon, Sun, ArrowLeft
 import { api } from '../api';
 import { useFlash } from '../components/FlashProvider';
 import { useLanguage } from '../hooks/useLanguage';
-import { Button, ConfirmDialog, Modal, Input, Select, Badge, SkeletonCard } from '../components/ui';
+import { Button, ConfirmDialog, Modal, Input, Select, Badge, SkeletonCard, Icon } from '../components/ui';
 import {
   SESSION_STATUSES,
   startOfWeekMonday,
@@ -37,6 +37,7 @@ export default function StudyPlanner() {
     status: '',
     subject: '',
   });
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   // State for pagination
   const [page, setPage] = useState(1);
@@ -227,6 +228,13 @@ export default function StudyPlanner() {
   // Close session form
   const closeSessionForm = useCallback(() => {
     setSessionForm(prev => ({ ...prev, open: false, loading: false }));
+  }, []);
+
+  const setSessionFormData = useCallback((updates) => {
+    setSessionForm(prev => ({
+      ...prev,
+      data: { ...prev.data, ...updates },
+    }));
   }, []);
 
   // Handle form submission
@@ -508,7 +516,7 @@ export default function StudyPlanner() {
               type="button"
               className="lg:hidden p-2 text-primary-600 dark:text-gray-400 hover:bg-primary-100 dark:hover:bg-gray-800 rounded-xl transition-colors"
               onClick={() => setSelectedDate(prev => shiftWeek(prev, -1))}
-              aria-label="Previous week"
+              aria-label={t('studyPlanner.previousWeek')}
             >
               <ArrowLeft size="20" />
             </button>
@@ -517,7 +525,7 @@ export default function StudyPlanner() {
               type="button"
               className="lg:hidden p-2 text-primary-600 dark:text-gray-400 hover:bg-primary-100 dark:hover:bg-gray-800 rounded-xl transition-colors"
               onClick={goToNextWeek}
-              aria-label="Next week"
+              aria-label={t('studyPlanner.nextWeek')}
             >
               <ArrowRight size="20" />
             </button>
@@ -542,7 +550,7 @@ export default function StudyPlanner() {
         </div>
       </header>
 
-      <main className="pt-16 pb-8">
+      <div className="pt-16 pb-8">
         <div className="container mx-auto px-4">
           {/* Weekly Summary */}
           <div className="card-clay p-6 mb-6">
@@ -844,7 +852,7 @@ export default function StudyPlanner() {
             </>
           )}
         </div>
-      </main>
+      </div>
 
       {/* Modals */}
       <Modal isOpen={sessionForm.open} onClose={closeSessionForm}>
@@ -1041,21 +1049,4 @@ export default function StudyPlanner() {
       />
     </div>
   );
-}
-
-// Helper to update session form data
-function setSessionFormData(updates) {
-  // This function is used in the JSX above, but we need to define it.
-  // However, we are already using useState setter directly in the JSX.
-  // So we don't need this helper.
-  // We'll remove this function and use the setter directly.
-  // But note: we are using it in the JSX above? Actually, we are not.
-  // We are using the setter from useState directly.
-  // So we can delete this function.
-  // However, to avoid an error, we'll leave it as an empty function.
-  // But better to remove it and use the setter directly.
-  // We'll replace the usage in the JSX with the setter from useState.
-  // Since we already used the setter in the JSX, we can remove this function.
-  // We'll leave it as a placeholder to avoid build error, but we won't use it.
-  return;
 }

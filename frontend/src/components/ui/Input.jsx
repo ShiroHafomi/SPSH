@@ -283,35 +283,36 @@ const Checkbox = forwardRef(
     const generatedId = useId();
     const id = providedId || generatedId;
     const errorId = `${id}-error`;
-    const describedBy = error ? errorId : undefined;
+    const descriptionId = `${id}-description`;
+    const describedBy = [description && descriptionId, error && errorId].filter(Boolean).join(' ') || undefined;
 
     return (
-      <div className={`form-field flex items-start gap-3 ${className}`}>
-        <input
-          ref={ref}
-          type="checkbox"
-          id={id}
-          disabled={disabled}
-          required={required}
-          aria-invalid={error ? 'true' : 'false'}
-          aria-describedby={describedBy}
-          className={`
-            h-4 w-4 mt-0.5 border-primary-300 text-primary-600
-            focus:ring-primary-500 focus:ring-2
-            rounded transition-colors
-            ${disabled ? 'cursor-not-allowed opacity-50' : ''}
-          `}
-          {...props}
-        />
-        <div className="flex-1">
-          {label && (
-            <label htmlFor={id} className="label cursor-pointer mb-0">
-              {label}
-              {required && <span className="text-danger-500 ml-1" aria-hidden="true">*</span>}
-            </label>
-          )}
-          {description && <p className="text-xs text-primary-400 dark:text-gray-500 mt-0.5">{description}</p>}
-        </div>
+      <div className={`form-field ${className}`}>
+        <label
+          htmlFor={id}
+          className={`flex min-h-11 items-start gap-3 rounded-lg py-2 ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+        >
+          <input
+            ref={ref}
+            type="checkbox"
+            id={id}
+            disabled={disabled}
+            required={required}
+            aria-invalid={error ? 'true' : 'false'}
+            aria-describedby={describedBy}
+            className="mt-0.5 size-4 rounded border-divider text-primary-600 focus:ring-2 focus:ring-primary-500"
+            {...props}
+          />
+          <span className="min-w-0 flex-1">
+            {label && (
+              <span className="block text-sm font-semibold text-ink">
+                {label}
+                {required && <span className="ml-1 text-danger-500" aria-hidden="true">*</span>}
+              </span>
+            )}
+            {description && <span id={descriptionId} className="mt-0.5 block text-sm text-ink-muted">{description}</span>}
+          </span>
+        </label>
         {error && (
           <p id={errorId} className="form-field-error" role="alert" aria-live="polite">
             {error}
@@ -344,20 +345,23 @@ const RadioGroup = ({
     const describedBy = [error && errorId, hint && hintId].filter(Boolean).join(' ') || undefined;
 
     return (
-      <div className={`form-field ${className}`}>
+      <fieldset className={`form-field ${className}`} aria-describedby={describedBy} disabled={disabled}>
         {label && (
-          <label className="label">
+          <legend className="label">
             {label}
-            {required && <span className="text-danger-500 ml-1" aria-hidden="true">*</span>}
-          </label>
+            {required && <span className="ml-1 text-danger-500" aria-hidden="true">*</span>}
+          </legend>
         )}
 
-        <fieldset aria-describedby={describedBy} disabled={disabled}>
-          <div className="flex flex-wrap gap-4" role="radiogroup" aria-label={label} aria-required={required}>
-            {options.map((option) => (
+        <div className="flex flex-wrap gap-2" aria-required={required}>
+          {options.map((option) => {
+            const optionDisabled = disabled || option.disabled;
+            return (
               <label
                 key={option.value}
-                className="flex items-center gap-2 cursor-pointer"
+                className={`flex min-h-11 items-center gap-2 rounded-lg border border-divider px-3 py-2 transition-colors ${
+                  optionDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-surface-muted'
+                }`}
               >
                 <input
                   type="radio"
@@ -365,19 +369,14 @@ const RadioGroup = ({
                   value={option.value}
                   checked={value === option.value}
                   onChange={onChange}
-                  disabled={disabled || option.disabled}
-                  className={`
-                    h-4 w-4 border-primary-300 text-primary-600
-                    focus:ring-primary-500 focus:ring-2
-                    ${disabled || option.disabled ? 'cursor-not-allowed opacity-50' : ''}
-                  `}
-                  aria-label={option.label}
+                  disabled={optionDisabled}
+                  className="size-4 border-divider text-primary-600 focus:ring-2 focus:ring-primary-500"
                 />
-                <span className="text-sm text-primary-700 dark:text-gray-300">{option.label}</span>
+                <span className="text-sm text-ink">{option.label}</span>
               </label>
-            ))}
-          </div>
-        </fieldset>
+            );
+          })}
+        </div>
 
         {error && (
           <p id={errorId} className="form-field-error" role="alert" aria-live="polite">
@@ -390,7 +389,7 @@ const RadioGroup = ({
             {hint}
           </p>
         )}
-      </div>
+      </fieldset>
     );
 };
 

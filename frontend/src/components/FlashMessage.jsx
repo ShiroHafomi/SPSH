@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import { useLanguage } from '../hooks/useLanguage';
 
 export function FlashMessage({ message, type = 'success', onClose }) {
+  const { t } = useLanguage();
   const [visible, setVisible] = useState(true);
 
   useEffect(() => {
@@ -32,7 +34,7 @@ export function FlashMessage({ message, type = 'success', onClose }) {
           setTimeout(() => onClose?.(), 200);
         }}
         className="opacity-60 hover:opacity-100"
-        aria-label="Dismiss"
+        aria-label={t('common.dismiss')}
       >
         &times;
       </button>
@@ -43,12 +45,12 @@ export function FlashMessage({ message, type = 'success', onClose }) {
 export function FlashContainer({ messages, onRemove }) {
   return (
     <div>
-      {messages.map((msg, index) => (
+      {messages.map((msg) => (
         <FlashMessage
-          key={index}
+          key={msg.id}
           message={msg.message}
           type={msg.type}
-          onClose={() => onRemove(index)}
+          onClose={() => onRemove(msg.id)}
         />
       ))}
     </div>

@@ -7,10 +7,11 @@ import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, PointElement, ArcElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { Bar, Scatter, Line, Doughnut } from 'react-chartjs-2';
+import { useAuth } from '../hooks/useAuth';
 import { useLanguage } from '../hooks/useLanguage';
 import { useTheme } from '../hooks/useTheme';
 import { formatLabel } from '../utils/formatLabel';
-import { MULTI_SERIES_COLORS, GRADE_COLORS, getChartOptions, getDoughnutOptions, getScatterOptions } from '../utils/chartTheme';
+import { CHART_THEME, GRADE_COLORS, getChartOptions, getDoughnutOptions, getMultiSeriesColors, getScatterOptions } from '../utils/chartTheme';
 import {
   Card,
   KPICard,
@@ -35,12 +36,18 @@ ChartJS.register(
 );
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [chartData, setChartData] = useState(null);
   const [kpis, setKpis] = useState([]);
   const [atRisk, setAtRisk] = useState(null);
   const { isDark } = useTheme();
+  const canManageStudents = user?.role === 'admin' || user?.role === 'teacher';
+  const studentListPath = user?.role === 'admin' ? '/admin/students' : '/teacher/students';
+  const atRiskPath = user?.role === 'admin' ? '/admin/at-risk' : '/teacher/at-risk';
+  const chartTheme = isDark ? CHART_THEME.dark : CHART_THEME.light;
+  const seriesColors = useMemo(() => getMultiSeriesColors(isDark), [isDark]);
 
   useEffect(() => {
     let mounted = true;
@@ -49,7 +56,7 @@ export default function Dashboard() {
       try {
         const [statsData, atRiskData] = await Promise.all([
           api.get('/dashboard/stats'),
-          api.get('/dashboard/at-risk').catch(() => null),
+          canManageStudents ? api.get('/dashboard/at-risk').catch(() => null) : Promise.resolve(null),
         ]);
         if (mounted) {
           setKpis(statsData.chartData.kpis);
@@ -64,22 +71,13 @@ export default function Dashboard() {
     }
     fetchData();
     return () => { mounted = false; };
-  }, []);
-
-  const formatKPI = (value, format) => {
-    if (value === null || value === undefined) return '—';
-    const num = Number(value);
-    if (isNaN(num)) return value;
-    if (format === 'pct') return num.toFixed(1) + '%';
-    if (format === 'dec1') return num.toFixed(1);
-    return num.toLocaleString();
-  };
+  }, [canManageStudents]);
 
   // Transform chart data from API to Chart.js format
   const charts = useMemo(() => {
     if (!chartData) return [];
     return chartData.map((chart, idx) => {
-      const seriesColor = MULTI_SERIES_COLORS[idx % MULTI_SERIES_COLORS.length];
+      const seriesColor = seriesColors[idx % seriesColors.length];
 
       // Bar Chart - Compare Categories (sorted descending)
       if (chart.type === 'bar') {
@@ -94,14 +92,14 @@ export default function Dashboard() {
           data: {
             labels: sorted.map(d => formatLabel(d.label)),
             datasets: [{
-              label: formatLabel(chart.yLabel || 'Value'),
+              label: formatLabel(chart.yLabel || t('common.value')),
               data: sorted.map(d => d.value),
               backgroundColor: seriesColor.bg,
               borderColor: seriesColor.border,
-              borderWidth: 2,
-              borderRadius: 8,
-              borderSkipped: false,
-              maxBarThickness: 52,
+              borderWidth: 1,
+              borderRadius: 4,
+              borderSkipped: 'start',
+              maxBarThickness: 24,
               hoverBackgroundColor: seriesColor.solid,
               hoverBorderColor: seriesColor.border,
             }],
@@ -117,15 +115,16 @@ export default function Dashboard() {
           chartType: 'scatter',
           data: {
             datasets: [{
-              label: `${formatLabel(chart.yLabel)} vs ${formatLabel(chart.xLabel)}`,
+              label: `${formatLabel(chart.yLabel)} ${t('common.versus')} ${formatLabel(chart.xLabel)}`,
               data: chart.data.map(d => ({ x: d.x, y: d.y })),
               backgroundColor: seriesColor.solid + 'B3',
               borderColor: seriesColor.solid,
               borderWidth: 2,
-              pointRadius: 7,
-              pointHoverRadius: 9,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              pointHitRadius: 12,
               pointBorderWidth: 2,
-              pointBorderColor: isDark ? '#0f172a' : '#ffffff',
+              pointBorderColor: chartTheme.background,
               pointStyle: 'circle',
             }],
           },
@@ -141,17 +140,18 @@ export default function Dashboard() {
           data: {
             labels: chart.labels.map(l => formatLabel(l)),
             datasets: [{
-              label: formatLabel(chart.yLabel || 'Value'),
+              label: formatLabel(chart.yLabel || t('common.value')),
               data: chart.data,
-              backgroundColor: 'rgba(99, 102, 241, 0.08)',
-              borderColor: 'rgb(99, 102, 241)',
-              borderWidth: 3,
+              backgroundColor: seriesColor.bg,
+              borderColor: seriesColor.border,
+              borderWidth: 2,
               fill: true,
-              tension: 0.35,
-              pointRadius: 5,
-              pointHoverRadius: 8,
-              pointBackgroundColor: 'rgb(99, 102, 241)',
-              pointBorderColor: isDark ? '#0f172a' : '#ffffff',
+              tension: 0.25,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              pointHitRadius: 12,
+              pointBackgroundColor: seriesColor.solid,
+              pointBorderColor: chartTheme.background,
               pointBorderWidth: 2,
               pointStyle: 'circle',
             }],
@@ -166,21 +166,20 @@ export default function Dashboard() {
       // Doughnut Chart - Part-to-Whole (Grade Distribution)
       if (chart.type === 'doughnut' || (chart.type === 'pie' && chart.labels?.some(l => ['A','B','C','D','F'].includes(l)))) {
         const backgrounds = chart.labels.map(l => GRADE_COLORS[l]?.bg || seriesColor.bg);
-        const borders = chart.labels.map(l => GRADE_COLORS[l]?.border || seriesColor.border);
 
         return {
           ...chart,
           chartType: 'doughnut',
           data: {
-            labels: chart.labels.map(l => `Grade ${l}`),
+            labels: chart.labels.map(l => `${t('common.grade')} ${l}`),
             datasets: [{
               data: chart.data,
               backgroundColor: backgrounds,
-              borderColor: borders,
-              borderWidth: 3,
+              borderColor: chartTheme.background,
+              borderWidth: 2,
               borderAlign: 'inner',
-              hoverOffset: 10,
-              hoverBorderWidth: 4,
+              hoverOffset: 6,
+              hoverBorderWidth: 2,
             }],
           },
           options: getDoughnutOptions(isDark),
@@ -194,7 +193,7 @@ export default function Dashboard() {
         data: {
           labels: chart.labels.map(l => formatLabel(l)),
           datasets: [{
-            label: formatLabel(chart.yLabel || 'Value'),
+            label: formatLabel(chart.yLabel || t('common.value')),
             data: chart.data,
             backgroundColor: seriesColor.bg,
             borderColor: seriesColor.border,
@@ -205,7 +204,7 @@ export default function Dashboard() {
         options: getChartOptions(isDark),
       };
     });
-  }, [chartData, isDark]);
+  }, [chartData, chartTheme.background, isDark, seriesColors, t]);
 
   // KPI Cards configuration
   const icons = [
@@ -215,32 +214,34 @@ export default function Dashboard() {
     getIcon('target') || null,
   ];
 
-  const gradients = ['from-indigo-500 to-purple-500', 'from-emerald-500 to-teal-400', 'from-pink-500 to-rose-400', 'from-indigo-600 to-purple-500'];
-
   const cards = useMemo(() => {
     const atRiskCount = atRisk && typeof atRisk.count === 'number' ? atRisk.count : 0;
     const list = [];
     kpis.forEach((kpi) => {
       const isTotal = kpi.key === 'total';
-      list.push({ ...kpi, featured: isTotal, to: isTotal ? '/students' : undefined });
-      if (isTotal) {
+      list.push({
+        ...kpi,
+        featured: isTotal,
+        to: isTotal && canManageStudents ? studentListPath : undefined,
+      });
+      if (isTotal && canManageStudents) {
         list.push({
           label: t('dashboard.atRiskCard'),
           key: 'at_risk',
           value: atRiskCount,
           format: 'int',
-          to: '/students?at_risk=1',
+          to: atRiskPath,
           featured: true,
           variant: 'danger',
         });
       }
     });
     return list;
-  }, [kpis, atRisk, t]);
+  }, [atRisk, atRiskPath, canManageStudents, kpis, studentListPath, t]);
 
   if (loading) {
     return (
-      <div className="space-y-8" aria-busy="true" aria-label="Loading dashboard">
+      <div className="space-y-8" role="status" aria-busy="true" aria-label={t('dashboard.loading')}>
         <div className="bento-grid-4">
           {[...Array(6)].map((_, i) => <SkeletonCard key={i} />)}
         </div>
@@ -252,9 +253,9 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-8" role="main">
+    <div className="space-y-8">
       {/* KPI Cards */}
-      <div className="bento-grid-4" role="region" aria-label="Key Metrics">
+      <div className="bento-grid-4" role="region" aria-label={t('dashboard.keyMetrics')}>
         {cards.map((card, idx) => (
           <KPICard
             key={card.key || idx}
@@ -265,7 +266,6 @@ export default function Dashboard() {
             featured={card.featured}
             variant={card.variant || 'primary'}
             to={card.to}
-            onClick={card.to ? undefined : () => {}}
           />
         ))}
       </div>
@@ -285,9 +285,9 @@ export default function Dashboard() {
               </div>
               <p className="text-sm text-danger-600 dark:text-danger-400/80 mb-3 ml-12">
                 {t('dashboard.atRiskMessage', {
-                  att: atRisk.thresholds?.attendance || 75,
-                  hrs: atRisk.thresholds?.studyHours || 2,
-                  gpa: atRisk.thresholds?.gpa || 2.5,
+                  att: atRisk.thresholds?.attendance ?? 75,
+                  hrs: atRisk.thresholds?.studyHours ?? 2,
+                  gpa: atRisk.thresholds?.gpa ?? 2.5,
                 })}
               </p>
               <div className="flex flex-wrap gap-1.5 ml-12">
@@ -304,7 +304,7 @@ export default function Dashboard() {
               </div>
             </div>
             <Link
-              to="/students?at_risk=1"
+              to={atRiskPath}
               className="inline-flex min-h-11 items-center justify-center rounded-xl bg-danger-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-danger-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger-500 focus-visible:ring-offset-2"
               aria-label={t('dashboard.viewAtRiskStudents')}
             >
@@ -315,29 +315,42 @@ export default function Dashboard() {
       )}
 
       {/* Charts Grid */}
-      <div className="bento-grid-2" role="region" aria-label="Analytics Charts">
-        {charts.map((chart, idx) => (
-          <Card key={idx} padding="lg" className="min-h-[420px]">
-            <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-              <h3 className="text-lg font-bold text-primary-950 dark:text-white flex items-center gap-2">
-                {formatLabel(chart.title)}
-              </h3>
-              {chart.xLabel && chart.yLabel && (
-                <Badge variant="outline" size="sm" className="whitespace-nowrap">
-                  <span className="truncate max-w-[100px]">{formatLabel(chart.xLabel)}</span>
-                  <Icon name="chevronRight" className="w-3 h-3 flex-shrink-0 text-primary-400" />
-                  <span className="truncate max-w-[100px]">{formatLabel(chart.yLabel)}</span>
-                </Badge>
-              )}
-            </div>
-            <div className="chart-container" style={{ height: '360px', position: 'relative' }}>
-              {chart.chartType === 'bar' && <Bar data={chart.data} options={chart.options} />}
-              {chart.chartType === 'scatter' && <Scatter data={chart.data} options={chart.options} />}
-              {chart.chartType === 'line' && <Line data={chart.data} options={chart.options} />}
-              {chart.chartType === 'doughnut' && <Doughnut data={chart.data} options={chart.options} />}
-            </div>
-          </Card>
-        ))}
+      <div className="bento-grid-2" role="region" aria-label={t('dashboard.analyticsCharts')}>
+        {charts.map((chart, idx) => {
+          const chartTitle = formatLabel(chart.title);
+          const dataPointCount = chart.data.datasets.reduce(
+            (total, dataset) => total + dataset.data.filter((value) => value != null).length,
+            0
+          );
+
+          return (
+            <Card key={chart.key || idx} padding="lg" className="min-h-[420px]">
+              <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+                <h3 className="text-lg font-bold text-primary-950 dark:text-white flex items-center gap-2">
+                  {chartTitle}
+                </h3>
+                {chart.xLabel && chart.yLabel && (
+                  <Badge variant="outline" size="sm" className="whitespace-nowrap">
+                    <span className="truncate max-w-[100px]">{formatLabel(chart.xLabel)}</span>
+                    <Icon name="chevronRight" className="w-3 h-3 flex-shrink-0 text-primary-400" />
+                    <span className="truncate max-w-[100px]">{formatLabel(chart.yLabel)}</span>
+                  </Badge>
+                )}
+              </div>
+              <div
+                className="chart-container"
+                style={{ height: '360px', position: 'relative' }}
+                role="img"
+                aria-label={t('dashboard.chartAria', { title: chartTitle, count: dataPointCount })}
+              >
+                {chart.chartType === 'bar' && <Bar data={chart.data} options={chart.options} />}
+                {chart.chartType === 'scatter' && <Scatter data={chart.data} options={chart.options} />}
+                {chart.chartType === 'line' && <Line data={chart.data} options={chart.options} />}
+                {chart.chartType === 'doughnut' && <Doughnut data={chart.data} options={chart.options} />}
+              </div>
+            </Card>
+          );
+        })}
 
         {!charts.length && (
           <Card padding="lg" className="col-span-full text-center py-16">

@@ -4,7 +4,7 @@ import { Line } from 'react-chartjs-2';
 import { Card } from '../ui';
 import { useLanguage } from '../../hooks/useLanguage';
 import { useTheme } from '../../hooks/useTheme';
-import { MULTI_SERIES_COLORS, getChartOptions } from '../../utils/chartTheme';
+import { getChartOptions, getMultiSeriesColors } from '../../utils/chartTheme';
 import { createTrendChartData } from '../../utils/goalProgress';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
@@ -13,18 +13,22 @@ function ChartCard({ title, data, isDark, summary }) {
   const options = getChartOptions(isDark);
   return (
     <Card padding="lg" className="min-h-[330px]">
-      <h3 className="text-base font-bold text-primary-950 dark:text-gray-100">{title}</h3>
-      <p className="sr-only">{summary}</p>
-      <div className="mt-4 h-64" aria-label={title}>
-        <Line
-          data={data}
-          options={{
-            ...options,
-            maintainAspectRatio: false,
-            plugins: { ...options.plugins, legend: { display: false } },
-          }}
-        />
-      </div>
+      <h3 className="text-base font-bold text-ink">{title}</h3>
+      <figure className="mt-4">
+        <div className="h-64">
+          <Line
+            data={data}
+            options={{
+              ...options,
+              maintainAspectRatio: false,
+              plugins: { ...options.plugins, legend: { display: false } },
+            }}
+            role="img"
+            aria-label={summary}
+          />
+        </div>
+        <figcaption className="sr-only">{summary}</figcaption>
+      </figure>
     </Card>
   );
 }
@@ -32,20 +36,21 @@ function ChartCard({ title, data, isDark, summary }) {
 export default function ProgressCharts({ checkIns, progress }) {
   const { t } = useLanguage();
   const { isDark } = useTheme();
+  const seriesColors = useMemo(() => getMultiSeriesColors(isDark), [isDark]);
   const charts = useMemo(() => [
     {
       title: t('progress.scoreTrend'),
-      data: createTrendChartData(checkIns, 'current_score', t('progress.latestScore'), MULTI_SERIES_COLORS[0]),
+      data: createTrendChartData(checkIns, 'current_score', t('progress.latestScore'), seriesColors[0]),
     },
     {
       title: t('progress.studyHoursTrend'),
-      data: createTrendChartData(checkIns, 'study_hours', t('progress.averageStudyHours'), MULTI_SERIES_COLORS[1]),
+      data: createTrendChartData(checkIns, 'study_hours', t('progress.averageStudyHours'), seriesColors[1]),
     },
     {
       title: t('progress.attendanceTrend'),
-      data: createTrendChartData(checkIns, 'attendance_percent', t('progress.averageAttendance'), MULTI_SERIES_COLORS[2]),
+      data: createTrendChartData(checkIns, 'attendance_percent', t('progress.averageAttendance'), seriesColors[2]),
     },
-  ].filter((chart) => chart.data), [checkIns, t]);
+  ].filter((chart) => chart.data), [checkIns, seriesColors, t]);
 
   if (!charts.length) {
     return (

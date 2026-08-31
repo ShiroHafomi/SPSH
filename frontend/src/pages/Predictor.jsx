@@ -427,7 +427,8 @@ export default function Predictor() {
                         </div>
                         <div className="col-span-2">
                           <button
-                            onChange={handleWhatIfPredict}
+                            type="button"
+                            onClick={handleWhatIfPredict}
                             disabled={loading}
                             className="btn-outline btn-primary w-full"
                           >
