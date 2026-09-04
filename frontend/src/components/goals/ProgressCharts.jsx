@@ -5,7 +5,7 @@ import { Card } from '../ui';
 import { useLanguage } from '../../hooks/useLanguage';
 import { useTheme } from '../../hooks/useTheme';
 import { getChartOptions, getMultiSeriesColors } from '../../utils/chartTheme';
-import { createTrendChartData } from '../../utils/goalProgress';
+import { createTrendChartData, formatMetric, getProgressStatusPresentation } from '../../utils/goalProgress';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
 
@@ -34,36 +34,41 @@ function ChartCard({ title, data, isDark, summary }) {
 }
 
 export default function ProgressCharts({ checkIns, progress }) {
-  const { t } = useLanguage();
+  const { lang, t } = useLanguage();
   const { isDark } = useTheme();
   const seriesColors = useMemo(() => getMultiSeriesColors(isDark), [isDark]);
   const charts = useMemo(() => [
     {
       title: t('progress.scoreTrend'),
-      data: createTrendChartData(checkIns, 'current_score', t('progress.latestScore'), seriesColors[0]),
+      data: createTrendChartData(checkIns, 'current_score', t('progress.latestScore'), seriesColors[0], lang),
     },
     {
       title: t('progress.studyHoursTrend'),
-      data: createTrendChartData(checkIns, 'study_hours', t('progress.averageStudyHours'), seriesColors[1]),
+      data: createTrendChartData(checkIns, 'study_hours', t('progress.averageStudyHours'), seriesColors[1], lang),
     },
     {
       title: t('progress.attendanceTrend'),
-      data: createTrendChartData(checkIns, 'attendance_percent', t('progress.averageAttendance'), seriesColors[2]),
+      data: createTrendChartData(checkIns, 'attendance_percent', t('progress.averageAttendance'), seriesColors[2], lang),
     },
-  ].filter((chart) => chart.data), [checkIns, seriesColors, t]);
+  ].filter((chart) => chart.data), [checkIns, lang, seriesColors, t]);
+  const statusPresentation = getProgressStatusPresentation(progress?.status);
+  const chartSummary = t('progress.textualSummary', {
+    count: formatMetric(progress?.totalCheckIns, { digits: 0, language: lang }),
+    status: t(statusPresentation.labelKey),
+  });
 
   if (!charts.length) {
     return (
       <Card padding="lg" className="text-center">
-        <h3 className="font-bold text-primary-950 dark:text-gray-100">{t('progress.charts')}</h3>
-        <p className="mt-2 text-sm text-primary-600 dark:text-gray-400">{t('progress.chartsEmpty')}</p>
+        <h3 className="font-bold text-ink">{t('progress.charts')}</h3>
+        <p className="mt-2 text-sm text-ink-muted">{t('progress.chartsEmpty')}</p>
       </Card>
     );
   }
 
   return (
     <section aria-labelledby="progress-charts-title">
-      <h2 id="progress-charts-title" className="mb-4 text-lg font-bold text-primary-950 dark:text-gray-100">{t('progress.charts')}</h2>
+      <h2 id="progress-charts-title" className="mb-4 text-lg font-bold text-ink">{t('progress.charts')}</h2>
       <div className="grid gap-5 xl:grid-cols-3">
         {charts.map((chart) => (
           <ChartCard
@@ -71,7 +76,7 @@ export default function ProgressCharts({ checkIns, progress }) {
             title={chart.title}
             data={chart.data}
             isDark={isDark}
-            summary={t('progress.textualSummary', { count: progress?.totalCheckIns ?? 0, status: progress?.status ?? '' })}
+            summary={`${chart.title}. ${chartSummary}`}
           />
         ))}
       </div>
