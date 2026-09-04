@@ -1,59 +1,85 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { useFlash } from '../components/FlashProvider';
 import { useLanguage } from '../hooks/useLanguage';
-import { Button, SkeletonCard } from '../components/ui';
+import { Button, ErrorState, PageHeader, SkeletonCard } from '../components/ui';
 import CheckinHistory from '../components/goals/CheckinHistory';
 import GoalEmptyState from '../components/goals/GoalEmptyState';
 import GoalSummaryCard from '../components/goals/GoalSummaryCard';
 import ProgressCharts from '../components/goals/ProgressCharts';
 import ProgressOverview from '../components/goals/ProgressOverview';
 import TeacherFeedbackForm from '../components/goals/TeacherFeedbackForm';
+import { asPositiveSafeInteger, normalizeGoalEntries, normalizeGoalPagination } from '../utils/goalProgress';
+
+const PAGE_SIZE = 20;
 
 export default function StudentGoalsProgress({ mode }) {
   const { studentId } = useParams();
+  const safeStudentId = asPositiveSafeInteger(studentId);
   const { t } = useLanguage();
   const { addFlash } = useFlash();
+  const requestRef = useRef(0);
   const [goals, setGoals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedGoalId, setSelectedGoalId] = useState(null);
-  const [pagination, setPagination] = useState({ page: 1, size: 20, total: 0, totalPages: 1 });
+  const [pagination, setPagination] = useState({ page: 1, size: PAGE_SIZE, total: 0, totalPages: 1 });
 
   const endpoint = mode === 'admin' ? '/admin' : '/teacher';
   const backTo = mode === 'admin' ? '/admin/students' : '/teacher';
 
   const loadGoals = useCallback(async (page = 1) => {
+    const requestId = ++requestRef.current;
     setLoading(true);
     setError('');
+
+    if (safeStudentId === null) {
+      setError(t('common.notFound'));
+      setLoading(false);
+      return;
+    }
+
+    const requestedPage = asPositiveSafeInteger(page) || 1;
+    const requestPage = (targetPage) => {
+      const query = mode === 'admin' ? `?page=${targetPage}&size=${PAGE_SIZE}` : '';
+      return api.get(`${endpoint}/students/${safeStudentId}/goals${query}`);
+    };
+
     try {
-      const query = mode === 'admin' ? `?page=${page}&size=${pagination.size}` : '';
-      const response = await api.get(`${endpoint}/students/${studentId}/goals${query}`);
-      const entries = Array.isArray(response.goals) ? response.goals : [];
+      let response = await requestPage(requestedPage);
+      if (requestId !== requestRef.current) return;
+
+      let normalizedPagination = mode === 'admin'
+        ? normalizeGoalPagination(response, requestedPage, PAGE_SIZE)
+        : null;
+      if (normalizedPagination && normalizedPagination.page !== requestedPage) {
+        response = await requestPage(normalizedPagination.page);
+        if (requestId !== requestRef.current) return;
+        normalizedPagination = normalizeGoalPagination(response, normalizedPagination.page, PAGE_SIZE);
+      }
+
+      const entries = normalizeGoalEntries(response?.goals);
       setGoals(entries);
       setSelectedGoalId((current) => (
-        entries.some((entry) => entry.goal?.id === current)
+        entries.some((entry) => entry.goal.id === current)
           ? current
-          : entries[0]?.goal?.id ?? null
+          : entries[0]?.goal.id ?? null
       ));
-      if (mode === 'admin') {
-        setPagination({
-          page: response.page || page,
-          size: response.size || pagination.size,
-          total: response.total || 0,
-          totalPages: response.totalPages || 1,
-        });
-      }
+      if (normalizedPagination) setPagination(normalizedPagination);
     } catch (loadError) {
+      if (requestId !== requestRef.current) return;
       setError(loadError?.message || t('goals.loadFailed'));
     } finally {
-      setLoading(false);
+      if (requestId === requestRef.current) setLoading(false);
     }
-  }, [endpoint, mode, pagination.size, studentId, t]);
+  }, [endpoint, mode, safeStudentId, t]);
 
   useEffect(() => {
     loadGoals();
+    return () => {
+      requestRef.current += 1;
+    };
   }, [loadGoals]);
 
   const selectedEntry = useMemo(
@@ -62,12 +88,18 @@ export default function StudentGoalsProgress({ mode }) {
   );
 
   const saveFeedback = async (goalId, checkInId, teacherFeedback) => {
-    const response = await api.put(`/teacher/students/${studentId}/goals/${goalId}/feedback`, {
-      checkin_id: checkInId,
+    const safeGoalId = asPositiveSafeInteger(goalId);
+    const safeCheckInId = asPositiveSafeInteger(checkInId);
+    if (safeStudentId === null || safeGoalId === null || safeCheckInId === null) {
+      throw new Error(t('checkins.feedbackFailed'));
+    }
+
+    const response = await api.put(`/teacher/students/${safeStudentId}/goals/${safeGoalId}/feedback`, {
+      checkin_id: safeCheckInId,
       teacher_feedback: teacherFeedback,
     });
     addFlash(t('checkins.feedbackSaved'), 'success');
-    if (response.changed) await loadGoals();
+    if (response?.changed) await loadGoals();
   };
 
   if (loading) {
@@ -76,21 +108,26 @@ export default function StudentGoalsProgress({ mode }) {
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-danger-200 bg-danger-50 p-6 text-danger-700 dark:border-danger-900/50 dark:bg-danger-950/30 dark:text-danger-300" role="alert">
-        <p className="font-semibold">{error}</p>
-        <Button className="mt-4" variant="outline" onClick={() => loadGoals(pagination.page)}>{t('goals.retryLoad')}</Button>
-      </div>
+      <ErrorState
+        title={t('common.failedToLoad')}
+        description={error}
+        action={() => loadGoals(pagination.page)}
+        actionLabel={t('goals.retryLoad')}
+      />
     );
   }
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <Link className="text-sm font-semibold text-primary-600 hover:text-primary-800 dark:text-primary-300 dark:hover:text-primary-200" to={backTo}>{t('common.backToList')}</Link>
-          <h1 className="mt-2 text-2xl font-bold text-primary-950 dark:text-gray-100">{t('goals.studentProgress', { name: studentId })}</h1>
-          <p className="mt-1 text-primary-600 dark:text-gray-400">{t('goals.studentProgressDesc')}</p>
-        </div>
+      <div>
+        <Link className="focus-ring inline-flex min-h-11 items-center rounded-lg px-2 text-sm font-semibold text-action transition-colors hover:bg-action-muted" to={backTo}>
+          {t('common.backToList')}
+        </Link>
+        <PageHeader
+          className="mt-2"
+          title={t('goals.studentProgress', { name: safeStudentId ?? '—' })}
+          subtitle={t('goals.studentProgressDesc')}
+        />
       </div>
 
       {!goals.length ? <GoalEmptyState description={t('goals.noStudentGoalsDesc')} /> : (
@@ -115,8 +152,8 @@ export default function StudentGoalsProgress({ mode }) {
           )}
 
           {mode === 'admin' && pagination.totalPages > 1 && (
-            <nav className="flex flex-wrap items-center justify-between gap-3 border-t border-primary-100 pt-5 dark:border-gray-800" aria-label={t('common.actions')}>
-              <p className="text-sm text-primary-600 dark:text-gray-400">{t('common.showing', { start: (pagination.page - 1) * pagination.size + 1, end: Math.min(pagination.page * pagination.size, pagination.total), total: pagination.total })}</p>
+            <nav className="flex flex-wrap items-center justify-between gap-3 border-t border-divider pt-5" aria-label={t('table.pagination')}>
+              <p className="text-sm text-ink-muted">{t('common.showing', { start: (pagination.page - 1) * pagination.size + 1, end: Math.min(pagination.page * pagination.size, pagination.total), total: pagination.total })}</p>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" disabled={pagination.page <= 1} onClick={() => loadGoals(pagination.page - 1)}>{t('common.previous')}</Button>
                 <Button variant="outline" size="sm" disabled={pagination.page >= pagination.totalPages} onClick={() => loadGoals(pagination.page + 1)}>{t('common.next')}</Button>

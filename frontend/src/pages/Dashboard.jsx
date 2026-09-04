@@ -292,7 +292,7 @@ export default function Dashboard() {
               </p>
               <div className="flex flex-wrap gap-1.5 ml-12">
                 {atRisk.students.slice(0, 8).map((s) => (
-                  <Badge key={s.id} variant="primary" size="sm" className="dark:bg-primary-900/40">
+                  <Badge key={s.id} variant="default" size="sm">
                     #{s.id}
                   </Badge>
                 ))}

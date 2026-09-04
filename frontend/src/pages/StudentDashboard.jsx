@@ -1,789 +1,830 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth, homeForRole } from '../hooks/useAuth';
-import { useFlash } from '../components/FlashProvider';
-import { useLanguage } from '../hooks/useLanguage';
 import { api } from '../api';
 import { renderIcon } from '../components/IconMap';
-import { GRADE_COLORS, getGradeBadgeClass } from '../utils/chartTheme';
+import { useFlash } from '../components/FlashProvider';
+import {
+  Badge,
+  Button,
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  EmptyState,
+  ErrorState,
+  GradeBadge,
+  Icon,
+  Input,
+  PageHeader,
+  Select,
+  SkeletonCard,
+  Textarea,
+} from '../components/ui';
+import { homeForRole, useAuth } from '../hooks/useAuth';
+import { useLanguage } from '../hooks/useLanguage';
+import {
+  buildSimulationInputs,
+  buildStudentProfileForm,
+  formatStudentMetric,
+  normalizeGrade,
+  normalizePercentage,
+  normalizeProbabilityEntries,
+  scoreDelta,
+  scoreTone,
+  toFiniteNumber,
+} from '../utils/studentDashboard';
+
+const EMPTY_PROFILE_FORM = buildStudentProfileForm();
+const EMPTY_SIMULATION_INPUTS = buildSimulationInputs();
+
+const SCORE_TONE_CLASSES = {
+  success: 'text-success-700 dark:text-success-300',
+  warning: 'text-warning-700 dark:text-warning-300',
+  danger: 'text-danger-700 dark:text-danger-300',
+  neutral: 'text-ink',
+};
+
+const RISK_STYLES = {
+  danger: 'border-danger-300 bg-danger-50 text-danger-800 dark:border-danger-900/60 dark:bg-danger-950/30 dark:text-danger-200',
+  warning: 'border-warning-300 bg-warning-50 text-warning-800 dark:border-warning-900/60 dark:bg-warning-950/30 dark:text-warning-200',
+  info: 'border-primary-300 bg-primary-50 text-primary-800 dark:border-primary-900/60 dark:bg-primary-950/30 dark:text-primary-200',
+};
+
+const RECOMMENDATION_STYLES = {
+  positive: 'border-success-200 bg-success-50 text-success-800 dark:border-success-900/50 dark:bg-success-950/30 dark:text-success-200',
+  warning: 'border-warning-200 bg-warning-50 text-warning-800 dark:border-warning-900/50 dark:bg-warning-950/30 dark:text-warning-200',
+  danger: 'border-danger-200 bg-danger-50 text-danger-800 dark:border-danger-900/50 dark:bg-danger-950/30 dark:text-danger-200',
+  info: 'border-primary-200 bg-primary-50 text-primary-800 dark:border-primary-900/50 dark:bg-primary-950/30 dark:text-primary-200',
+};
+
+const API_ICON_MAP = {
+  AlertTriangle: 'AlertTriangle',
+  BookOpen: 'BookOpen',
+  Moon: 'Moon',
+  Briefcase: 'Briefcase',
+  TrendingUp: 'TrendingUp',
+};
+
+function asObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+}
+
+function textValue(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function GradeValue({ grade, size = 'default' }) {
+  const normalizedGrade = normalizeGrade(grade);
+  return normalizedGrade
+    ? <GradeBadge grade={normalizedGrade} size={size} />
+    : <Badge variant="gray" size={size === 'lg' ? 'lg' : 'default'}>—</Badge>;
+}
+
+function MetricCard({ icon, label, value, supportingText, valueClassName = 'text-ink' }) {
+  return (
+    <Card padding="sm" className="min-w-0">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-muted">{label}</p>
+          <div className={`mt-3 font-mono text-3xl font-bold tabular-nums ${valueClassName}`}>{value}</div>
+        </div>
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-action-muted text-action-strong" aria-hidden="true">
+          <Icon name={icon} className="size-5" />
+        </span>
+      </div>
+      {supportingText && <p className="mt-3 text-sm text-ink-muted">{supportingText}</p>}
+    </Card>
+  );
+}
+
+function RangeControl({ id, label, value, min, max, step, currentValue, valueLabel, onChange }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-4">
+        <label htmlFor={id} className="text-sm font-semibold text-ink">{label}</label>
+        <output htmlFor={id} className="min-w-20 text-right font-mono text-sm font-bold tabular-nums text-ink">
+          {valueLabel}
+        </output>
+      </div>
+      <input
+        id={id}
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="focus-ring mt-3 h-11 w-full cursor-pointer accent-primary-600"
+      />
+      <p className="mt-1 text-sm text-ink-muted">{currentValue}</p>
+    </div>
+  );
+}
 
 export default function StudentDashboard() {
   const { user } = useAuth();
   const { addFlash } = useFlash();
   const navigate = useNavigate();
-  const { t } = useLanguage();
+  const { lang, t } = useLanguage();
+  const profileRequestRef = useRef(0);
+  const advisorRequestRef = useRef(0);
+  const simulationRequestRef = useRef(0);
+  const tabRefs = useRef([]);
   const [loading, setLoading] = useState(true);
+  const [profileError, setProfileError] = useState(false);
+  const [profileMissing, setProfileMissing] = useState(false);
   const [profile, setProfile] = useState(null);
   const [percentiles, setPercentiles] = useState({});
   const [riskAlerts, setRiskAlerts] = useState([]);
   const [prediction, setPrediction] = useState(null);
   const [simulated, setSimulated] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
-  const [advisorAdvice, setAdvisorAdvice] = useState(null);
+  const [simulationLoading, setSimulationLoading] = useState(false);
+  const [simulationError, setSimulationError] = useState(false);
+  const [advisorAdvice, setAdvisorAdvice] = useState('');
+  const [advisorLoading, setAdvisorLoading] = useState(true);
+  const [advisorError, setAdvisorError] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
-  const [simInputs, setSimInputs] = useState({
-    study_hours_per_day: 0,
-    sleep_hours: 0,
-    attendance_percent: 0,
-  });
-  const [profileForm, setProfileForm] = useState({});
+  const [simInputs, setSimInputs] = useState(EMPTY_SIMULATION_INPUTS);
+  const [profileForm, setProfileForm] = useState(EMPTY_PROFILE_FORM);
   const [profileSaving, setProfileSaving] = useState(false);
 
-  // Fetch profile on mount
-  useEffect(() => {
-    fetchProfile();
-    fetchAdvisor();
+  const loadAdvisor = useCallback(async () => {
+    const requestId = ++advisorRequestRef.current;
+    setAdvisorLoading(true);
+    setAdvisorError(false);
+
+    try {
+      const response = await api.get('/student/me/advisor');
+      if (requestId !== advisorRequestRef.current) return;
+      setAdvisorAdvice(textValue(response?.advice));
+    } catch {
+      if (requestId !== advisorRequestRef.current) return;
+      setAdvisorAdvice('');
+      setAdvisorError(true);
+    } finally {
+      if (requestId === advisorRequestRef.current) setAdvisorLoading(false);
+    }
   }, []);
 
-  const fetchProfile = async () => {
-    try {
-      setLoading(true);
-      const res = await api.get('/student/me/profile');
-      setProfile(res.student);
-      setPercentiles(res.percentiles);
-      setRiskAlerts(res.riskAlerts);
-      // Initialize simulator with current values
-      if (res.student) {
-        setSimInputs({
-          study_hours_per_day: res.student.study_hours_per_day || 0,
-          sleep_hours: res.student.sleep_hours || 0,
-          attendance_percent: res.student.attendance_percent || 0,
-        });
-        // Initialize profile form
-        setProfileForm({
-          gender: res.student.gender || '',
-          age: res.student.age || '',
-          study_hours_per_day: res.student.study_hours_per_day || '',
-          attendance_percent: res.student.attendance_percent || '',
-          sleep_hours: res.student.sleep_hours || '',
-          previous_gpa: res.student.previous_gpa || '',
-          parental_education: res.student.parental_education || '',
-          internet_access: res.student.internet_access ? 'Yes' : 'No',
-          extracurricular: res.student.extracurricular ? 'Yes' : 'No',
-          part_time_job: res.student.part_time_job ? 'Yes' : 'No',
-          notes: res.student.notes || '',
-        });
-      }
-      // Get baseline prediction
-      const predRes = await api.post('/student/me/simulate', {});
-      setPrediction({ final_score: res.student?.final_score, grade: res.student?.grade });
-      setSimulated(predRes.current);
-    } catch (err) {
-      console.error('Failed to fetch profile:', err);
-      addFlash(t('student.profileLoadFailed'), 'error');
-      if (err.status === 403) navigate(homeForRole(user?.role));
-    } finally {
-      setLoading(false);
-    }
-  };
+  const loadProfile = useCallback(async () => {
+    const requestId = ++profileRequestRef.current;
+    setLoading(true);
+    setProfileError(false);
+    setProfileMissing(false);
 
-  const fetchAdvisor = async () => {
     try {
-      const res = await api.get('/student/me/advisor');
-      setAdvisorAdvice(res.advice);
-    } catch (err) {
-      console.error('Failed to fetch advisor:', err);
+      const response = await api.get('/student/me/profile');
+      if (requestId !== profileRequestRef.current) return;
+
+      const student = asObject(response?.student);
+      if (!student) {
+        setProfile(null);
+        setProfileMissing(true);
+        return;
+      }
+
+      simulationRequestRef.current += 1;
+      setSimulationLoading(false);
+      setProfile(student);
+      setPercentiles(asObject(response?.percentiles) || {});
+      setRiskAlerts(Array.isArray(response?.riskAlerts) ? response.riskAlerts.filter(asObject) : []);
+      setSimInputs(buildSimulationInputs(student));
+      setProfileForm(buildStudentProfileForm(student));
+      setPrediction(null);
+      setSimulated(null);
+      setRecommendations([]);
+      setSimulationError(false);
+
+      try {
+        const predictionResponse = await api.post('/student/me/simulate', {});
+        if (requestId !== profileRequestRef.current) return;
+        const baseline = asObject(predictionResponse?.current);
+        setPrediction(baseline);
+        setSimulated(baseline);
+      } catch {
+        if (requestId === profileRequestRef.current) {
+          setPrediction(null);
+          setSimulated(null);
+          setSimulationError(true);
+        }
+      }
+    } catch (error) {
+      if (requestId !== profileRequestRef.current) return;
+      setProfile(null);
+      if (error?.status === 400 || error?.status === 404) {
+        setProfileMissing(true);
+      } else {
+        setProfileError(true);
+      }
+      if (error?.status === 403) navigate(homeForRole(user?.role));
+    } finally {
+      if (requestId === profileRequestRef.current) setLoading(false);
     }
-  };
+  }, [navigate, user?.role]);
+
+  useEffect(() => {
+    loadProfile();
+    loadAdvisor();
+
+    return () => {
+      profileRequestRef.current += 1;
+      advisorRequestRef.current += 1;
+      simulationRequestRef.current += 1;
+    };
+  }, [loadAdvisor, loadProfile]);
 
   const handleSimulate = async () => {
+    const requestId = ++simulationRequestRef.current;
+    setSimulationLoading(true);
+    setSimulationError(false);
+
     try {
-      const res = await api.post('/student/me/simulate', simInputs);
-      setSimulated(res.simulated);
-      setRecommendations(res.recommendations);
-    } catch (err) {
-      console.error('Simulation failed:', err);
+      const response = await api.post('/student/me/simulate', simInputs);
+      if (requestId !== simulationRequestRef.current) return;
+      const baseline = asObject(response?.current);
+      if (baseline) setPrediction(baseline);
+      setSimulated(asObject(response?.simulated));
+      setRecommendations(Array.isArray(response?.recommendations) ? response.recommendations.filter(asObject) : []);
+    } catch {
+      if (requestId !== simulationRequestRef.current) return;
+      setSimulationError(true);
       addFlash(t('student.simulationFailed'), 'error');
+    } finally {
+      if (requestId === simulationRequestRef.current) setSimulationLoading(false);
     }
   };
 
   const handleInputChange = (field, value) => {
-    setSimInputs(prev => ({ ...prev, [field]: value }));
+    setSimInputs((current) => ({ ...current, [field]: value }));
   };
 
   const handleProfileChange = (field, value) => {
-    setProfileForm(prev => ({ ...prev, [field]: value }));
+    setProfileForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleTabKeyDown = (event, index) => {
+    let nextIndex;
+    if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
+    if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length;
+    if (event.key === 'Home') nextIndex = 0;
+    if (event.key === 'End') nextIndex = tabs.length - 1;
+    if (nextIndex === undefined) return;
+
+    event.preventDefault();
+    setActiveTab(tabs[nextIndex].id);
+    tabRefs.current[nextIndex]?.focus();
   };
 
   const handleSaveProfile = async () => {
+    if (profileSaving) return;
+    setProfileSaving(true);
     try {
-      setProfileSaving(true);
-      const res = await api.put('/student/me/profile', profileForm);
-      setProfile(res.student);
-      // Re-initialize form with updated data
-      setProfileForm({
-        gender: res.student.gender || '',
-        age: res.student.age || '',
-        study_hours_per_day: res.student.study_hours_per_day || '',
-        attendance_percent: res.student.attendance_percent || '',
-        sleep_hours: res.student.sleep_hours || '',
-        previous_gpa: res.student.previous_gpa || '',
-        parental_education: res.student.parental_education || '',
-        internet_access: res.student.internet_access ? 'Yes' : 'No',
-        extracurricular: res.student.extracurricular ? 'Yes' : 'No',
-        part_time_job: res.student.part_time_job ? 'Yes' : 'No',
-        notes: res.student.notes || '',
-      });
+      await api.put('/student/me/profile', profileForm);
+      simulationRequestRef.current += 1;
+      setSimulationLoading(false);
+      setSimulated(null);
+      setPrediction(null);
+      setRecommendations([]);
+      setSimulationError(false);
+      await loadProfile();
       addFlash(t('student.profileSaved'), 'success');
-    } catch (err) {
-      console.error('Failed to save profile:', err);
+    } catch {
       addFlash(t('student.profileSaveFailed'), 'error');
     } finally {
       setProfileSaving(false);
     }
   };
 
+  const gradeProbabilityRows = useMemo(
+    () => normalizeProbabilityEntries(simulated?.grade_probabilities),
+    [simulated]
+  );
+
+  const tabs = [
+    { id: 'overview', label: t('student.tabOverview'), icon: 'dashboard' },
+    { id: 'simulator', label: t('student.tabSimulator'), icon: 'sliders' },
+    { id: 'advisor', label: t('student.tabAdvisor'), icon: 'messageSquare' },
+    { id: 'editProfile', label: t('student.tabEditProfile'), icon: 'user' },
+  ];
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary-600 border-t-transparent" />
+      <div className="mx-auto max-w-7xl space-y-5" aria-busy="true" aria-label={t('student.loadingProfile')}>
+        <SkeletonCard />
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
       </div>
     );
   }
 
-  if (!profile) {
+  if (profileError) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-12 text-center">
-        {renderIcon('AlertCircle', { className: "w-12 h-12 text-danger-500 mx-auto mb-4" })}
-        <h2 className="text-xl font-semibold text-primary-950 dark:text-gray-100 mb-2">
-          {t('student.noProfile')}
-        </h2>
-        <p className="text-primary-500 dark:text-gray-400">
-          {t('student.noProfileDesc')}
-        </p>
+      <div className="mx-auto max-w-4xl">
+        <ErrorState
+          title={t('student.profileLoadFailed')}
+          description={t('student.profileLoadFailedDesc')}
+          action={loadProfile}
+          actionLabel={t('common.tryAgain')}
+        />
       </div>
     );
   }
 
-  const riskColors = {
-    danger: 'border-danger-500 bg-danger-50 text-danger-700 dark:bg-danger-950/30 dark:text-danger-300',
-    warning: 'border-warning-500 bg-warning-50 text-warning-700 dark:bg-warning-950/30 dark:text-warning-300',
-    info: 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-950/30 dark:text-primary-300',
-  };
+  if (profileMissing || !profile) {
+    return (
+      <div className="mx-auto max-w-4xl">
+        <EmptyState icon="user" title={t('student.noProfile')} description={t('student.noProfileDesc')} />
+      </div>
+    );
+  }
 
-  const riskIcons = {
-    AlertTriangle: renderIcon('AlertTriangle', { className: "w-5 h-5" }),
-    BookOpen: renderIcon('BookOpen', { className: "w-5 h-5" }),
-    Moon: renderIcon('Moon', { className: "w-5 h-5" }),
-    Briefcase: renderIcon('Briefcase', { className: "w-5 h-5" }),
-  };
-
-  const getScoreColor = (score) => {
-    if (score >= 80) return 'text-success-600 dark:text-success-400';
-    if (score >= 60) return 'text-warning-600 dark:text-warning-400';
-    return 'text-danger-600 dark:text-danger-400';
-  };
+  const currentGrade = normalizeGrade(profile.grade);
+  const displayName = textValue(profile.name) || textValue(user?.name) || '—';
+  const attendance = normalizePercentage(profile.attendance_percent);
+  const attendanceWidth = attendance ?? 0;
+  const attendanceTone = attendance === null
+    ? 'bg-divider'
+    : attendance >= 75
+      ? 'bg-success-600'
+      : attendance >= 60
+        ? 'bg-warning-600'
+        : 'bg-danger-600';
+  const simulatedScore = toFiniteNumber(simulated?.final_score);
+  const baselineScore = toFiniteNumber(prediction?.final_score);
+  const delta = scoreDelta(simulatedScore, baselineScore);
+  const numberOptions = { maximumFractionDigits: 1 };
+  const wholeNumberOptions = { maximumFractionDigits: 0 };
+  const hoursLabel = (value) => t('student.hoursValue', {
+    value: formatStudentMetric(value, lang, numberOptions),
+  });
+  const percentLabel = (value) => t('student.percentageValue', {
+    value: formatStudentMetric(value, lang, numberOptions),
+  });
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-primary-950 dark:text-gray-100">
-            {t('student.dashboardTitle', { name: profile.name })}
-          </h1>
-          <p className="text-primary-500 dark:text-gray-400">
-            {t('student.dashboardSubtitle')}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className={`${getGradeBadgeClass(profile.grade)} px-4 py-2 text-lg`}>
-            {t('student.currentGrade', { grade: profile.grade })}
-          </span>
-        </div>
-      </div>
+    <div className="mx-auto max-w-7xl space-y-6 sm:space-y-8">
+      <PageHeader
+        title={t('student.dashboardTitle', { name: displayName })}
+        subtitle={t('student.dashboardSubtitle')}
+        actions={
+          <Badge variant="outline" size="lg" className="gap-2">
+            <Icon name="award" className="size-4" />
+            <span>{t('student.currentGrade', { grade: currentGrade || '—' })}</span>
+          </Badge>
+        }
+      />
 
-      {/* Risk Alert Banner */}
       {riskAlerts.length > 0 && (
-        <div className="space-y-3" role="alert" aria-live="polite">
-          {riskAlerts.map((alert, idx) => (
-            <div
-              key={idx}
-              className={`card-clay flex items-start gap-4 p-4 border-l-4 ${riskColors[alert.type] || riskColors.info}`}
-            >
-              <div className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-current/20">
-                {riskIcons[alert.icon] || riskIcons.AlertTriangle}
-              </div>
-              <div className="flex-1">
-                <h3 className="font-semibold">{alert.title}</h3>
-                <p className="mt-1 text-sm">{alert.message}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+        <section className="space-y-3" aria-labelledby="student-risk-alerts-title" aria-live="polite">
+          <h2 id="student-risk-alerts-title" className="sr-only">{t('student.riskAlerts')}</h2>
+          {riskAlerts.map((alert, index) => {
+            const type = Object.hasOwn(RISK_STYLES, alert.type) ? alert.type : 'info';
+            const iconName = Object.hasOwn(API_ICON_MAP, alert.icon)
+              ? API_ICON_MAP[alert.icon]
+              : 'AlertTriangle';
+            return (
+              <article
+                key={`${textValue(alert.title)}-${textValue(alert.message)}-${index}`}
+                className={`flex items-start gap-3 rounded-xl border p-4 ${RISK_STYLES[type]}`}
+              >
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-current/10" aria-hidden="true">
+                  {renderIcon(iconName, { className: 'size-5' })}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-semibold">{textValue(alert.title) || t('student.riskAlertFallback')}</h3>
+                  {textValue(alert.message) && <p className="mt-1 break-words text-sm">{textValue(alert.message)}</p>}
+                </div>
+              </article>
+            );
+          })}
+        </section>
       )}
 
-      {/* Tabs */}
-      <div className="border-b border-primary-200 dark:border-gray-700">
-        <nav className="flex gap-1" role="tablist">
-          {[
-            { id: 'overview', label: t('student.tabOverview'), icon: renderIcon('LayoutDashboard', { className: "w-5 h-5" }) },
-            { id: 'simulator', label: t('student.tabSimulator'), icon: renderIcon('Sliders', { className: "w-5 h-5" }) },
-            { id: 'advisor', label: t('student.tabAdvisor'), icon: renderIcon('MessageSquare', { className: "w-5 h-5" }) },
-            { id: 'editProfile', label: t('student.tabEditProfile'), icon: renderIcon('UserPen', { className: "w-5 h-5" }) },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              role="tab"
-              aria-selected={activeTab === tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-3 rounded-t-xl text-sm font-medium transition-colors ${
-                activeTab === tab.id
-                  ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 border-b-2 border-primary-500'
-                  : 'text-primary-400 dark:text-gray-500 hover:text-primary-600 dark:hover:text-primary-400'
-              }`}
-            >
-              <span className="flex items-center">{tab.icon}</span>
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+      <div className="overflow-x-auto border-b border-divider">
+        <div className="min-w-max" role="tablist" aria-label={t('student.tabsLabel')}>
+          {tabs.map((tab, index) => {
+            const selected = activeTab === tab.id;
+            return (
+              <button
+                ref={(element) => { tabRefs.current[index] = element; }}
+                key={tab.id}
+                id={`student-tab-${tab.id}`}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                aria-controls={`student-panel-${tab.id}`}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => setActiveTab(tab.id)}
+                onKeyDown={(event) => handleTabKeyDown(event, index)}
+                className={`focus-ring inline-flex min-h-11 items-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold transition-colors ${
+                  selected
+                    ? 'border-primary-600 text-action-strong'
+                    : 'border-transparent text-ink-muted hover:border-divider hover:text-ink'
+                }`}
+              >
+                <Icon name={tab.icon} className="size-4" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
-
-      {/* Tab Panels */}
-      <div className="space-y-6">
-        {/* Overview Tab - Personal Scorecard */}
-        {activeTab === 'overview' && (
-          <>
-            {/* Quick What-If Widget */}
-            <div className="card p-6 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100">
-                  Quick What-If: Study Hours
-                </h3>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-primary-600 dark:text-gray-300 mb-2">
-                    Study Hours per Day
-                  </label>
-                  <div className="flex items-center gap-4">
-                    <input
-                      type="range"
-                      min={0}
-                      max={16}
-                      step={0.5}
-                      value={simInputs.study_hours_per_day}
-                      onChange={(e) => handleInputChange('study_hours_per_day', parseFloat(e.target.value))}
-                      className="flex-1 h-2 bg-primary-100 dark:bg-gray-800 rounded-lg appearance-none cursor-pointer accent-primary-600"
-                    />
-                    <span className="text-lg font-mono text-primary-950 dark:text-gray-100 w-16 text-right">
-                      {simInputs.study_hours_per_day}h
-                    </span>
-                  </div>
-                  <p className="text-sm text-primary-400 dark:text-gray-500 mt-1">
-                    Current: {profile.study_hours_per_day}h
-                  </p>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-primary-500 dark:text-gray-400">
-                      Predicted Score:
-                    </p>
-                    <p className="text-2xl font-bold font-mono">
-                      {simulated?.final_score?.toFixed(1) ?? '—'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-primary-500 dark:text-gray-400">
-                      Predicted Grade:
-                    </p>
-                    <span className={`${getGradeBadgeClass(simulated?.grade)} text-lg px-3 py-1`}>
-                      {simulated?.grade ?? '—'}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    // Trigger simulation to update the simulated state
-                    handleSimulate();
-                  }}
-                  className="btn-outline btn-primary w-full"
-                >
-                  Run Quick Simulation
-                </button>
-              </div>
-            </div>
-
-            {/* Scorecard Grid */}
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-              {/* Final Score Card */}
-              <div className="card p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-medium text-primary-500 dark:text-gray-400">
-                    {t('student.finalScore')}
-                  </h3>
-                  <span className={`text-3xl font-bold font-mono ${getScoreColor(profile.final_score)}`}>
-                    {profile.final_score}
-                  </span>
-                </div>
-                <p className="text-sm text-primary-400 dark:text-gray-500">
-                  {t('student.percentile', { p: percentiles.finalScore || 0 })}
-                </p>
-              </div>
-
-              {/* Grade Card */}
-              <div className="card p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-medium text-primary-500 dark:text-gray-400">
-                    {t('student.grade')}
-                  </h3>
-                  <span className={`${getGradeBadgeClass(profile.grade)} text-lg px-4 py-2`}>
-                    {profile.grade}
-                  </span>
-                </div>
-                <p className="text-sm text-primary-400 dark:text-gray-500">
-                  {t('student.classPercentile', { p: percentiles.gpa || 0 })}
-                </p>
-              </div>
-
-              {/* Previous GPA Card */}
-              <div className="card p-6">
-                <h3 className="text-sm font-medium text-primary-500 dark:text-gray-400 mb-2">
-                  {t('student.previousGPA')}
-                </h3>
-                <p className="text-3xl font-bold font-mono text-primary-950 dark:text-gray-100">
-                  {profile.previous_gpa?.toFixed(1) || '-'}
-                </p>
-                <p className="text-sm text-primary-400 dark:text-gray-500 mt-1">
-                  {t('student.percentile', { p: percentiles.gpa || 0 })}
-                </p>
-              </div>
-
-              {/* Attendance Card */}
-              <div className="card p-6">
-                <h3 className="text-sm font-medium text-primary-500 dark:text-gray-400 mb-2">
-                  {t('student.attendance')}
-                </h3>
-                <p className="text-3xl font-bold font-mono text-primary-950 dark:text-gray-100">
-                  {profile.attendance_percent}%
-                </p>
-                <div className="mt-3 h-2 bg-primary-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-300 ${
-                      profile.attendance_percent >= 75
-                        ? 'bg-success-500'
-                        : profile.attendance_percent >= 60
-                        ? 'bg-warning-500'
-                        : 'bg-danger-500'
-                    }`}
-                    style={{ width: `${profile.attendance_percent}%` }}
-                  />
-                </div>
-                <p className="text-sm text-primary-400 dark:text-gray-500 mt-1">
-                  {t('student.percentile', { p: percentiles.attendance || 0 })}
-                </p>
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* Simulator Tab */}
-        {activeTab === 'simulator' && (
-          <div className="grid gap-6 lg:grid-cols-2">
-            {/* Input Controls */}
-            <div className="card p-6">
-              <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-6">
-                {t('student.simulatorTitle')}
-              </h3>
-              <div className="space-y-6">
-                {/* Study Hours */}
-                <div>
-                  <label className="label">{t('student.studyHours')}</label>
-                  <div className="flex items-center gap-4 mt-2">
-                    <input
-                      type="range"
-                      min={0}
-                      max={16}
-                      step={0.5}
-                      value={simInputs.study_hours_per_day}
-                      onChange={(e) => handleInputChange('study_hours_per_day', parseFloat(e.target.value))}
-                      className="flex-1 h-2 bg-primary-100 dark:bg-gray-800 rounded-lg appearance-none cursor-pointer accent-primary-600"
-                    />
-                    <span className="text-lg font-mono text-primary-950 dark:text-gray-100 w-16 text-right">
-                      {simInputs.study_hours_per_day}h
-                    </span>
-                  </div>
-                  <p className="text-sm text-primary-400 dark:text-gray-500 mt-1">
-                    {t('student.currentValue', { val: profile.study_hours_per_day })}
-                  </p>
-                </div>
-
-                {/* Sleep Hours */}
-                <div>
-                  <label className="label">{t('student.sleepHours')}</label>
-                  <div className="flex items-center gap-4 mt-2">
-                    <input
-                      type="range"
-                      min={0}
-                      max={12}
-                      step={0.5}
-                      value={simInputs.sleep_hours}
-                      onChange={(e) => handleInputChange('sleep_hours', parseFloat(e.target.value))}
-                      className="flex-1 h-2 bg-primary-100 dark:bg-gray-800 rounded-lg appearance-none cursor-pointer accent-primary-600"
-                    />
-                    <span className="text-lg font-mono text-primary-950 dark:text-gray-100 w-16 text-right">
-                      {simInputs.sleep_hours}h
-                    </span>
-                  </div>
-                  <p className="text-sm text-primary-400 dark:text-gray-500 mt-1">
-                    {t('student.currentValue', { val: profile.sleep_hours })}
-                  </p>
-                </div>
-
-                {/* Attendance */}
-                <div>
-                  <label className="label">{t('student.attendancePercent')}</label>
-                  <div className="flex items-center gap-4 mt-2">
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      step={5}
-                      value={simInputs.attendance_percent}
-                      onChange={(e) => handleInputChange('attendance_percent', parseFloat(e.target.value))}
-                      className="flex-1 h-2 bg-primary-100 dark:bg-gray-800 rounded-lg appearance-none cursor-pointer accent-primary-600"
-                    />
-                    <span className="text-lg font-mono text-primary-950 dark:text-gray-100 w-20 text-right">
-                      {simInputs.attendance_percent}%
-                    </span>
-                  </div>
-                  <p className="text-sm text-primary-400 dark:text-gray-500 mt-1">
-                    {t('student.currentValue', { val: profile.attendance_percent })}
-                  </p>
-                </div>
-
-                <button
-                  onClick={handleSimulate}
-                  className="btn-primary w-full text-lg px-8 py-3"
-                  disabled={false}
-                >
-                  {t('student.runSimulation')}
-                </button>
-              </div>
-            </div>
-
-            {/* Results Panel */}
-            <div className="card p-6">
-              <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-6">
-                {t('student.simulationResults')}
-              </h3>
-
-              {simulated && (
-                <div className="space-y-6">
-                  {/* Predicted Grade & Score */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="p-4 rounded-2xl bg-primary-50 dark:bg-primary-900/20">
-                      <p className="text-sm text-primary-500 dark:text-gray-400">
-                        {t('student.predictedScore')}
-                      </p>
-                      <p className={`text-3xl font-bold font-mono ${getScoreColor(simulated.final_score)}`}>
-                        {simulated.final_score.toFixed(1)}
-                      </p>
-                      {prediction && (
-                        <p className="text-sm mt-1">
-                          <span className={simulated.final_score > (prediction.final_score || 0) ? 'text-success-600 dark:text-success-400' : 'text-danger-600 dark:text-danger-400'}>
-                            {simulated.final_score > (prediction.final_score || 0) ? '+' : ''}
-                            {(simulated.final_score - (prediction.final_score || 0)).toFixed(1)}
-                          </span>
-                          {t('student.vsCurrent')}
-                        </p>
-                      )}
-                    </div>
-                    <div className="p-4 rounded-2xl bg-primary-50 dark:bg-primary-900/20">
-                      <p className="text-sm text-primary-500 dark:text-gray-400">
-                        {t('student.predictedGrade')}
-                      </p>
-                      <span className={`${getGradeBadgeClass(simulated.grade)} text-2xl px-6 py-3`}>
-                        {simulated.grade}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Grade Probabilities */}
-                  {simulated.grade_probabilities && (
-                    <div>
-                      <h4 className="text-sm font-medium text-primary-950 dark:text-gray-100 mb-3">
-                        {t('student.gradeProbabilities')}
-                      </h4>
-                      <div className="space-y-2">
-                        {Object.entries(simulated.grade_probabilities)
-                          .sort(([a], [b]) => a.localeCompare(b))
-                          .map(([grade, prob]) => (
-                            <div key={grade} className="flex items-center gap-3">
-                              <span className={`${getGradeBadgeClass(grade)} w-10 justify-center text-sm`}>
-                                {grade}
-                              </span>
-                              <div className="flex-1 h-3 bg-primary-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full rounded-full transition-all duration-500"
-                                  style={{
-                                    width: `${prob * 100}%`,
-                                    backgroundColor: (GRADE_COLORS[grade] || {}).solid || 'rgb(148,163,184)',
-                                  }}
-                                />
-                              </div>
-                              <span className="text-sm font-mono w-12 text-right text-primary-950 dark:text-gray-100">
-                                {(prob * 100).toFixed(1)}%
-                              </span>
-                            </div>
-                          ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Recommendations */}
-                  {recommendations.length > 0 && (
-                    <div>
-                      <h4 className="text-sm font-medium text-primary-950 dark:text-gray-100 mb-3">
-                        {t('student.recommendations')}
-                      </h4>
-                      <div className="space-y-2">
-                        {recommendations.map((rec, idx) => {
-                          const recColors = {
-                            positive: 'bg-success-50 dark:bg-success-900/20 text-success-700 dark:text-success-300',
-                            warning: 'bg-warning-50 dark:bg-warning-900/20 text-warning-700 dark:text-warning-300',
-                            danger: 'bg-danger-50 dark:bg-danger-900/20 text-danger-700 dark:text-danger-300',
-                            info: 'bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300',
-                          };
-                          const iconMap = {
-                            TrendingUp: renderIcon('TrendingUp', { className: "w-5 h-5" }),
-                            BookOpen: riskIcons.BookOpen,
-                            Moon: riskIcons.Moon,
-                            AlertTriangle: riskIcons.AlertTriangle,
-                            Briefcase: riskIcons.Briefcase,
-                          };
-                          return (
-                            <div
-                              key={idx}
-                              className={`flex items-start gap-3 p-3 rounded-xl ${recColors[rec.type] || recColors.info}`}
-                            >
-                              <div className="flex-shrink-0 w-5 h-5">
-                                {iconMap[rec.icon] || riskIcons.AlertTriangle}
-                              </div>
-                              <div>
-                                <p className="font-medium">{rec.title}</p>
-                                <p className="text-sm mt-0.5">{rec.message}</p>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {!simulated && (
-                <div className="text-center py-12 text-primary-400 dark:text-gray-500">
-                  <p>{t('student.adjustSliders')}</p>
-                  <p className="text-sm mt-2">{t('student.adjustSlidersDesc')}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Advisor Tab */}
-        {activeTab === 'advisor' && (
-          <div className="card p-6">
-            <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-4">
-              {t('student.aiAdvisor')}
-            </h3>
-            {advisorAdvice ? (
-              <div className="prose prose-primary dark:prose-invert max-w-none whitespace-pre-wrap">
-                {advisorAdvice}
-              </div>
-            ) : (
-              <div className="text-center py-12 text-primary-400 dark:text-gray-500">
-                {renderIcon('Loader2', { className: "w-8 h-8 mx-auto mb-4 animate-spin" })}
-                <p>{t('student.loadingAdvice')}</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Edit Profile Tab */}
-        {activeTab === 'editProfile' && (
-          <div className="card p-6 max-w-2xl">
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-2">
-                {t('student.editProfileTitle')}
-              </h3>
-              <p className="text-primary-500 dark:text-gray-400">{t('student.editProfileSubtitle')}</p>
-            </div>
-
-            <form onSubmit={(e) => { e.preventDefault(); handleSaveProfile(); }} className="space-y-5">
-              <div className="grid gap-5 md:grid-cols-2">
-                {/* Gender */}
-                <div>
-                  <label className="label">{t('student.gender')} <span className="text-danger-500">*</span></label>
-                  <select
-                    value={profileForm.gender}
-                    onChange={(e) => handleProfileChange('gender', e.target.value)}
-                    className="input mt-1"
-                    required
-                  >
-                    <option value="">{t('common.select')}</option>
-                    <option value="Male">{t('student.male')}</option>
-                    <option value="Female">{t('student.female')}</option>
-                  </select>
-                </div>
-
-                {/* Age */}
-                <div>
-                  <label className="label">{t('student.age')} <span className="text-danger-500">*</span></label>
-                  <input
-                    type="number"
-                    min="15"
-                    max="30"
-                    value={profileForm.age}
-                    onChange={(e) => handleProfileChange('age', e.target.value)}
-                    className="input mt-1"
-                    required
-                  />
-                </div>
-
-                {/* Study Hours Per Day */}
-                <div>
-                  <label className="label">{t('student.studyHoursPerDay')}</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="24"
-                    step="0.5"
-                    value={profileForm.study_hours_per_day}
-                    onChange={(e) => handleProfileChange('study_hours_per_day', e.target.value)}
-                    className="input mt-1"
-                  />
-                </div>
-
-                {/* Attendance Percent */}
-                <div>
-                  <label className="label">{t('student.attendancePercent')}</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={profileForm.attendance_percent}
-                    onChange={(e) => handleProfileChange('attendance_percent', e.target.value)}
-                    className="input mt-1"
-                  />
-                </div>
-
-                {/* Sleep Hours */}
-                <div>
-                  <label className="label">{t('student.sleepHours')}</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="24"
-                    step="0.5"
-                    value={profileForm.sleep_hours}
-                    onChange={(e) => handleProfileChange('sleep_hours', e.target.value)}
-                    className="input mt-1"
-                  />
-                </div>
-
-                {/* Previous GPA */}
-                <div>
-                  <label className="label">{t('student.previousGPA')}</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="4"
-                    step="0.1"
-                    value={profileForm.previous_gpa}
-                    onChange={(e) => handleProfileChange('previous_gpa', e.target.value)}
-                    className="input mt-1"
-                  />
-                </div>
-
-                {/* Parental Education */}
-                <div>
-                  <label className="label">{t('student.parentalEducation')}</label>
-                  <select
-                    value={profileForm.parental_education}
-                    onChange={(e) => handleProfileChange('parental_education', e.target.value)}
-                    className="input mt-1"
-                  >
-                    <option value="">{t('common.select')}</option>
-                    <option value="High School">{t('student.highSchool')}</option>
-                    <option value="Bachelor">{t('student.bachelors')}</option>
-                    <option value="Master">{t('student.masters')}</option>
-                    <option value="PhD">{t('student.phd')}</option>
-                  </select>
-                </div>
-
-                {/* Internet Access */}
-                <div>
-                  <label className="label">{t('student.internetAccess')}</label>
-                  <select
-                    value={profileForm.internet_access}
-                    onChange={(e) => handleProfileChange('internet_access', e.target.value)}
-                    className="input mt-1"
-                  >
-                    <option value="">{t('common.select')}</option>
-                    <option value="Yes">{t('student.yes')}</option>
-                    <option value="No">{t('student.no')}</option>
-                  </select>
-                </div>
-
-                {/* Extracurricular */}
-                <div>
-                  <label className="label">{t('student.extracurricular')}</label>
-                  <select
-                    value={profileForm.extracurricular}
-                    onChange={(e) => handleProfileChange('extracurricular', e.target.value)}
-                    className="input mt-1"
-                  >
-                    <option value="">{t('common.select')}</option>
-                    <option value="Yes">{t('student.yes')}</option>
-                    <option value="No">{t('student.no')}</option>
-                  </select>
-                </div>
-
-                {/* Part-Time Job */}
-                <div>
-                  <label className="label">{t('student.partTimeJob')}</label>
-                  <select
-                    value={profileForm.part_time_job}
-                    onChange={(e) => handleProfileChange('part_time_job', e.target.value)}
-                    className="input mt-1"
-                  >
-                    <option value="">{t('common.select')}</option>
-                    <option value="Yes">{t('student.yes')}</option>
-                    <option value="No">{t('student.no')}</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Notes */}
+      {activeTab === 'overview' && (
+        <section id="student-panel-overview" role="tabpanel" aria-labelledby="student-tab-overview" className="space-y-6">
+          <Card>
+            <CardHeader>
               <div>
-                <label className="label">{t('student.notes')}</label>
-                <textarea
-                  value={profileForm.notes}
-                  onChange={(e) => handleProfileChange('notes', e.target.value)}
-                  rows={3}
-                  className="input mt-1"
-                  placeholder="Add any additional notes..."
+                <CardTitle>{t('student.quickWhatIfStudyHours')}</CardTitle>
+                <CardDescription>{t('student.simulatorSubtitle')}</CardDescription>
+              </div>
+              <span className="flex size-10 items-center justify-center rounded-xl bg-action-muted text-action-strong" aria-hidden="true">
+                <Icon name="sliders" className="size-5" />
+              </span>
+            </CardHeader>
+            <RangeControl
+              id="quick-study-hours"
+              label={t('student.studyHoursPerDay')}
+              value={simInputs.study_hours_per_day}
+              min={0}
+              max={24}
+              step={0.5}
+              currentValue={t('student.currentValue', { val: hoursLabel(profile.study_hours_per_day) })}
+              valueLabel={hoursLabel(simInputs.study_hours_per_day)}
+              onChange={(value) => handleInputChange('study_hours_per_day', value)}
+            />
+            <div className="mt-5 grid gap-4 border-t border-divider pt-5 sm:grid-cols-2">
+              <div>
+                <p className="text-sm text-ink-muted">{t('student.predictedScore')}</p>
+                <p className={`mt-1 font-mono text-2xl font-bold tabular-nums ${SCORE_TONE_CLASSES[scoreTone(simulatedScore)]}`}>
+                  {formatStudentMetric(simulatedScore, lang, numberOptions)}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-ink-muted">{t('student.predictedGrade')}</p>
+                <div className="mt-2"><GradeValue grade={simulated?.grade} size="lg" /></div>
+              </div>
+            </div>
+            <Button
+              fullWidth
+              className="mt-5"
+              leftIcon="sparkles"
+              onClick={handleSimulate}
+              loading={simulationLoading}
+            >
+              {t('student.runQuickSimulation')}
+            </Button>
+          </Card>
+
+          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricCard
+              icon="barChart"
+              label={t('student.finalScore')}
+              value={formatStudentMetric(profile.final_score, lang, numberOptions)}
+              valueClassName={SCORE_TONE_CLASSES[scoreTone(profile.final_score)]}
+              supportingText={t('student.percentile', {
+                p: formatStudentMetric(normalizePercentage(percentiles.finalScore), lang, wholeNumberOptions),
+              })}
+            />
+            <MetricCard
+              icon="award"
+              label={t('student.grade')}
+              value={<GradeValue grade={currentGrade} size="lg" />}
+              supportingText={t('student.classPercentile', {
+                p: formatStudentMetric(normalizePercentage(percentiles.gpa), lang, wholeNumberOptions),
+              })}
+            />
+            <MetricCard
+              icon="graduationCap"
+              label={t('student.previousGPA')}
+              value={formatStudentMetric(profile.previous_gpa, lang, {
+                minimumFractionDigits: 1,
+                maximumFractionDigits: 1,
+              })}
+              supportingText={t('student.percentile', {
+                p: formatStudentMetric(normalizePercentage(percentiles.gpa), lang, wholeNumberOptions),
+              })}
+            />
+            <Card padding="sm" className="min-w-0">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-muted">{t('student.attendance')}</p>
+                  <p className="mt-3 font-mono text-3xl font-bold tabular-nums text-ink">{percentLabel(attendance)}</p>
+                </div>
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-action-muted text-action-strong" aria-hidden="true">
+                  <Icon name="calendar" className="size-5" />
+                </span>
+              </div>
+              <div
+                className="mt-4 h-2 overflow-hidden rounded-full bg-surface-muted"
+                role="progressbar"
+                aria-label={t('student.attendanceProgress', { value: formatStudentMetric(attendance, lang, numberOptions) })}
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow={attendance ?? undefined}
+                aria-valuetext={attendance === null ? '—' : undefined}
+              >
+                <div
+                  className={`h-full rounded-full ${attendanceTone}`}
+                  style={{ width: `${attendanceWidth}%` }}
                 />
               </div>
+              <p className="mt-3 text-sm text-ink-muted">
+                {t('student.percentile', {
+                  p: formatStudentMetric(normalizePercentage(percentiles.attendance), lang, wholeNumberOptions),
+                })}
+              </p>
+            </Card>
+          </div>
+        </section>
+      )}
 
-              {/* Save Button */}
-              <div className="flex justify-end pt-4 border-t border-primary-200 dark:border-gray-700">
-                <button
-                  type="submit"
-                  className="btn-primary px-8 py-2.5"
-                  disabled={profileSaving}
-                >
-                  {profileSaving ? t('student.saving') : t('student.saveProfile')}
-                </button>
+      {activeTab === 'simulator' && (
+        <section id="student-panel-simulator" role="tabpanel" aria-labelledby="student-tab-simulator" className="grid gap-6 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle>{t('student.simulatorTitle')}</CardTitle>
+                <CardDescription>{t('student.simulatorSubtitle')}</CardDescription>
+              </div>
+            </CardHeader>
+            <div className="space-y-6">
+              <RangeControl
+                id="sim-study-hours"
+                label={t('student.studyHours')}
+                value={simInputs.study_hours_per_day}
+                min={0}
+                max={24}
+                step={0.5}
+                currentValue={t('student.currentValue', { val: hoursLabel(profile.study_hours_per_day) })}
+                valueLabel={hoursLabel(simInputs.study_hours_per_day)}
+                onChange={(value) => handleInputChange('study_hours_per_day', value)}
+              />
+              <RangeControl
+                id="sim-sleep-hours"
+                label={t('student.sleepHours')}
+                value={simInputs.sleep_hours}
+                min={0}
+                max={24}
+                step={0.5}
+                currentValue={t('student.currentValue', { val: hoursLabel(profile.sleep_hours) })}
+                valueLabel={hoursLabel(simInputs.sleep_hours)}
+                onChange={(value) => handleInputChange('sleep_hours', value)}
+              />
+              <RangeControl
+                id="sim-attendance"
+                label={t('student.attendancePercent')}
+                value={simInputs.attendance_percent}
+                min={0}
+                max={100}
+                step={1}
+                currentValue={t('student.currentValue', { val: percentLabel(profile.attendance_percent) })}
+                valueLabel={percentLabel(simInputs.attendance_percent)}
+                onChange={(value) => handleInputChange('attendance_percent', value)}
+              />
+              <Button fullWidth leftIcon="sparkles" onClick={handleSimulate} loading={simulationLoading}>
+                {t('student.runSimulation')}
+              </Button>
+            </div>
+          </Card>
+
+          <Card aria-live="polite">
+            <CardHeader>
+              <div>
+                <CardTitle>{t('student.simulationResults')}</CardTitle>
+                <CardDescription>{t('student.adjustSlidersDesc')}</CardDescription>
+              </div>
+            </CardHeader>
+
+            {simulationError ? (
+              <ErrorState
+                title={t('student.simulationFailed')}
+                description={t('student.simulationFailedDesc')}
+                action={handleSimulate}
+                actionLabel={t('common.tryAgain')}
+                className="border-0 bg-surface-muted"
+              />
+            ) : simulated ? (
+              <div className="space-y-6">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-xl bg-surface-muted p-4">
+                    <p className="text-sm text-ink-muted">{t('student.predictedScore')}</p>
+                    <p className={`mt-1 font-mono text-3xl font-bold tabular-nums ${SCORE_TONE_CLASSES[scoreTone(simulatedScore)]}`}>
+                      {formatStudentMetric(simulatedScore, lang, numberOptions)}
+                    </p>
+                    {delta !== null && (
+                      <p className={`mt-1 text-sm font-semibold ${delta >= 0 ? 'text-success-700 dark:text-success-300' : 'text-danger-700 dark:text-danger-300'}`}>
+                        {delta > 0 ? '+' : ''}{formatStudentMetric(delta, lang, numberOptions)} {t('student.vsCurrent')}
+                      </p>
+                    )}
+                  </div>
+                  <div className="rounded-xl bg-surface-muted p-4">
+                    <p className="text-sm text-ink-muted">{t('student.predictedGrade')}</p>
+                    <div className="mt-3"><GradeValue grade={simulated.grade} size="lg" /></div>
+                  </div>
+                </div>
+
+                {gradeProbabilityRows.length > 0 && (
+                  <section aria-labelledby="grade-probabilities-title">
+                    <h3 id="grade-probabilities-title" className="text-sm font-bold text-ink">{t('student.gradeProbabilities')}</h3>
+                    <div className="mt-3 space-y-3">
+                      {gradeProbabilityRows.map(({ grade, probability }) => {
+                        const percentage = probability * 100;
+                        return (
+                          <div key={grade} className="grid grid-cols-[2.5rem_minmax(0,1fr)_4rem] items-center gap-3">
+                            <GradeValue grade={grade} />
+                            <div
+                              className="h-2 overflow-hidden rounded-full bg-surface-muted"
+                              role="progressbar"
+                              aria-label={t('student.probabilityLabel', {
+                                grade,
+                                value: formatStudentMetric(percentage, lang, numberOptions),
+                              })}
+                              aria-valuemin="0"
+                              aria-valuemax="100"
+                              aria-valuenow={percentage}
+                            >
+                              <div className="h-full rounded-full bg-primary-600" style={{ width: `${percentage}%` }} />
+                            </div>
+                            <span className="text-right font-mono text-sm tabular-nums text-ink">{percentLabel(percentage)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
+
+                {recommendations.length > 0 && (
+                  <section aria-labelledby="student-recommendations-title">
+                    <h3 id="student-recommendations-title" className="text-sm font-bold text-ink">{t('student.recommendations')}</h3>
+                    <div className="mt-3 space-y-3">
+                      {recommendations.map((recommendation, index) => {
+                        const type = Object.hasOwn(RECOMMENDATION_STYLES, recommendation.type)
+                          ? recommendation.type
+                          : 'info';
+                        const iconName = Object.hasOwn(API_ICON_MAP, recommendation.icon)
+                          ? API_ICON_MAP[recommendation.icon]
+                          : 'AlertTriangle';
+                        return (
+                          <article
+                            key={`${textValue(recommendation.title)}-${textValue(recommendation.message)}-${index}`}
+                            className={`flex items-start gap-3 rounded-xl border p-3 ${RECOMMENDATION_STYLES[type]}`}
+                          >
+                            <span className="mt-0.5 shrink-0" aria-hidden="true">{renderIcon(iconName, { className: 'size-5' })}</span>
+                            <div className="min-w-0">
+                              <h4 className="font-semibold">{textValue(recommendation.title) || t('student.recommendationFallback')}</h4>
+                              {textValue(recommendation.message) && <p className="mt-1 break-words text-sm">{textValue(recommendation.message)}</p>}
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
+              </div>
+            ) : (
+              <EmptyState
+                icon="sliders"
+                title={t('student.adjustSliders')}
+                description={t('student.adjustSlidersDesc')}
+                className="border-0 bg-surface-muted"
+              />
+            )}
+          </Card>
+        </section>
+      )}
+
+      {activeTab === 'advisor' && (
+        <section id="student-panel-advisor" role="tabpanel" aria-labelledby="student-tab-advisor">
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle>{t('student.aiAdvisor')}</CardTitle>
+                <CardDescription>{t('student.advisorDescription')}</CardDescription>
+              </div>
+              <span className="flex size-10 items-center justify-center rounded-xl bg-action-muted text-action-strong" aria-hidden="true">
+                <Icon name="brain" className="size-5" />
+              </span>
+            </CardHeader>
+            {advisorLoading ? (
+              <div className="space-y-3" aria-busy="true" aria-label={t('student.loadingAdvice')}>
+                <div className="skeleton h-4 w-full" />
+                <div className="skeleton h-4 w-5/6" />
+                <div className="skeleton h-4 w-2/3" />
+              </div>
+            ) : advisorError ? (
+              <ErrorState
+                title={t('student.advisorLoadFailed')}
+                description={t('student.advisorLoadFailedDesc')}
+                action={loadAdvisor}
+                actionLabel={t('common.tryAgain')}
+                className="border-0 bg-surface-muted"
+              />
+            ) : advisorAdvice ? (
+              <p className="whitespace-pre-wrap break-words leading-7 text-ink">{advisorAdvice}</p>
+            ) : (
+              <EmptyState
+                icon="messageSquare"
+                title={t('student.advisorEmpty')}
+                description={t('student.advisorEmptyDesc')}
+                className="border-0 bg-surface-muted"
+              />
+            )}
+          </Card>
+        </section>
+      )}
+
+      {activeTab === 'editProfile' && (
+        <section id="student-panel-editProfile" role="tabpanel" aria-labelledby="student-tab-editProfile">
+          <Card className="max-w-3xl">
+            <CardHeader divider>
+              <div>
+                <CardTitle>{t('student.editProfileTitle')}</CardTitle>
+                <CardDescription>{t('student.editProfileSubtitle')}</CardDescription>
+              </div>
+            </CardHeader>
+            <form onSubmit={(event) => { event.preventDefault(); handleSaveProfile(); }}>
+              <div className="grid gap-5 sm:grid-cols-2">
+                <Select
+                  id="student-gender"
+                  label={t('student.gender')}
+                  value={profileForm.gender}
+                  onChange={(event) => handleProfileChange('gender', event.target.value)}
+                  required
+                  options={[
+                    { value: '', label: t('common.select') },
+                    { value: 'Male', label: t('student.male') },
+                    { value: 'Female', label: t('student.female') },
+                  ]}
+                />
+                <Input
+                  id="student-age"
+                  type="number"
+                  min="15"
+                  max="30"
+                  label={t('student.age')}
+                  value={profileForm.age}
+                  onChange={(event) => handleProfileChange('age', event.target.value)}
+                  required
+                />
+                <Input id="student-study-hours" type="number" min="0" max="24" step="0.5" label={t('student.studyHoursPerDay')} value={profileForm.study_hours_per_day} onChange={(event) => handleProfileChange('study_hours_per_day', event.target.value)} />
+                <Input id="student-attendance" type="number" min="0" max="100" step="1" label={t('student.attendancePercent')} value={profileForm.attendance_percent} onChange={(event) => handleProfileChange('attendance_percent', event.target.value)} />
+                <Input id="student-sleep-hours" type="number" min="0" max="24" step="0.5" label={t('student.sleepHours')} value={profileForm.sleep_hours} onChange={(event) => handleProfileChange('sleep_hours', event.target.value)} />
+                <Input id="student-previous-gpa" type="number" min="0" max="4" step="0.1" label={t('student.previousGPA')} value={profileForm.previous_gpa} onChange={(event) => handleProfileChange('previous_gpa', event.target.value)} />
+                <Select
+                  id="student-parental-education"
+                  label={t('student.parentalEducation')}
+                  value={profileForm.parental_education}
+                  onChange={(event) => handleProfileChange('parental_education', event.target.value)}
+                  options={[
+                    { value: '', label: t('common.select') },
+                    { value: 'High School', label: t('student.highSchool') },
+                    { value: 'Bachelor', label: t('student.bachelors') },
+                    { value: 'Master', label: t('student.masters') },
+                    { value: 'PhD', label: t('student.phd') },
+                  ]}
+                />
+                {[
+                  ['internet_access', 'internetAccess'],
+                  ['extracurricular', 'extracurricular'],
+                  ['part_time_job', 'partTimeJob'],
+                ].map(([field, labelKey]) => (
+                  <Select
+                    key={field}
+                    id={`student-${field.replaceAll('_', '-')}`}
+                    label={t(`student.${labelKey}`)}
+                    value={profileForm[field]}
+                    onChange={(event) => handleProfileChange(field, event.target.value)}
+                    options={[
+                      { value: '', label: t('common.select') },
+                      { value: 'Yes', label: t('student.yes') },
+                      { value: 'No', label: t('student.no') },
+                    ]}
+                  />
+                ))}
+              </div>
+              <Textarea
+                id="student-notes"
+                className="mt-5"
+                label={t('student.notes')}
+                value={profileForm.notes}
+                onChange={(event) => handleProfileChange('notes', event.target.value)}
+                rows={4}
+                placeholder={t('student.notesPlaceholder')}
+              />
+              <div className="mt-6 flex justify-end border-t border-divider pt-5">
+                <Button type="submit" leftIcon="check" loading={profileSaving}>
+                  {t('student.saveProfile')}
+                </Button>
               </div>
             </form>
-          </div>
-        )}
-      </div>
+          </Card>
+        </section>
+      )}
     </div>
   );
 }

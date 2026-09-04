@@ -87,7 +87,7 @@ export default function GoalForm({ isOpen, onClose, goal, onSave }) {
             />
           )}
         </div>
-        <div className="flex justify-end gap-3 border-t border-primary-100 pt-4 dark:border-gray-800">
+        <div className="flex justify-end gap-3 border-t border-divider pt-4">
           <Button type="button" variant="ghost" onClick={onClose} disabled={isSubmitting}>{t('common.cancel')}</Button>
           <Button type="submit" loading={isSubmitting} disabled={isSubmitting}>{isEdit ? t('common.save') : t('goals.createGoal')}</Button>
         </div>
