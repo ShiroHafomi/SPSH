@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus } from 'lucide-react';
 import { api } from '../api';
 import { useFlash } from '../components/FlashProvider';
 import { useLanguage } from '../hooks/useLanguage';
-import { Button, ConfirmDialog, SkeletonCard } from '../components/ui';
+import { Button, ConfirmDialog, ErrorState, PageHeader, SkeletonCard } from '../components/ui';
 import CheckinHistory from '../components/goals/CheckinHistory';
 import GoalEmptyState from '../components/goals/GoalEmptyState';
 import GoalForm from '../components/goals/GoalForm';
@@ -11,6 +10,7 @@ import GoalSummaryCard from '../components/goals/GoalSummaryCard';
 import ProgressCharts from '../components/goals/ProgressCharts';
 import ProgressOverview from '../components/goals/ProgressOverview';
 import WeeklyCheckinForm from '../components/goals/WeeklyCheckinForm';
+import { normalizeGoalEntries } from '../utils/goalProgress';
 
 export default function StudentGoals() {
   const { t } = useLanguage();
@@ -29,7 +29,7 @@ export default function StudentGoals() {
     setLoadError('');
     try {
       const response = await api.get('/student/me/goals/progress');
-      const entries = Array.isArray(response.goals) ? response.goals : [];
+      const entries = normalizeGoalEntries(response?.goals);
       setGoals(entries);
       setSelectedGoalId((current) => (
         entries.some((entry) => entry.goal?.id === current)
@@ -111,41 +111,43 @@ export default function StudentGoals() {
 
   if (loadError) {
     return (
-      <div className="rounded-2xl border border-danger-200 bg-danger-50 p-6 text-danger-700 dark:border-danger-900/50 dark:bg-danger-950/30 dark:text-danger-300" role="alert">
-        <p className="font-semibold">{loadError}</p>
-        <Button className="mt-4" variant="outline" onClick={loadGoals}>{t('goals.retryLoad')}</Button>
-      </div>
+      <ErrorState
+        title={t('common.failedToLoad')}
+        description={loadError}
+        action={loadGoals}
+        actionLabel={t('goals.retryLoad')}
+      />
     );
   }
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-primary-950 dark:text-gray-100">{t('goals.title')}</h1>
-          <p className="mt-1 max-w-2xl text-primary-600 dark:text-gray-400">{t('goals.subtitle')}</p>
-        </div>
-        <Button onClick={() => setGoalForm({ open: true, goal: null })} leftIcon={<Plus className="h-4 w-4" aria-hidden="true" />}>
-          {t('goals.createGoal')}
-        </Button>
-      </div>
+      <PageHeader
+        title={t('goals.title')}
+        subtitle={t('goals.subtitle')}
+        actions={(
+          <Button onClick={() => setGoalForm({ open: true, goal: null })} leftIcon="plus">
+            {t('goals.createGoal')}
+          </Button>
+        )}
+      />
 
       {!goals.length ? (
         <GoalEmptyState canCreate onCreate={() => setGoalForm({ open: true, goal: null })} />
       ) : (
         <>
           <section aria-labelledby="active-goals-title">
-            <h2 id="active-goals-title" className="mb-4 text-lg font-bold text-primary-950 dark:text-gray-100">{t('goals.activeGoals')}</h2>
+            <h2 id="active-goals-title" className="mb-4 text-lg font-bold text-ink">{t('goals.activeGoals')}</h2>
             {activeGoals.length ? (
               <div className="grid gap-5 lg:grid-cols-2">
                 {activeGoals.map((entry) => <GoalSummaryCard key={entry.goal.id} entry={entry} actions={summaryActions(entry)} onSelect={(selected) => setSelectedGoalId(selected.goal.id)} />)}
               </div>
-            ) : <p className="text-sm text-primary-600 dark:text-gray-400">{t('goals.noActiveGoals')}</p>}
+            ) : <p className="text-sm text-ink-muted">{t('goals.noActiveGoals')}</p>}
           </section>
 
           {previousGoals.length > 0 && (
             <section aria-labelledby="previous-goals-title">
-              <h2 id="previous-goals-title" className="mb-4 text-lg font-bold text-primary-950 dark:text-gray-100">{t('goals.previousGoals')}</h2>
+              <h2 id="previous-goals-title" className="mb-4 text-lg font-bold text-ink">{t('goals.previousGoals')}</h2>
               <div className="grid gap-5 lg:grid-cols-2">
                 {previousGoals.map((entry) => <GoalSummaryCard key={entry.goal.id} entry={entry} actions={summaryActions(entry)} onSelect={(selected) => setSelectedGoalId(selected.goal.id)} />)}
               </div>

@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useCallback, createContext, useContext } from 'react';
 import { createPortal } from 'react-dom';
+import { useLanguage } from '../../hooks/useLanguage';
 import { Icon, getIcon } from './Icons';
 
 // Toast Context
@@ -19,6 +20,7 @@ export const useToast = () => {
 
 // Toast Provider
 export const ToastProvider = ({ children, position = 'top-right', maxToasts = 5, defaultDuration = 5000 }) => {
+  const { t } = useLanguage();
   const [toasts, setToasts] = useState([]);
 
   const addToast = useCallback((toast) => {
@@ -55,7 +57,7 @@ export const ToastProvider = ({ children, position = 'top-right', maxToasts = 5,
       <div
         className={`fixed z-[100] flex flex-col gap-2 ${positions[position]} pointer-events-none`}
         role="region"
-        aria-label="Notifications"
+        aria-label={t('notifications.title')}
         aria-live="polite"
       >
         {toasts.map((toast) => (
@@ -63,7 +65,6 @@ export const ToastProvider = ({ children, position = 'top-right', maxToasts = 5,
             key={toast.id}
             toast={toast}
             onClose={() => removeToast(toast.id)}
-            onUpdate={(updates) => updateToast(toast.id, updates)}
           />
         ))}
       </div>
@@ -72,7 +73,8 @@ export const ToastProvider = ({ children, position = 'top-right', maxToasts = 5,
 };
 
 // Individual Toast
-const Toast = ({ toast, onClose, onUpdate }) => {
+const Toast = ({ toast, onClose }) => {
+  const { t } = useLanguage();
   const [isVisible, setIsVisible] = useState(true);
   const [progress, setProgress] = useState(100);
 
@@ -162,19 +164,21 @@ const Toast = ({ toast, onClose, onUpdate }) => {
           </div>
           {toast.action && (
             <button
+              type="button"
               onClick={() => {
                 toast.action.onClick?.();
                 onClose();
               }}
-              className="flex-shrink-0 px-3 py-1.5 text-xs font-semibold rounded-lg bg-primary-100 text-primary-700 hover:bg-primary-200 dark:bg-primary-900/40 dark:text-primary-300 dark:hover:bg-primary-900/60 transition-colors"
+              className="flex min-h-11 flex-shrink-0 items-center rounded-lg bg-primary-100 px-3 py-2 text-xs font-semibold text-primary-700 transition-colors hover:bg-primary-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring dark:bg-primary-900/40 dark:text-primary-300 dark:hover:bg-primary-900/60"
             >
               {toast.action.label}
             </button>
           )}
           <button
+            type="button"
             onClick={onClose}
-            className="flex-shrink-0 p-1 text-primary-400 hover:text-primary-600 dark:text-gray-400 dark:hover:text-gray-200 rounded-lg hover:bg-primary-100 dark:hover:bg-gray-800 transition-colors"
-            aria-label="Dismiss"
+            className="flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center rounded-lg text-primary-500 transition-colors hover:bg-primary-100 hover:text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+            aria-label={t('common.dismiss')}
           >
             <Icon name="x" className="w-4 h-4" />
           </button>

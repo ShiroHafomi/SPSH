@@ -1,10 +1,7 @@
-/**
- * Card Components - Flexible card layouts with consistent styling
- */
-
 import { forwardRef } from 'react';
+import { Link } from 'react-router-dom';
+import { useLanguage } from '../../hooks/useLanguage';
 
-// Base Card
 const Card = forwardRef(
   (
     {
@@ -19,37 +16,26 @@ const Card = forwardRef(
     ref
   ) => {
     const variants = {
-      default: 'bg-white border border-primary-100 shadow-bento',
-      clay: 'bg-white border border-primary-100 shadow-clay-md',
-      elevated: 'bg-white border border-primary-100 shadow-lg',
-      outlined: 'bg-white border-2 border-primary-200',
-      ghost: 'bg-transparent border-none shadow-none',
+      default: 'border border-divider bg-surface shadow-bento',
+      clay: 'border border-divider bg-surface shadow-clay-md',
+      elevated: 'border border-divider bg-surface shadow-clay-lg',
+      outlined: 'border border-divider bg-surface',
+      ghost: 'border-0 bg-transparent shadow-none',
     };
-
     const paddings = {
       none: '',
       sm: 'p-4',
-      default: 'p-6',
-      lg: 'p-8',
+      default: 'p-5 sm:p-6',
+      lg: 'p-6 sm:p-8',
     };
-
-    const hoverStyles = hover
-      ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-bento-hover hover:border-primary-200 transition-all duration-200'
-      : '';
-
-    const interactive = onClick ? 'cursor-pointer' : '';
+    const interactive = hover || onClick;
 
     return (
       <div
         ref={ref}
-        className={`
-          rounded-3xl
-          ${variants[variant]}
-          ${paddings[padding]}
-          ${hoverStyles}
-          ${interactive}
-          ${className}
-        `}
+        className={`rounded-2xl ${variants[variant] || variants.default} ${paddings[padding] || paddings.default} ${
+          interactive ? 'cursor-pointer transition-colors duration-200 hover:border-primary-300 hover:bg-surface-muted' : ''
+        } ${className}`}
         onClick={onClick}
         {...props}
       >
@@ -61,66 +47,45 @@ const Card = forwardRef(
 
 Card.displayName = 'Card';
 
-// Card Header
 const CardHeader = forwardRef(
   ({ children, className = '', divider = false, ...props }, ref) => (
     <div
       ref={ref}
-      className={`flex items-center justify-between gap-4 mb-4 ${divider ? 'pb-4 border-b border-primary-100 dark:border-gray-700' : ''} ${className}`}
+      className={`mb-4 flex flex-wrap items-start justify-between gap-3 ${divider ? 'border-b border-divider pb-4' : ''} ${className}`}
       {...props}
     >
       {children}
     </div>
   )
 );
-
 CardHeader.displayName = 'CardHeader';
 
-// Card Title
 const CardTitle = ({ children, className = '', as: Component = 'h3', ...props }) => (
-  <Component className={`text-lg font-bold text-primary-950 dark:text-gray-100 ${className}`} {...props}>
-    {children}
-  </Component>
+  <Component className={`text-lg font-bold text-ink ${className}`} {...props}>{children}</Component>
 );
-
 CardTitle.displayName = 'CardTitle';
 
-// Card Description
 const CardDescription = ({ children, className = '', ...props }) => (
-  <p className={`text-sm text-primary-500 dark:text-gray-400 ${className}`} {...props}>
-    {children}
-  </p>
+  <p className={`text-sm text-ink-muted ${className}`} {...props}>{children}</p>
 );
-
 CardDescription.displayName = 'CardDescription';
 
-// Card Content
-const CardContent = forwardRef(
-  ({ children, className = '', ...props }, ref) => (
-    <div ref={ref} className={className} {...props}>
-      {children}
-    </div>
-  )
-);
-
+const CardContent = forwardRef(({ children, className = '', ...props }, ref) => (
+  <div ref={ref} className={className} {...props}>{children}</div>
+));
 CardContent.displayName = 'CardContent';
 
-// Card Footer
-const CardFooter = forwardRef(
-  ({ children, className = '', divider = true, ...props }, ref) => (
-    <div
-      ref={ref}
-      className={`flex items-center justify-end gap-3 mt-4 ${divider ? 'pt-4 border-t border-primary-100 dark:border-gray-700' : ''} ${className}`}
-      {...props}
-    >
-      {children}
-    </div>
-  )
-);
-
+const CardFooter = forwardRef(({ children, className = '', divider = true, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={`mt-4 flex flex-wrap items-center justify-end gap-3 ${divider ? 'border-t border-divider pt-4' : ''} ${className}`}
+    {...props}
+  >
+    {children}
+  </div>
+));
 CardFooter.displayName = 'CardFooter';
 
-// KPI Card - Specialized for dashboard metrics
 const KPICard = ({
   label,
   value,
@@ -134,97 +99,72 @@ const KPICard = ({
   className = '',
   to,
 }) => {
-  const formatValue = (val, fmt) => {
-    if (val === null || val === undefined) return '—';
-    const num = Number(val);
-    if (isNaN(num)) return val;
-    if (fmt === 'pct') return num.toFixed(1) + '%';
-    if (fmt === 'dec1') return num.toFixed(1);
-    if (fmt === 'dec2') return num.toFixed(2);
-    if (fmt === 'currency') return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num);
-    return num.toLocaleString();
+  const { lang, t } = useLanguage();
+  const locale = lang === 'vi' ? 'vi-VN' : 'en-US';
+
+  const formatValue = (rawValue, valueFormat) => {
+    if (rawValue === null || rawValue === undefined) return '—';
+    const number = Number(rawValue);
+    if (!Number.isFinite(number)) return rawValue;
+    if (valueFormat === 'pct') return new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(number) + '%';
+    if (valueFormat === 'dec1') return new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(number);
+    if (valueFormat === 'dec2') return new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(number);
+    if (valueFormat === 'currency') return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(number);
+    return new Intl.NumberFormat(locale).format(number);
   };
 
   const featuredVariants = {
-    primary: 'bg-linear-to-br from-primary-600 to-primary-500',
-    success: 'bg-linear-to-br from-success-600 to-emerald-500',
-    accent: 'bg-linear-to-br from-accent-500 to-orange-500',
-    danger: 'bg-linear-to-br from-danger-600 to-red-500',
+    primary: 'border-primary-600 bg-primary-600',
+    success: 'border-success-700 bg-success-700',
+    accent: 'border-accent-700 bg-accent-700',
+    danger: 'border-danger-600 bg-danger-600',
   };
-
-  const defaultVariantStyles = {
-    default: 'bg-white dark:bg-gray-900 border border-primary-100 dark:border-gray-800',
-    clay: 'bg-white border border-primary-100 shadow-clay-sm',
-  };
-
-  const Component = to ? 'a' : onClick ? 'button' : 'div';
-
-  const variantClass = featured
-    ? featuredVariants[variant] || featuredVariants.primary
-    : defaultVariantStyles[variant] || defaultVariantStyles.default;
-
   const iconColors = {
-    primary: 'bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-400',
-    success: 'bg-success-100 text-success-600 dark:bg-success-900/40 dark:text-success-400',
-    accent: 'bg-accent-100 text-accent-600 dark:bg-accent-900/40 dark:text-accent-400',
-    danger: 'bg-danger-100 text-danger-600 dark:bg-danger-900/40 dark:text-danger-400',
-    default: 'bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-400',
+    primary: 'bg-primary-100 text-primary-700 dark:bg-primary-950/70 dark:text-primary-200',
+    success: 'bg-success-100 text-success-700 dark:bg-success-950/70 dark:text-success-200',
+    accent: 'bg-accent-100 text-accent-700 dark:bg-accent-950/70 dark:text-accent-200',
+    danger: 'bg-danger-100 text-danger-700 dark:bg-danger-950/70 dark:text-danger-200',
+    default: 'bg-primary-100 text-primary-700 dark:bg-primary-950/70 dark:text-primary-200',
   };
-
-  const textColors = {
-    primary: 'text-primary-900 dark:text-primary-100',
-    success: 'text-success-900 dark:text-success-100',
-    accent: 'text-accent-900 dark:text-accent-100',
-    danger: 'text-danger-900 dark:text-danger-100',
-    default: 'text-primary-900 dark:text-primary-100',
-  };
-
-  const textClass = featured
-    ? 'text-white'
-    : textColors[variant] || textColors.default;
+  const componentProps = to ? { to } : { onClick };
+  const Component = to ? Link : onClick ? 'button' : 'div';
+  const isInteractive = Boolean(to || onClick);
 
   return (
     <Component
-      className={`
-        kpi-card group relative overflow-hidden rounded-2xl transition-all duration-300
-        ${variantClass}
-        ${onClick || to ? 'cursor-pointer' : ''}
-        ${className}
-      `}
-      onClick={onClick}
-      href={to}
-      aria-label={label}
+      className={`kpi-card relative overflow-hidden text-left ${
+        featured ? `${featuredVariants[variant] || featuredVariants.primary} text-white` : ''
+      } ${isInteractive ? 'focus-ring transition-colors duration-200 hover:border-primary-300' : ''} ${className}`}
+      aria-label={isInteractive ? label : undefined}
+      {...componentProps}
     >
-      <div className="flex items-start justify-between">
-        <p className={`kpi-label ${featured ? 'text-white/75' : 'text-primary-400'} group:hover:text-white/75 dark:group:hover:text-white/60 transition-colors`}>
-          {label}
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <p className={`kpi-label ${featured ? 'text-white/80' : ''}`}>{label}</p>
         {icon && (
-          <div className={`kpi-icon-box flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform ${iconColors[variant] || iconColors.default}`}>
+          <div className={`kpi-icon-box ${featured ? 'bg-white/15 text-white' : iconColors[variant] || iconColors.default}`}>
             {icon}
           </div>
         )}
       </div>
-      <p className={`kpi-value ${textClass} font-mono tabular-nums`}>
-        {formatValue(value, format)}
-      </p>
-      {trend !== undefined && (
-        <div className={`flex items-center gap-1 text-sm font-medium ${trend >= 0 ? 'text-success-600 dark:text-success-400' : 'text-danger-600 dark:text-danger-400'}`}>
-          <span>{trend >= 0 ? '↑' : '↓'}</span>
-          <span className="absolute">{Math.abs(trend)}%</span>
-          {trendLabel && <span className={featured ? 'text-white/75' : 'text-primary-400 dark:text-gray-500'}>{trendLabel}</span>}
+      <p className={`kpi-value ${featured ? 'text-white' : ''}`}>{formatValue(value, format)}</p>
+      {trend !== undefined && Number.isFinite(Number(trend)) && (
+        <div className={`flex flex-wrap items-center gap-1.5 text-sm font-medium ${
+          featured ? 'text-white/90' : Number(trend) >= 0 ? 'text-success-700 dark:text-success-300' : 'text-danger-700 dark:text-danger-300'
+        }`}>
+          <span aria-hidden="true">{Number(trend) >= 0 ? '↑' : '↓'}</span>
+          <span>{Math.abs(Number(trend))}%</span>
+          {trendLabel && <span className={featured ? 'text-white/75' : 'text-ink-muted'}>{trendLabel}</span>}
         </div>
       )}
       {featured && to && (
-        <span className="inline-flex items-center gap-1 mt-auto text-sm font-semibold text-white/90 group-hover:text-white transition-colors">
-          View Details
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+        <span className="mt-auto inline-flex items-center gap-1 text-sm font-semibold text-white">
+          {t('common.viewDetails')}
+          <span aria-hidden="true">→</span>
         </span>
       )}
     </Component>
   );
 };
-
 KPICard.displayName = 'KPICard';
 
 export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, KPICard };

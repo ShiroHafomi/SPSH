@@ -26,7 +26,7 @@ import { DriftStatusBadge } from '../components/DriftStatusBadge';
 import { Badge, Button, Card, GradeBadge, Input, Select, Skeleton } from '../components/ui';
 import { useLanguage } from '../hooks/useLanguage';
 import { useTheme } from '../hooks/useTheme';
-import { CHART_THEME, MULTI_SERIES_COLORS, getChartOptions } from '../utils/chartTheme';
+import { CHART_THEME, getChartOptions, getMultiSeriesColors } from '../utils/chartTheme';
 import {
   DRIFT_FEATURES,
   EMPTY_VALUE,
@@ -122,11 +122,8 @@ function ErrorState({ message, retryLabel, onRetry }) {
 
 function ChartCard({ title, scopeLabel, summary, data, type, isDark, xTitle, yTitle, stacked = false, emptyText }) {
   const baseOptions = getChartOptions(isDark);
-  const reduceMotion = typeof window !== 'undefined'
-    && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const options = {
     ...baseOptions,
-    animation: reduceMotion ? false : baseOptions.animation,
     plugins: {
       ...baseOptions.plugins,
       legend: { ...baseOptions.plugins.legend, display: true },
@@ -362,12 +359,15 @@ export default function MlMonitoring({ apiRole }) {
     kind,
     t(getPredictionKindPresentation(kind).labelKey),
   ])), [t]);
-  const kindColors = useMemo(() => ({
-    prediction: MULTI_SERIES_COLORS[1],
-    feedback: MULTI_SERIES_COLORS[4],
-    baseline: MULTI_SERIES_COLORS[5],
-    simulation: MULTI_SERIES_COLORS[3],
-  }), []);
+  const kindColors = useMemo(() => {
+    const colors = getMultiSeriesColors(isDark);
+    return {
+      prediction: colors[1],
+      feedback: colors[4],
+      baseline: colors[5],
+      simulation: colors[3],
+    };
+  }, [isDark]);
   const charts = useMemo(() => {
     const currentPageCharts = buildCurrentPageCharts(history.rows, kindLabels, kindColors);
     return {

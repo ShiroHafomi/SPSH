@@ -4,8 +4,98 @@ export const GOAL_STATUSES = ['active', 'completed', 'paused', 'cancelled'];
 export const GOAL_GRADES = ['A', 'B', 'C', 'D', 'F'];
 export const EMPTY_VALUE = '—';
 
+export function asPositiveSafeInteger(value) {
+  if (typeof value === 'string') {
+    const normalized = value.trim();
+    if (!/^\d+$/.test(normalized)) return null;
+    value = normalized;
+  } else if (typeof value !== 'number') {
+    return null;
+  }
+
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number > 0 ? number : null;
+}
+
+function asNonNegativeSafeInteger(value) {
+  if (typeof value === 'string') {
+    const normalized = value.trim();
+    if (!/^\d+$/.test(normalized)) return null;
+    value = normalized;
+  } else if (typeof value !== 'number') {
+    return null;
+  }
+
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number >= 0 ? number : null;
+}
+
+export function normalizeGoalPagination(response, requestedPage = 1, fallbackSize = 20) {
+  const data = response && typeof response === 'object' && !Array.isArray(response)
+    ? response
+    : {};
+  const size = asPositiveSafeInteger(data.size) || asPositiveSafeInteger(fallbackSize) || 20;
+  const total = asNonNegativeSafeInteger(data.total) ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / size));
+  const page = Math.min(
+    asPositiveSafeInteger(data.page) || asPositiveSafeInteger(requestedPage) || 1,
+    totalPages
+  );
+
+  return { page, size, total, totalPages };
+}
+
+function asRecord(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+}
+
+function safeText(value) {
+  return typeof value === 'string' ? value : '';
+}
+
+export function normalizeGoalEntries(entries) {
+  if (!Array.isArray(entries)) return [];
+
+  return entries.flatMap((value) => {
+    const entry = asRecord(value);
+    const goal = asRecord(entry?.goal);
+    const goalId = asPositiveSafeInteger(goal?.id);
+    if (!entry || !goal || goalId === null) return [];
+
+    const checkIns = Array.isArray(entry.checkIns)
+      ? entry.checkIns.flatMap((checkInValue) => {
+        const checkIn = asRecord(checkInValue);
+        const checkInId = asPositiveSafeInteger(checkIn?.id);
+        return checkIn && checkInId !== null
+          ? [{
+            ...checkIn,
+            id: checkInId,
+            student_note: safeText(checkIn.student_note),
+            teacher_feedback: safeText(checkIn.teacher_feedback),
+          }]
+          : [];
+      })
+      : [];
+
+    return [{
+      ...entry,
+      goal: {
+        ...goal,
+        id: goalId,
+        status: GOAL_STATUSES.includes(goal.status) ? goal.status : '',
+        target_grade: GOAL_GRADES.includes(goal.target_grade) ? goal.target_grade : null,
+      },
+      progress: asRecord(entry.progress) || {},
+      checkIns,
+    }];
+  });
+}
+
 function finiteInput(value) {
   if (value === '' || value === null || value === undefined) return null;
+  if (typeof value !== 'number' && typeof value !== 'string') return Number.NaN;
+  if (typeof value === 'string' && value.trim() === '') return null;
+
   const number = Number(value);
   return Number.isFinite(number) ? number : Number.NaN;
 }
@@ -82,27 +172,39 @@ export function checkinPayload(values) {
 }
 
 export function asFiniteNumber(value) {
-  if (value === null || value === undefined || value === '' || (typeof value === 'string' && !value.trim())) {
-    return null;
-  }
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string' || value.trim() === '') return null;
+
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
 
-export function formatMetric(value, { digits = 2, suffix = '' } = {}) {
-  const number = asFiniteNumber(value);
-  if (number === null) return EMPTY_VALUE;
-  const rounded = Number(number.toFixed(digits));
-  return `${rounded}${suffix}`;
+function activeLocale(language) {
+  return language
+    || (typeof document !== 'undefined' ? document.documentElement.lang : 'en')
+    || 'en';
 }
 
-export function formatGoalDate(value) {
+export function formatMetric(value, { digits = 2, suffix = '', language } = {}) {
+  const number = asFiniteNumber(value);
+  if (number === null) return EMPTY_VALUE;
+  const locale = activeLocale(language);
+
+  try {
+    return `${new Intl.NumberFormat(locale, { maximumFractionDigits: digits }).format(number)}${suffix}`;
+  } catch {
+    return `${new Intl.NumberFormat('en', { maximumFractionDigits: digits }).format(number)}${suffix}`;
+  }
+}
+
+export function formatGoalDate(value, language) {
+  const locale = activeLocale(language);
   if (value instanceof Date && Number.isFinite(value.getTime())) {
-    return value.toLocaleDateString();
+    return value.toLocaleDateString(locale);
   }
   if (!isCalendarDate(value)) return EMPTY_VALUE;
   const [year, month, day] = value.split('-').map(Number);
-  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString(undefined, { timeZone: 'UTC' });
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString(locale, { timeZone: 'UTC' });
 }
 
 function dateSortValue(value) {
@@ -113,17 +215,17 @@ function dateSortValue(value) {
 
 export function sortCheckInsChronologically(checkIns) {
   if (!Array.isArray(checkIns)) return [];
-  return [...checkIns].sort((left, right) => {
+  return checkIns.filter(asRecord).sort((left, right) => {
     const difference = dateSortValue(left?.week_start) - dateSortValue(right?.week_start);
     if (difference !== 0) return difference;
     return (asFiniteNumber(left?.id) ?? 0) - (asFiniteNumber(right?.id) ?? 0);
   });
 }
 
-export function createTrendChartData(checkIns, field, label, color) {
+export function createTrendChartData(checkIns, field, label, color, language) {
   const points = sortCheckInsChronologically(checkIns)
     .map((checkIn) => ({
-      label: formatGoalDate(checkIn?.week_start),
+      label: formatGoalDate(checkIn?.week_start, language),
       value: asFiniteNumber(checkIn?.[field]),
     }))
     .filter((point) => point.label !== EMPTY_VALUE && point.value !== null);
@@ -137,7 +239,7 @@ export function createTrendChartData(checkIns, field, label, color) {
       data: points.map((point) => point.value),
       borderColor: color.border,
       backgroundColor: color.bg,
-      borderWidth: 3,
+      borderWidth: 2,
       fill: true,
       tension: 0.35,
       pointRadius: 4,
