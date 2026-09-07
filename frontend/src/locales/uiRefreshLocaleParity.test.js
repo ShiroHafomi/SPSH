@@ -70,6 +70,13 @@ test('admin AI tool guidance and lookup labels exist in both locales', () => {
     'noSummaryGenerated',
     'noInterventionGenerated',
     'bulkEvalFailed',
+    'interventionPermissionDenied',
+    'interventionStudentNotFound',
+    'interventionInsufficientData',
+    'interventionUnavailable',
+    'interventionUnexpectedError',
+    'retryIntervention',
+    'interventionNotStored',
   ]) {
     assert.equal(typeof en.admin[key], 'string');
     assert.equal(typeof vi.admin[key], 'string');

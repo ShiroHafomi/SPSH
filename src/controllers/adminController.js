@@ -599,7 +599,7 @@ async function apiAdminBulkAiEvaluate(req, res) {
       }
       try {
         const student = rows.find(s => s.id === item.studentId);
-        const noteResult = await generateInterventionNote(item.studentId, null, item.prediction);
+        const noteResult = await generateInterventionNote(item.studentId, null, item.prediction, student);
         return {
           studentId: item.studentId,
           student_id: student?.student_id ?? null,
@@ -635,31 +635,51 @@ async function apiAdminBulkAiEvaluate(req, res) {
 async function apiAdminGenerateIntervention(req, res) {
   const id = parsePositiveSafeInteger(req.params.id);
   if (id === null) {
-    return res.status(400).json({ error: 'Student ID must be a positive integer.' });
+    return res.status(400).json({
+      error: 'Student ID must be a positive integer.',
+      code: 'INVALID_STUDENT_ID',
+    });
+  }
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required.', code: 'AUTH_REQUIRED' });
+  }
+  if (req.user.role !== 'admin' || !authService.canAccessStudent(req.user, id)) {
+    return res.status(403).json({ error: 'Access denied.', code: 'STUDENT_ACCESS_DENIED' });
   }
 
   try {
     const student = await studentService.findById(id);
-    if (!student) return res.status(404).json({ error: 'Student not found.' });
-
-    // Get prediction first
-    let prediction;
-    try {
-      prediction = await mlService.predictForStudent(id);
-    } catch (err) {
-      if (err.message === 'ML capacity exceeded') {
-        return res.status(503).json({ error: 'Intervention service temporarily unavailable, please retry' });
-      }
-      throw err;
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found.', code: 'STUDENT_NOT_FOUND' });
     }
 
-    // Generate intervention note using prediction
+    const prediction = await mlService.predictForStudent(id, student);
     const { generateInterventionNote } = require('../services/aiCounselService');
-    const result = await generateInterventionNote(id, null, prediction);
-    res.json(result);
-  } catch (err) {
-    console.error('[apiAdminGenerateIntervention]', err);
-    res.status(500).json({ error: 'Failed to generate intervention note.' });
+    const result = await generateInterventionNote(id, null, prediction, student);
+    return res.json(result);
+  } catch (error) {
+    const { MlDependencyError, StudentPredictionDataError } = require('../utils/mlErrors');
+    if (error instanceof StudentPredictionDataError) {
+      return res.status(422).json({
+        error: 'Student record does not contain sufficient valid data for intervention generation.',
+        code: error.code,
+      });
+    }
+    if (error instanceof MlDependencyError) {
+      return res.status(503).json({
+        error: 'Intervention service is temporarily unavailable. Please retry later.',
+        code: error.code,
+      });
+    }
+
+    console.error('[apiAdminGenerateIntervention]', {
+      name: error?.name || 'Error',
+      code: error?.code || 'UNEXPECTED_ERROR',
+    });
+    return res.status(500).json({
+      error: 'Failed to generate intervention note.',
+      code: 'INTERVENTION_INTERNAL_ERROR',
+    });
   }
 }
 

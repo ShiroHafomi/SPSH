@@ -246,7 +246,7 @@ async function apiTeacherAiCounsel(req, res) {
     // Get ML prediction first
     let prediction;
     try {
-      prediction = await mlService.predictForStudent(studentId);
+      prediction = await mlService.predictForStudent(studentId, student);
     } catch (err) {
       if (err.message === 'ML capacity exceeded') {
         return res.status(503).json({ error: 'Counsel service temporarily unavailable, please retry' });
@@ -255,12 +255,7 @@ async function apiTeacherAiCounsel(req, res) {
     }
 
     // Generate intervention note using prediction
-    const result = await generateInterventionNote(studentId, customPrompt, prediction);
-
-    // Save intervention note to student's notes
-    await studentService.updateStudent(studentId, {
-      notes: result.interventionNote,
-    });
+    const result = await generateInterventionNote(studentId, customPrompt, prediction, student);
 
     // Log audit event
     await logAuditEvent({

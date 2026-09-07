@@ -23,8 +23,12 @@ function parseBinary(value, field) {
 }
 
 function parseFiniteNumber(value, field, { min, max, integer = false } = {}) {
-  if (value === undefined || value === null || value === '') {
+  if (value === undefined || value === null || (typeof value === 'string' && value.trim() === '')) {
     throw new RangeError(`${field} is required`);
+  }
+  if ((typeof value !== 'number' && typeof value !== 'string')
+      || (typeof value === 'string' && !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim()))) {
+    throw new RangeError(`${field} must be a finite number`);
   }
   const num = Number(value);
   if (!Number.isFinite(num) || Number.isNaN(num)) {
@@ -108,34 +112,55 @@ function validatePredictionProfile(input) {
  * Adapter: Convert a schema-map student row to ML prediction profile.
  * Uses 'semantic' tags (not 'semanticTag') from schema_map.json.
  */
+function normalizeFieldKey(value) {
+  return typeof value === 'string'
+    ? value.replace(/[^a-z0-9]/gi, '').toLowerCase()
+    : '';
+}
+
+const PROFILE_FIELD_ALIASES = Object.freeze({
+  gender: ['gender'],
+  age: ['age'],
+  study_hours_per_day: ['study_hours_per_day', 'study_hours', 'studyHours'],
+  attendance_percent: ['attendance_percent', 'attendance'],
+  sleep_hours: ['sleep_hours', 'sleep'],
+  previous_gpa: ['previous_gpa', 'gpa'],
+  parental_education: ['parental_education', 'parentalEducation'],
+  internet_access: ['internet_access', 'internetAccess'],
+  extracurricular: ['extracurricular'],
+  part_time_job: ['part_time_job', 'partTimeJob'],
+});
+
 function studentToProfile(student, schemaMap) {
-  if (!student || typeof student !== 'object') {
+  if (!student || typeof student !== 'object' || Array.isArray(student)) {
     throw new TypeError('Student record required');
   }
 
-  // Build a lookup by semantic tag
+  const columns = Array.isArray(schemaMap)
+    ? schemaMap
+    : (Array.isArray(schemaMap?.columns) ? schemaMap.columns : []);
   const bySemantic = new Map();
-  if (schemaMap && Array.isArray(schemaMap)) {
-    for (const col of schemaMap) {
-      if (col.semantic) bySemantic.set(col.semantic, col.name);
-    }
+  for (const column of columns) {
+    if (!column || typeof column.name !== 'string') continue;
+    const semanticKey = normalizeFieldKey(column.semantic ?? column.semanticTag);
+    if (semanticKey) bySemantic.set(semanticKey, column.name);
   }
 
-  // Fallback field names if semantic tags not found
-  const get = (semantic) => student[bySemantic.get(semantic)] ?? student[semantic];
-
-  return {
-    gender: get('gender'),
-    age: get('age'),
-    study_hours_per_day: get('study_hours'),
-    attendance_percent: get('attendance'),
-    sleep_hours: get('sleep'),
-    previous_gpa: get('gpa'),
-    parental_education: get('parental_education'),
-    internet_access: get('internet_access'),
-    extracurricular: get('extracurricular'),
-    part_time_job: get('part_time_job'),
+  const get = (field) => {
+    const aliases = PROFILE_FIELD_ALIASES[field];
+    for (const alias of aliases) {
+      const mappedName = bySemantic.get(normalizeFieldKey(alias));
+      if (mappedName && Object.hasOwn(student, mappedName)) return student[mappedName];
+    }
+    for (const alias of aliases) {
+      if (Object.hasOwn(student, alias)) return student[alias];
+    }
+    return null;
   };
+
+  return Object.fromEntries(
+    Object.keys(PROFILE_FIELD_ALIASES).map((field) => [field, get(field)])
+  );
 }
 
 module.exports = {
