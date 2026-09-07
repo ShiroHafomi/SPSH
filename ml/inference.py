@@ -12,6 +12,8 @@ import numpy as np
 import pandas as pd
 import joblib
 
+from feature_engineering import create_interaction_features
+
 PROJECT_ROOT = Path(__file__).parent.parent
 MODELS_DIR = PROJECT_ROOT / "ml" / "models"
 
@@ -72,7 +74,7 @@ def build_input_dataframe(args):
 
 def predict(regressor, classifier, preprocessor, X):
     """Make predictions."""
-    X_transformed = preprocessor.transform(X)
+    X_transformed = preprocessor.transform(create_interaction_features(X))
 
     # Regression prediction
     score_pred = regressor.predict(X_transformed)[0]
