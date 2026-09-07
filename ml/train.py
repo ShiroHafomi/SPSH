@@ -55,6 +55,8 @@ from sklearn.metrics import (
 from sklearn.inspection import permutation_importance
 from sklearn.base import clone
 
+from feature_engineering import create_interaction_features
+
 # Optional imports with graceful fallback
 try:
     import xgboost as xgb
@@ -704,44 +706,6 @@ def build_engineered_preprocessor(
         [t[0] for t in transformers],
     )
     return ColumnTransformer(transformers, remainder="drop")
-
-
-def create_interaction_features(
-    df: pd.DataFrame, numeric_features: List[str]
-) -> pd.DataFrame:
-    """Create manual interaction terms for selected numeric features."""
-    df_inter = df.copy()
-    interactions = []
-
-    # Study habits interactions
-    if "study_hours_per_day" in df.columns and "attendance_percent" in df.columns:
-        df_inter["study_attendance_interaction"] = (
-            df["study_hours_per_day"].clip(0, 16) * df["attendance_percent"] / 100.0
-        )
-        interactions.append("study_attendance_interaction")
-
-    if "study_hours_per_day" in df.columns and "previous_gpa" in df.columns:
-        df_inter["study_gpa_interaction"] = df["study_hours_per_day"].clip(0, 16) * df[
-            "previous_gpa"
-        ].clip(0, 4)
-        interactions.append("study_gpa_interaction")
-
-    if "sleep_hours" in df.columns and "attendance_percent" in df.columns:
-        df_inter["sleep_attendance_interaction"] = (
-            df["sleep_hours"].clip(0, 16) * df["attendance_percent"] / 100.0
-        )
-        interactions.append("sleep_attendance_interaction")
-
-    if "attendance_percent" in df.columns and "previous_gpa" in df.columns:
-        df_inter["attendance_gpa_interaction"] = (
-            df["attendance_percent"] * df["previous_gpa"].clip(0, 3) / 100.0
-        )
-        interactions.append("attendance_gpa_interaction")
-
-    if len(interactions) > 0:
-        logger.info("Created interaction features: %s", interactions)
-
-    return df_inter
 
 
 # ============================================================
@@ -1423,9 +1387,11 @@ def main():
     y_clf = df[TARGET_CLF].map(GRADE_MAP).values
 
     # Feature engineering: add interaction terms
-    X_enhanced = create_interaction_features(X, numeric_features)
+    X_enhanced = create_interaction_features(X)
     interaction_cols = [c for c in X_enhanced.columns if '_interaction' in c]
     extended_numeric = numeric_features + interaction_cols
+    if interaction_cols:
+        logger.info("Created interaction features: %s", interaction_cols)
 
     logger.info(
         "Target regression range: [%d, %d], mean=%.2f",

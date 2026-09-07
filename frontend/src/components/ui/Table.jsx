@@ -1,11 +1,32 @@
-/**
- * Table Component - Accessible, sortable, paginated data table
- */
-
-import { forwardRef, useMemo, useState } from 'react';
+import { forwardRef, useEffect, useRef, useState } from 'react';
+import { useLanguage } from '../../hooks/useLanguage';
 import { Button } from './Button';
-import { Icon, getIcon } from './Icons';
-import { Badge, GradeBadge } from './Badge';
+import { Icon } from './Icons';
+import { Badge, GradeBadge, StatusBadge } from './Badge';
+
+const ALIGN_CLASSES = {
+  left: 'text-left',
+  center: 'text-center',
+  right: 'text-right',
+};
+
+function SelectAllCheckbox({ checked, indeterminate, onChange, label }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={checked}
+      onChange={onChange}
+      aria-label={label}
+      className="size-4 rounded border-divider text-primary-600 focus:ring-2 focus:ring-primary-500"
+    />
+  );
+}
 
 const Table = forwardRef(
   (
@@ -21,8 +42,8 @@ const Table = forwardRef(
       selectedRows = [],
       onSelectionChange,
       loading = false,
-      emptyMessage = 'No data available',
-      emptyDescription = 'Try adjusting your search or filter criteria.',
+      emptyMessage,
+      emptyDescription,
       emptyAction,
       className = '',
       rowClassName,
@@ -31,131 +52,86 @@ const Table = forwardRef(
       onPageChange,
       pageSize,
       onPageSizeChange,
-      striped = true,
-      hoverable = true,
-      bordered = true,
       children,
       responsive = true,
     },
     ref
   ) => {
+    const { lang, t } = useLanguage();
+    const locale = lang === 'vi' ? 'vi-VN' : 'en-US';
     const [sortState, setSortState] = useState({ column: sortColumn, direction: sortDirection });
 
     const handleSort = (column) => {
       if (!sortable || !column.sortable) return;
-      const newDirection = sortState.column === column.key && sortState.direction === 'asc' ? 'desc' : 'asc';
-      setSortState({ column: column.key, direction: newDirection });
-      onSort?.(column.key, newDirection);
+      const direction = sortState.column === column.key && sortState.direction === 'asc' ? 'desc' : 'asc';
+      setSortState({ column: column.key, direction });
+      onSort?.(column.key, direction);
     };
 
     const handleSelectAll = (checked) => {
-      if (checked) {
-        onSelectionChange?.(data.map((row) => row[keyField]));
-      } else {
-        onSelectionChange?.([]);
-      }
+      onSelectionChange?.(checked ? data.map((row) => row[keyField]) : []);
     };
 
     const handleSelectRow = (rowId, checked) => {
-      const newSelection = checked
-        ? [...selectedRows, rowId]
-        : selectedRows.filter((id) => id !== rowId);
-      onSelectionChange?.(newSelection);
+      onSelectionChange?.(
+        checked ? [...selectedRows, rowId] : selectedRows.filter((id) => id !== rowId)
+      );
     };
 
     const renderCell = (row, column) => {
       const value = row[column.key];
-
-      // Custom render function
-      if (column.render) {
-        return column.render(value, row);
-      }
-
-      // Grade badge
-      if (column.key === 'grade' || column.type === 'grade') {
-        return <GradeBadge grade={value} size="default" />;
-      }
-
-      // Status badge
-      if (column.type === 'status') {
-        return <StatusBadge status={value} />;
-      }
-
-      // Boolean
+      if (column.render) return column.render(value, row);
+      if (column.key === 'grade' || column.type === 'grade') return <GradeBadge grade={value} size="default" />;
+      if (column.type === 'status') return <StatusBadge status={value} />;
       if (column.type === 'boolean' || typeof value === 'boolean') {
-        return (
-          <Badge variant={value ? 'success' : 'gray'} size="sm" dot>
-            {value ? 'Yes' : 'No'}
-          </Badge>
-        );
+        return <Badge variant={value ? 'success' : 'gray'} size="sm" dot>{value ? t('common.yes') : t('common.no')}</Badge>;
       }
-
-      // Date
       if (column.type === 'date' || column.type === 'datetime') {
-        if (!value) return <span className="text-primary-300 dark:text-gray-600 italic">—</span>;
+        if (!value) return <span className="italic text-ink-muted">—</span>;
         const date = new Date(value);
-        return date.toLocaleDateString(column.type === 'datetime' ? undefined : 'en-US', {
+        if (Number.isNaN(date.getTime())) return <span className="italic text-ink-muted">—</span>;
+        return new Intl.DateTimeFormat(locale, {
           year: 'numeric',
           month: 'short',
           day: 'numeric',
-          ...(column.type === 'datetime' && { hour: '2-digit', minute: '2-digit' }),
-        });
+          ...(column.type === 'datetime' ? { hour: '2-digit', minute: '2-digit' } : {}),
+        }).format(date);
       }
-
-      // Number formatting
       if (column.type === 'number' || column.type === 'currency' || column.type === 'percent') {
-        if (value === null || value === undefined) return <span className="text-primary-300 dark:text-gray-600 italic">—</span>;
-        const num = Number(value);
-        if (column.type === 'currency') {
-          return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num);
-        }
-        if (column.type === 'percent') {
-          return `${num.toFixed(1)}%`;
-        }
-        return num.toLocaleString();
+        if (value === null || value === undefined) return <span className="italic text-ink-muted">—</span>;
+        const number = Number(value);
+        if (!Number.isFinite(number)) return <span className="italic text-ink-muted">—</span>;
+        if (column.type === 'currency') return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(number);
+        if (column.type === 'percent') return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(number)}%`;
+        return new Intl.NumberFormat(locale).format(number);
       }
-
-      // Default text
-      if (value === null || value === undefined || value === '') {
-        return <span className="text-primary-300 dark:text-gray-600 italic">—</span>;
-      }
-
-      return <span>{value}</span>;
+      if (value === null || value === undefined || value === '') return <span className="italic text-ink-muted">—</span>;
+      return <span className="break-words">{value}</span>;
     };
 
     if (children) {
       return (
-        <div className={`${responsive ? 'overflow-x-auto' : ''} ${className}`}>
-          <table ref={ref} className="table w-full" role="grid">
-            {children}
-          </table>
+        <div className={`${responsive ? 'max-w-full overflow-x-auto' : ''} ${className}`}>
+          <table ref={ref} className="table">{children}</table>
         </div>
       );
     }
 
     if (loading) {
       return (
-        <div className={`table-container ${className}`}>
-          <table className="table w-full" role="grid">
+        <div className={`table-container ${className}`} aria-busy="true" aria-label={t('common.loading')}>
+          <table className="table">
             <thead className="table-header">
               <tr>
-                {selectable && <th className="table-header-th w-12" />}
-                {columns.map((col) => (
-                  <th key={col.key} className="table-header-th">
-                    {col.header || col.label || col.key}
-                  </th>
-                ))}
+                {selectable && <th className="table-header-th w-12" scope="col" />}
+                {columns.map((column) => <th key={column.key} className="table-header-th" scope="col">{column.header || column.label || column.key}</th>)}
               </tr>
             </thead>
             <tbody className="table-body">
-              {[...Array(8)].map((_, i) => (
-                <tr key={i} className="table-row">
+              {[...Array(8)].map((_, index) => (
+                <tr key={index} className="table-row">
                   {selectable && <td className="table-cell" />}
-                  {columns.map((col) => (
-                    <td key={col.key} className="table-cell">
-                      <div className="h-4 bg-primary-100 dark:bg-gray-700 rounded animate-shimmer" />
-                    </td>
-                  ))}
+                  {columns.map((column) => <td key={column.key} className="table-cell"><div className="h-4 rounded bg-surface-muted animate-shimmer" /></td>)}
                 </tr>
               ))}
             </tbody>
@@ -164,148 +140,134 @@ const Table = forwardRef(
       );
     }
 
+    const effectivePageSize = pageSize || 20;
+    const startResult = pagination?.total > 0 ? ((pagination.page - 1) * effectivePageSize) + 1 : 0;
+    const endResult = pagination ? Math.min(pagination.page * effectivePageSize, pagination.total) : 0;
+
     return (
       <div className={`table-container ${className}`}>
-        <table className="table w-full" role="grid">
+        <table className="table">
           <thead className="table-header">
             <tr>
               {selectable && (
-                <th className="table-header-th w-12">
-                  <input
-                    type="checkbox"
+                <th className="table-header-th w-12" scope="col">
+                  <SelectAllCheckbox
                     checked={selectedRows.length === data.length && data.length > 0}
                     indeterminate={selectedRows.length > 0 && selectedRows.length < data.length}
-                    onChange={(e) => handleSelectAll(e.target.checked)}
-                    className="h-4 w-4 border-primary-300 text-primary-600 focus:ring-primary-500"
+                    onChange={(event) => handleSelectAll(event.target.checked)}
+                    label={t('table.selectAll')}
                   />
                 </th>
               )}
-              {columns.map((col) => (
-                <th
-                  key={col.key}
-                  className={`table-header-th ${col.align ? `text-${col.align}` : ''} ${col.width ? `w-[${col.width}]` : ''}`}
-                  style={col.style}
-                >
-                  <div className="flex items-center gap-1">
-                    <span>{col.header || col.label || col.key}</span>
-                    {sortable && col.sortable && (
+              {columns.map((column) => {
+                const isSorted = sortState.column === column.key;
+                const alignClass = ALIGN_CLASSES[column.align] || '';
+                return (
+                  <th
+                    key={column.key}
+                    className={`table-header-th ${alignClass}`}
+                    style={{ ...(column.width ? { width: column.width } : {}), ...column.style }}
+                    scope="col"
+                    aria-sort={isSorted ? (sortState.direction === 'asc' ? 'ascending' : 'descending') : undefined}
+                  >
+                    {sortable && column.sortable ? (
                       <button
                         type="button"
-                        onClick={() => handleSort(col)}
-                        className="p-0.5 text-primary-400 hover:text-primary-600 transition-colors"
-                        aria-label={sortState.column === col.key ? `Sorted ${sortState.direction === 'asc' ? 'ascending' : 'descending'}` : 'Sort'}
+                        onClick={() => handleSort(column)}
+                        className={`focus-ring -my-2 inline-flex min-h-11 items-center gap-1.5 rounded-lg px-1 text-left transition-colors hover:text-primary-700 ${alignClass}`}
+                        aria-label={t('table.sortBy', { column: column.header || column.label || column.key })}
                       >
-                        {sortState.column === col.key ? (
-                          sortState.direction === 'asc' ? (
-                            <Icon name="chevronUp" className="w-4 h-4" />
-                          ) : (
-                            <Icon name="chevronDown" className="w-4 h-4" />
-                          )
-                        ) : (
-                          <Icon name="chevronUp" className="w-4 h-4 opacity-50" />
-                        )}
+                        <span>{column.header || column.label || column.key}</span>
+                        <Icon name={isSorted && sortState.direction === 'desc' ? 'chevronDown' : 'chevronUp'} className={`size-4 ${isSorted ? '' : 'opacity-40'}`} />
                       </button>
+                    ) : (
+                      column.header || column.label || column.key
                     )}
-                  </div>
-                </th>
-              ))}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody className="table-body">
             {data.length === 0 ? (
               <tr>
                 <td colSpan={columns.length + (selectable ? 1 : 0)} className="table-empty">
-                  <div className="text-primary-300 dark:text-gray-600 mb-2">
-                    <Icon name="database" className="w-12 h-12 mx-auto" />
-                  </div>
-                  <p className="text-primary-400 dark:text-gray-500 font-medium">{emptyMessage}</p>
-                  <p className="text-sm text-primary-400 dark:text-gray-500 mt-1">{emptyDescription}</p>
+                  <Icon name="database" className="mx-auto mb-3 size-11 text-ink-muted" />
+                  <p className="font-semibold text-ink">{emptyMessage || t('common.noData')}</p>
+                  <p className="mt-1 text-sm text-ink-muted">{emptyDescription || t('table.emptyDescription')}</p>
                   {emptyAction && <div className="mt-4">{emptyAction}</div>}
                 </td>
               </tr>
             ) : (
-              data.map((row) => (
-                <tr
-                  key={row[keyField]}
-                  className={`table-row ${onRowClick ? 'cursor-pointer' : ''} ${rowClassName ? rowClassName(row) : ''}`}
-                  onClick={() => onRowClick?.(row)}
-                >
-                  {selectable && (
-                    <td className="table-cell">
-                      <input
-                        type="checkbox"
-                        checked={selectedRows.includes(row[keyField])}
-                        onChange={(e) => handleSelectRow(row[keyField], e.target.checked)}
-                        className="h-4 w-4 border-primary-300 text-primary-600 focus:ring-primary-500"
-                      />
-                    </td>
-                  )}
-                  {columns.map((col) => (
-                    <td
-                      key={col.key}
-                      className={`table-cell ${col.align ? `text-${col.align}` : ''}`}
-                      style={col.style}
-                    >
-                      {renderCell(row, col)}
-                    </td>
-                  ))}
-                </tr>
-              ))
+              data.map((row) => {
+                const rowId = row[keyField];
+                const activateRow = () => onRowClick?.(row);
+                return (
+                  <tr
+                    key={rowId}
+                    className={`table-row ${onRowClick ? 'focus-ring cursor-pointer' : ''} ${rowClassName ? rowClassName(row) : ''}`}
+                    onClick={activateRow}
+                    onKeyDown={onRowClick ? (event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        activateRow();
+                      }
+                    } : undefined}
+                    tabIndex={onRowClick ? 0 : undefined}
+                  >
+                    {selectable && (
+                      <td className="table-cell">
+                        <input
+                          type="checkbox"
+                          checked={selectedRows.includes(rowId)}
+                          onClick={(event) => event.stopPropagation()}
+                          onChange={(event) => handleSelectRow(rowId, event.target.checked)}
+                          aria-label={t('table.selectRow')}
+                          className="size-4 rounded border-divider text-primary-600 focus:ring-2 focus:ring-primary-500"
+                        />
+                      </td>
+                    )}
+                    {columns.map((column) => (
+                      <td key={column.key} className={`table-cell ${ALIGN_CLASSES[column.align] || ''}`} style={column.style}>
+                        {renderCell(row, column)}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
 
         {pagination && (
-          <div className="p-4 border-t border-primary-100 dark:border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-sm text-primary-500 dark:text-gray-400">
-              Showing {((pagination.page - 1) * (pageSize || 20)) + 1} to {Math.min(pagination.page * (pageSize || 20), pagination.total)} of {pagination.total} results
-            </div>
-            <div className="flex items-center gap-2">
-              <select
-                value={pageSize || 20}
-                onChange={(e) => onPageSizeChange?.(Number(e.target.value))}
-                className="input input-sm w-auto"
-                aria-label="Page size"
-              >
-                {[10, 20, 50, 100].map((size) => (
-                  <option key={size} value={size}>
-                    {size} per page
-                  </option>
-                ))}
-              </select>
-              <nav className="flex items-center gap-1" aria-label="Pagination">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onPageChange?.(pagination.page - 1)}
-                  disabled={pagination.page <= 1}
-                  aria-label="Previous page"
+          <div className="flex flex-col gap-4 border-t border-divider p-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-ink-muted">
+              {t('table.paginationSummary', { start: startResult, end: endResult, total: pagination.total })}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              {onPageSizeChange && (
+                <select
+                  value={effectivePageSize}
+                  onChange={(event) => onPageSizeChange(Number(event.target.value))}
+                  className="input input-sm w-auto"
+                  aria-label={t('table.pageSize')}
                 >
-                  <Icon name="chevronLeft" className="w-4 h-4" />
+                  {[10, 20, 50, 100].map((size) => <option key={size} value={size}>{t('table.perPage', { size })}</option>)}
+                </select>
+              )}
+              <nav className="flex flex-wrap items-center gap-1" aria-label={t('table.pagination')}>
+                <Button variant="ghost" size="icon" onClick={() => onPageChange?.(pagination.page - 1)} disabled={pagination.page <= 1} aria-label={t('table.previousPage')}>
+                  <Icon name="chevronLeft" className="size-4" />
                 </Button>
-                {pagination.pages.map((page) => (
-                  page === '...' ? (
-                    <span key="ellipsis" className="px-2 text-primary-300 dark:text-gray-600">…</span>
-                  ) : (
-                    <Button
-                      key={page}
-                      variant={page === pagination.page ? 'primary' : 'ghost'}
-                      size="sm"
-                      onClick={() => onPageChange?.(page)}
-                      className="min-w-[36px]"
-                    >
+                {(pagination.pages || []).map((page, index) => page === '...'
+                  ? <span key={`ellipsis-${index}`} className="px-2 text-ink-muted">…</span>
+                  : (
+                    <Button key={page} variant={page === pagination.page ? 'primary' : 'ghost'} size="icon" onClick={() => onPageChange?.(page)} aria-current={page === pagination.page ? 'page' : undefined}>
                       {page}
                     </Button>
-                  )
-                ))}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onPageChange?.(pagination.page + 1)}
-                  disabled={pagination.page >= pagination.totalPages}
-                  aria-label="Next page"
-                >
-                  <Icon name="chevronRight" className="w-4 h-4" />
+                  ))}
+                <Button variant="ghost" size="icon" onClick={() => onPageChange?.(pagination.page + 1)} disabled={pagination.page >= pagination.totalPages} aria-label={t('table.nextPage')}>
+                  <Icon name="chevronRight" className="size-4" />
                 </Button>
               </nav>
             </div>
@@ -318,27 +280,12 @@ const Table = forwardRef(
 
 Table.displayName = 'Table';
 
-export const TableHeader = ({ className = '', ...props }) => (
-  <thead className={`table-header ${className}`} {...props} />
-);
+export const TableHeader = ({ className = '', ...props }) => <thead className={`table-header ${className}`} {...props} />;
+export const TableBody = ({ className = '', ...props }) => <tbody className={`table-body ${className}`} {...props} />;
+export const TableRow = ({ className = '', ...props }) => <tr className={`table-row ${className}`} {...props} />;
+export const TableHead = ({ align, className = '', ...props }) => <th className={`table-header-th ${ALIGN_CLASSES[align] || ''} ${className}`} {...props} />;
+export const TableCell = ({ align, className = '', ...props }) => <td className={`table-cell ${ALIGN_CLASSES[align] || ''} ${className}`} {...props} />;
 
-export const TableBody = ({ className = '', ...props }) => (
-  <tbody className={`table-body ${className}`} {...props} />
-);
-
-export const TableRow = ({ className = '', ...props }) => (
-  <tr className={`table-row ${className}`} {...props} />
-);
-
-export const TableHead = ({ align, className = '', ...props }) => (
-  <th className={`table-header-th ${align ? `text-${align}` : ''} ${className}`} {...props} />
-);
-
-export const TableCell = ({ align, className = '', ...props }) => (
-  <td className={`table-cell ${align ? `text-${align}` : ''} ${className}`} {...props} />
-);
-
-// Column configuration helper
 export const createColumn = (config) => ({
   key: config.key,
   header: config.header,

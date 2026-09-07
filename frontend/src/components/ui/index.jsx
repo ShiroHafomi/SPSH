@@ -4,6 +4,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
+import { useLanguage } from '../../hooks/useLanguage';
 
 // Icons
 export { icons, Icon, getIcon } from './Icons';
@@ -31,6 +32,9 @@ export { Dropdown, DropdownTrigger } from './Dropdown';
 
 // Toast/Notifications
 export { ToastProvider, useToast, useFlash, toast } from './Toast';
+
+// Feedback states
+export { EmptyState, ErrorState } from './FeedbackState';
 
 // Skeleton loading
 export const Skeleton = ({ className = '', ...props }) => (
@@ -71,40 +75,28 @@ export const PageContainer = ({ children, className = '', ...props }) => (
 
 export const PageHeader = ({ title, subtitle, actions, className = '', ...props }) => (
   <div className={`page-header ${className}`} {...props}>
-    <div>
+    <div className="min-w-0">
       {title && <h1 className="page-title">{title}</h1>}
       {subtitle && <p className="page-subtitle">{subtitle}</p>}
     </div>
-    {actions && <div className="flex items-center gap-2">{actions}</div>}
+    {actions && <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">{actions}</div>}
   </div>
 );
 
+const DIRECTION_CLASSES = { row: 'flex-row', col: 'flex-col', 'row-reverse': 'flex-row-reverse', 'col-reverse': 'flex-col-reverse' };
+const ALIGN_CLASSES = { start: 'items-start', center: 'items-center', end: 'items-end', stretch: 'items-stretch', baseline: 'items-baseline' };
+const JUSTIFY_CLASSES = { start: 'justify-start', center: 'justify-center', end: 'justify-end', between: 'justify-between', around: 'justify-around' };
+const GAP_CLASSES = { 0: 'gap-0', 1: 'gap-1', 2: 'gap-2', 3: 'gap-3', 4: 'gap-4', 5: 'gap-5', 6: 'gap-6', 8: 'gap-8' };
+const GRID_CLASSES = { 1: 'grid-cols-1', 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4', 5: 'grid-cols-5', 6: 'grid-cols-6' };
+
 export const Flex = ({ children, direction = 'row', align = 'center', justify = 'start', gap = 4, wrap = false, className = '', ...props }) => (
-  <div
-    className={`
-      flex
-      flex-${direction}
-      items-${align}
-      justify-${justify}
-      gap-${gap}
-      ${wrap ? 'flex-wrap' : ''}
-      ${className}
-    `}
-    {...props}
-  >
+  <div className={`flex ${DIRECTION_CLASSES[direction] || DIRECTION_CLASSES.row} ${ALIGN_CLASSES[align] || ALIGN_CLASSES.center} ${JUSTIFY_CLASSES[justify] || JUSTIFY_CLASSES.start} ${GAP_CLASSES[gap] || GAP_CLASSES[4]} ${wrap ? 'flex-wrap' : ''} ${className}`} {...props}>
     {children}
   </div>
 );
 
 export const Grid = ({ children, cols = 1, gap = 5, className = '', ...props }) => (
-  <div
-    className={`
-      grid gap-${gap}
-      grid-cols-${cols}
-      ${className}
-    `}
-    {...props}
-  >
+  <div className={`grid ${GAP_CLASSES[gap] || GAP_CLASSES[5]} ${GRID_CLASSES[cols] || GRID_CLASSES[1]} ${className}`} {...props}>
     {children}
   </div>
 );
@@ -116,8 +108,9 @@ export const Grid3 = ({ children, className = '', ...props }) => <Grid cols={3} 
 export const Grid4 = ({ children, className = '', ...props }) => <Grid cols={4} className={`grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 ${className}`} {...props}>{children}</Grid>;
 
 // Container
+const CONTAINER_CLASSES = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-xl', '2xl': 'max-w-2xl', '4xl': 'max-w-4xl', '6xl': 'max-w-6xl', '7xl': 'max-w-7xl', full: 'max-w-full' };
 export const Container = ({ children, size = '7xl', className = '', ...props }) => (
-  <div className={`max-w-${size} mx-auto px-4 sm:px-6 lg:px-8 ${className}`} {...props}>
+  <div className={`mx-auto w-full ${CONTAINER_CLASSES[size] || CONTAINER_CLASSES['7xl']} ${className}`} {...props}>
     {children}
   </div>
 );
@@ -133,7 +126,8 @@ export const Section = ({ children, className = '', ...props }) => (
 export const Divider = ({ className = '', ...props }) => <hr className={`border-primary-100 dark:border-gray-800 ${className}`} {...props} />;
 
 // Spacer
-export const Spacer = ({ size = 4, className = '', ...props }) => <div className={`h-${size} ${className}`} {...props} />;
+const SPACER_CLASSES = { 1: 'h-1', 2: 'h-2', 3: 'h-3', 4: 'h-4', 5: 'h-5', 6: 'h-6', 8: 'h-8', 10: 'h-10', 12: 'h-12' };
+export const Spacer = ({ size = 4, className = '', ...props }) => <div className={`${SPACER_CLASSES[size] || SPACER_CLASSES[4]} ${className}`} {...props} />;
 
 // Visually hidden (for accessibility)
 export const VisuallyHidden = ({ children, ...props }) => (
@@ -208,19 +202,22 @@ export const Spinner = ({ size = 'default', className = '', ...props }) => {
 };
 
 // Loading overlay
-export const LoadingOverlay = ({ isLoading, children, message = 'Loading...' }) => (
-  <div className="relative">
-    {children}
-    {isLoading && (
-      <div className="absolute inset-0 bg-white/80 dark:bg-gray-950/80 backdrop-blur-sm flex items-center justify-center z-10">
-        <div className="card-clay p-8 text-center">
-          <Spinner size="lg" className="mx-auto mb-4" />
-          <p className="text-primary-600 dark:text-gray-400">{message}</p>
+export const LoadingOverlay = ({ isLoading, children, message }) => {
+  const { t } = useLanguage();
+  return (
+    <div className="relative">
+      {children}
+      {isLoading && (
+        <div className="absolute inset-0 z-dropdown flex items-center justify-center bg-surface/85 backdrop-blur-sm" role="status">
+          <div className="card p-6 text-center">
+            <Spinner size="lg" className="mx-auto mb-4" />
+            <p className="text-ink-muted">{message || t('common.loading')}</p>
+          </div>
         </div>
-      </div>
-    )}
-  </div>
-);
+      )}
+    </div>
+  );
+};
 
 // Avatar
 export const Avatar = ({ src, alt, name, size = 'default', className = '', ...props }) => {

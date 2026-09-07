@@ -25,7 +25,7 @@ export default function TeacherFeedbackForm({ checkIn, onSave }) {
   };
 
   return (
-    <form onSubmit={submit} className="mt-4 border-t border-primary-100 pt-4 dark:border-gray-800">
+    <form onSubmit={submit} className="mt-4 border-t border-divider pt-4">
       <Textarea
         name={`teacher-feedback-${checkIn.id}`}
         label={t('checkins.teacherFeedback')}

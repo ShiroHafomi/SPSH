@@ -40,8 +40,8 @@ const Badge = forwardRef(
         className={`
           inline-flex items-center gap-1.5
           font-semibold leading-5 rounded-full
-          ${variants[variant]}
-          ${sizes[size]}
+          ${variants[variant] || variants.default}
+          ${sizes[size] || sizes.default}
           ${className}
         `}
         {...props}
@@ -85,7 +85,7 @@ const GradeBadge = ({ grade, size = 'default', className = '', ...props }) => {
         inline-flex items-center justify-center
         font-bold leading-none rounded-full
         ${variant}
-        ${sizes[size]}
+        ${sizes[size] || sizes.default}
         ${className}
       `}
       {...props}

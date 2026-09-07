@@ -2,7 +2,7 @@
 
 A full-stack web application for analyzing and predicting student performance based on study habits. Built with a React/Vite frontend and Express/MySQL backend, featuring machine learning predictions, notification center, role-based access control, and schema-agnostic design that adapts to any CSV dataset.
 
-## 📊 Features
+## Features
 
 - **Authentication System**: Secure login/registration with JWT tokens, password hashing (bcryptjs), and role-based access (admin/teacher/student)
 - **CRUD Operations**: Create, read, update, delete student records with form validation
@@ -16,6 +16,7 @@ A full-stack web application for analyzing and predicting student performance ba
 - **Saved What-If Scenarios**: Persist successful simulations, mark preferred scenarios, and compare different approaches
 - **Notification Center**: Real-time alerts for study goals, weekly check-ins, teacher feedback, and risk alerts with preference controls
 - **Study Goals & Weekly Check-ins**: Set academic targets and track progress with completion analytics
+- **Personal Assignments & Deadlines**: Students can track their own coursework, priorities, deadlines, and completion state with timezone-safe overdue indicators
 - **Internationalization**: Full English/Vietnamese localization with synchronized key parity
 - **Role-Based Navigation**: 
   - Students: Personal dashboard, goal tracking, simulation tools
@@ -32,16 +33,17 @@ A full-stack web application for analyzing and predicting student performance ba
 - **Responsive Design**: Mobile-friendly interface with Tailwind CSS
 - **Production Ready**: Environment configuration, process management, and build optimization
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 ### Frontend
-- **React 18.3** with **Vite 5.4** build tool
-- **React Router 6.26** for hash-based routing
-- **Tailwind CSS 3.4** via Play CDN (utility-first styling)
-- **Chart.js 4.4** with **react-chartjs-2 5.2** for data visualization
-- **Lucide React** for consistent iconography
-- **Axios** for HTTP client with automatic JWT handling
-- **i18next** for internationalization (English/Vietnamese)
+- **React 18.3** with **Vite 5.4** as the active SPA in `frontend/`
+- **React Router 6.26** with browser-history routing and role-protected route groups
+- **Tailwind CSS 3.4** compiled through PostCSS using semantic design-token aliases
+- **Chart.js 4.4** with **react-chartjs-2 5.2** for responsive data visualization
+- **Lucide React** plus the shared SVG icon registry for consistent iconography
+- Native **Fetch API** wrapper with session-cookie credentials
+- Custom English/Vietnamese `LanguageProvider` with synchronized locale objects
+- Node's built-in **`node:test`** runner for frontend utility and contract tests
 
 ### Backend
 - **Node.js 22** runtime
@@ -77,7 +79,49 @@ A full-stack web application for analyzing and predicting student performance ba
 - **Audit tables** for tracking changes to critical entities
 - **Connection pooling** with configurable limits
 
-## 📁 Project Structure
+## UI Refresh — Consistent Education Dashboard
+
+The active interface is the React/Vite SPA under `frontend/`; the Express server serves its production build and exposes the existing API. `frontend/src/App.jsx` preserves the established URLs and authorization gates while all authenticated route groups render through the shared `AppShell` in `frontend/src/components/AppShell.jsx`.
+
+### Application shell and navigation
+
+- Desktop users receive one persistent left sidebar with grouped, role-specific destinations, a clear active-route state, page context, notification access, language/theme controls, account identity, and logout.
+- Student navigation is generated independently from teacher and admin navigation. Hiding a destination is not treated as authorization; `ProtectedRoute` continues to enforce each route's roles.
+- Tablet and mobile widths use an accessible drawer with a backdrop, Escape and outside-interaction closing, focus trapping/restoration, body-scroll locking, and route-change closing.
+- The shell owns the single document `<main>` landmark and skip link. Pages should render sections and headers inside that landmark rather than nesting another `<main>`.
+
+### Theme and design tokens
+
+`frontend/src/index.css` defines the light and dark semantic tokens, and `frontend/tailwind.config.js` exposes them as Tailwind aliases:
+
+```text
+canvas / surface / surface-muted
+ink / ink-muted / divider
+action / action-muted / action-strong
+success / warning / danger / focus-ring
+```
+
+The explicit light or dark choice is stored in `localStorage`. When no valid choice has been saved, `useTheme` follows `prefers-color-scheme`; both modes set the browser `color-scheme`. Motion is reduced when the user requests `prefers-reduced-motion`.
+
+### Shared UI conventions
+
+- Reuse `Button`, `Input`, `Select`, `Checkbox`, `RadioGroup`, `Card`, `KPICard`, `Table`, `Modal`, `ConfirmDialog`, `EmptyState`, `ErrorState`, skeletons, and layout helpers from `frontend/src/components/ui/`.
+- Interactive controls use visible focus states and at least 44px touch targets. Modal and drawer flows preserve keyboard focus.
+- Wide tables scroll inside their own contained region; page layouts must not create document-wide horizontal scrolling.
+- User-facing copy belongs in both `frontend/src/locales/en.js` and `frontend/src/locales/vi.js`. Add parity coverage when introducing a namespace or shared key set.
+- Charts consume `frontend/src/utils/chartTheme.js` for fixed series identity, light/dark contrast, locale-aware numeric formatting, responsive legends/tooltips, reduced motion, and consistent mark sizing. Keep missing values as missing rather than converting them to zero, and provide a textual summary or data table when a chart is the only visual representation.
+
+Future authenticated pages should be added to the appropriate role group in `frontend/src/components/appShell.js`, protected independently in `App.jsx`, and composed from the shared semantic components instead of introducing another application shell.
+
+Verify frontend changes with:
+
+```bash
+npm --prefix frontend test
+npm --prefix frontend run build
+git diff --check
+```
+
+## Project Structure
 
 ```
 ├─ README.md
@@ -89,60 +133,37 @@ A full-stack web application for analyzing and predicting student performance ba
 │   └─ sample_students.csv      # Sample data (50 rows, gitignored)
 ├─ public/
 │   └─ vite.svg                 # Vite logo
-├─ frontend/                    # React/Vite SPA
+├─ frontend/                    # Active React/Vite SPA
 │   ├─ package.json
 │   ├─ vite.config.js
+│   ├─ tailwind.config.js       # Semantic token aliases and component theme
 │   ├─ index.html
-│   ├─ src/
-│   │   ├─ main.jsx             # Entry point
-│   │   ├─ App.jsx              # Root component with routing
-│   │   ├─ api.js               # HTTP client wrapper
-│   │   ├─ hooks/               # Custom React hooks
-│   │   │   ├─ useNotifications.jsx
-│   │   │   └─ ...
-│   │   ├─ components/          # Reusable UI components
-│   │   │   ├─ layouts/         # Role-based layouts (AdminLayout.jsx, etc.)
-│   │   │   ├─ notifications/   # Notification bell, item, preferences
-│   │   │   ├─ forms/           # Dynamic form components
-│   │   │   ├─ charts/          # Chart wrappers
-│   │   │   └─ ...
-│   │   ├─ pages/               # Route components
-│   │   │   ├─ Login.jsx
-│   │   │   ├─ Register.jsx
-│   │   │   ├─ Dashboard.jsx
-│   │   │   ├─ Notifications.jsx
-│   │   │   ├─ Students.jsx
-│   │   │   ├─ WhatIfSimulator.jsx
-│   │   │   ├─ SavedScenarios.jsx
-│   │   │   ├─ StudentProfile.jsx
-│   │   │   ├─ AdminUsers.jsx
-│   │   │   ├─ MlMonitoring.jsx
-│   │   │   └─ ...
-│   │   ├─ utils/               # Utility functions
-│   │   │   ├─ chartConfig.js   # Schema-agnostic chart assignment
-│   │   │   ├─ columns.js       # SQL injection prevention whitelist
-│   │   │   ├─ safeNavigation.js
-│   │   │   ├─ notifications.js # Notification formatting/parsing
-│   │   │   ├─ schemaMap.js     # Load/validate schema_map.json
-│   │   │   ├─ locales/         # English/Vietnamese translation files
-│   │   │   │   ├─ en.js
-│   │   │   │   ├─ vi.js
-│   │   │   │   ├─ mlMonitoringLocaleParity.test.js
-│   │   │   │   └─ notificationLocaleParity.test.js
-│   │   │   └─ whatIf/          # What-If scenario utilities
-│   │   │       ├─ Comparison.jsx
-│   │   │       └─ ...
-│   │   ├─ views/               # Legacy view components (being phased out)
-│   │   │   ├─ login.js
-│   │   │   ├─ register.js
-│   │   │   ├─ dashboard.js
-│   │   │   ├─ students.js
-│   │   │   ├─ studentForm.js
-│   │   │   └─ adminUsers.js
-│   │   └─ locales/             # Legacy flat locale files (being migrated)
-│   │       ├─ en.js
-│   │       └─ vi.js
-│   └─ tests/                   # Vitest/react-testing-library tests
+│   └─ src/
+│       ├─ main.jsx             # BrowserRouter entry point
+│       ├─ App.jsx              # Providers, protected role groups, and routes
+│       ├─ api.js               # Fetch wrapper with session credentials
+│       ├─ index.css            # Light/dark tokens and global component styles
+│       ├─ components/
+│       │   ├─ AppShell.jsx     # Shared responsive authenticated shell
+│       │   ├─ appShell.js      # Role navigation and route-state utilities
+│       │   ├─ notifications/   # Bell, items, and preference dialog
+│       │   ├─ goals/           # Goal progress UI and accessible charts
+│       │   └─ ui/              # Buttons, fields, cards, tables, modals, feedback states
+│       ├─ hooks/
+│       │   ├─ useAuth.jsx
+│       │   ├─ useLanguage.jsx
+│       │   ├─ useNotifications.jsx
+│       │   └─ useTheme.jsx
+│       ├─ pages/               # Existing student, teacher, admin, and shared routes
+│       ├─ locales/
+│       │   ├─ en.js
+│       │   ├─ vi.js
+│       │   └─ *LocaleParity.test.js
+│       └─ utils/
+│           ├─ chartTheme.js    # Shared Chart.js colors, marks, formatting, and motion
+│           ├─ assignments.js   # Assignment validation, timezone, and list-state helpers
+│           ├─ notifications.js # Notification formatting and trusted navigation
+│           └─ *.test.js        # Node test files colocated with utilities
 ├─ ml/                          # Machine Learning pipeline
 │   ├─ requirements.txt
 │   ├─ fetch_data.py            # MySQL → CSV cache
@@ -180,8 +201,10 @@ A full-stack web application for analyzing and predicting student performance ba
    │   ├─ mlMonitoring.js       # ML monitoring utilities (drift calculation)
    │   └─ predictionHistory.js  # prediction event history utilities
    ├─ controllers/
-   │   └─ apiController.js      # all API handlers (JSON responses)
+   │   ├─ apiController.js      # shared API handlers (JSON responses)
+   │   └─ assignmentController.js # assignment API validation and ownership boundary
    ├─ services/
+   │   ├─ assignmentService.js  # assignment table, SQL, lifecycle, and deadlines
    │   ├─ authService.js        # ALL SQL for users table + auth
    │   ├─ studentService.py     # ALL SQL for students (parameterized only)
    │   ├─ goalsService.js       # study goals CRUD
@@ -200,14 +223,14 @@ A full-stack web application for analyzing and predicting student performance ba
        └─ resetDb.js            # development database reset utility
 ```
 
-## ⚙️ Prerequisites
+## Prerequisites
 
 - **Node.js 22** (or compatible LTS version)
 - **MySQL 8.0+** (local or remote instance)
 - **Python 3.11** (for ML pipeline - optional if using pre-trained models)
 - **Git** (for version control)
 
-## 🔧 Installation & Setup
+## Installation & Setup
 
 ### 1. Environment Configuration
 
@@ -270,7 +293,7 @@ ADMIN_NAME="Administrator" \
 npm run seed:admin
 ```
 
-## 🚀 Running the Application
+## Running the Application
 
 ### Development Mode
 
@@ -310,7 +333,7 @@ The production server serves the React frontend from Express on http://localhost
 npm run setup
 ```
 
-## 📚 API Overview
+## API Overview
 
 All API endpoints require authentication unless otherwise noted. Responses are JSON-formatted.
 
@@ -377,12 +400,56 @@ All API endpoints require authentication unless otherwise noted. Responses are J
 | GET | `/api/weekly-checkins` = Yes | List weekly check-ins |
 | POST | `/api/weekly-checkins` = Yes | Create new weekly check-in |
 
-## 👥 User Roles & Permissions
+### Personal Assignments — Phase 1
+
+Personal assignment tracking is available only to authenticated users with the `student` role and a linked student record. The frontend route is `/student/assignments`; every API query and mutation resolves ownership from the authenticated account instead of accepting a student ID from the client. Assignment data is removed when its owning user account is deleted.
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/student/me/assignments` | Student | List the current student's assignments, pagination, and full-result summary |
+| POST | `/api/student/me/assignments` | Student | Create a personal assignment |
+| GET | `/api/student/me/assignments/:assignmentId` | Student | Get one owned assignment |
+| PATCH | `/api/student/me/assignments/:assignmentId` | Student | Update an owned assignment using its optimistic `version` |
+| DELETE | `/api/student/me/assignments/:assignmentId?version=:version` | Student | Delete an owned assignment only at the expected optimistic `version` |
+
+Assignments support `todo`, `in_progress`, and `done` statuses and `low`, `medium`, and `high` priorities. The list API accepts `q`, `subject`, `status`, `priority`, `overdue`, `from`, `to`, `page`, `size`, and an allowlisted `sort` value. Search covers title and subject. Date filters apply to `due_at` as a half-open UTC range; the frontend converts inclusive viewing dates using the browser's viewing timezone. Pagination defaults to 20 items and is capped at 100. Summary counts (`todo`, `inProgress`, `done`, and `overdue`) cover the complete filtered result, not only the current page. Overdue is a subset of unfinished assignments and must not be added to the status totals.
+
+A deadline is accepted only as a timestamp with an explicit UTC offset, stored as a UTC instant, and displayed in the assignment's selected IANA timezone together with that timezone. Past deadlines are valid. The server returns an `asOf` snapshot and computes time-dependent fields dynamically:
+
+```text
+isOverdue = status != done AND due_at < asOf
+completedLate = status == done AND completed_at > due_at
+```
+
+No background job stores or changes an overdue status. The visible frontend refreshes deadline indicators periodically and refreshes the list when the tab regains focus or visibility.
+
+Entering `done` records `completed_at` using server time. Repeating `done` preserves the first completion time. Reopening requires UI confirmation and clears `completed_at`. A completed assignment must be reopened in a separate update before its deadline can change. Title or description edits do not reset completion, and changing a deadline does not complete the assignment. Updates and deletions require the current optimistic `version`, so a stale confirmation cannot overwrite or delete newer work. Assignment operations do not update grades, machine-learning inputs, Study Goals, or Study Planner session minutes.
+
+Primary implementation and test files:
+
+- `src/services/assignmentService.js` and `src/services/assignmentService.test.js`
+- `src/controllers/assignmentController.js` and `src/controllers/assignmentController.test.js`
+- `frontend/src/pages/Assignments.jsx`
+- `frontend/src/utils/assignments.js` and `frontend/src/utils/assignments.test.js`
+- `frontend/src/locales/assignmentLocaleParity.test.js`
+
+Run the relevant suites and production build with:
+
+```bash
+npm test
+npm --prefix frontend test
+npm --prefix frontend run build
+```
+
+Phase 1 does **not** include teacher assignment distribution, student submissions or file uploads, grading, automatic reminders, external calendar synchronization, or automatic changes to Study Goals or machine-learning data.
+
+## User Roles & Permissions
 
 ### Student
 - Access to personal dashboard and profile
 - CRUD operations on own student record (if linked)
 - Study goal creation and tracking
+- Personal assignment and deadline tracking at `/student/assignments`
 - Weekly check-in submission
 - What-If simulation and scenario saving
 - Notification center with preference controls
@@ -412,7 +479,7 @@ Administrator
 
 Higher roles inherit all permissions of lower roles.
 
-## 🔐 Security & Privacy
+## Security & Privacy
 
 ### Authentication Security
 - JWT tokens with 15-minute access token expiration
@@ -447,7 +514,7 @@ Higher roles inherit all permissions of lower roles.
 - Feedback collection limited to accuracy metrics only
 - No collection of sensitive personal information in ML pipeline
 
-## ⚠️ Known Limitations & Gotchas
+## Known Limitations & Gotchas
 
 ### Database & Import
 - **MySQL STRICT Mode**: Invalid numeric/date values cause batch insert failures → importer falls back to row-by-row processing and logs errors to `import_errors.log`
@@ -472,20 +539,19 @@ Higher roles inherit all permissions of lower roles.
 - **Missing Dependency**: `ml/fetch_data.py` imports SQLAlchemy but it's not in `requirements.txt` (workaround: uses direct mysql2 via Node.js subprocess)
 
 ### Frontend & UX
-- **CDN Dependencies**: Tailwind CSS and Chart.js loaded from public CDNs → requires internet connectivity
-- **Notification Polling**: Updates via HTTP polling every 60 seconds (not real-time WebSocket)
-- **Teacher Scope**: Teachers have organization-wide access to analytics and ML monitoring (not classroom-limited)
-- **Vite Hot Module Reloading**: CSS changes may require full refresh during development
-- **Mobile Layout**: Some complex tables (e.g., ML monitoring) may require horizontal scrolling on narrow screens
+- **Notification Polling**: Updates use visible-page HTTP polling at intervals of at least 60 seconds, not real-time push.
+- **Teacher Scope**: Teachers have organization-wide access to analytics and ML monitoring (not classroom-limited).
+- **Mobile Tables**: Wide data tables remain complete and scroll inside a labeled, contained region rather than hiding essential columns.
+- **Bundle Size**: The production build currently reports a non-blocking warning for a JavaScript chunk above 500 kB; route-level code splitting remains future work.
 
 ### Testing & CI
 - **Test Coverage**: Unit tests for services and utilities; integration tests for API endpoints
-- **Frontend Testing**: Vitest with React Testing Library for component testing
+- **Frontend Testing**: Node's built-in test runner covers pure UI state, formatting, locale parity, and API-contract utilities
 - **ML Testing**: Limited due to non-deterministic nature; focuses on pipeline integrity
 - **CI Pipeline**: GitHub Actions runs on Ubuntu with Node.js 22; tests backend and frontend suites
-- **Artifact Exclusion**: `node_modules`, `frontend/dist`, ML model artifacts, and cached data are gitignored
+- **Artifact Exclusion**: `node_modules`, ML model artifacts, and cached data are gitignored; do not include newly generated build output in feature changes
 
-## 🔍 Current Development Focus
+## Current Development Focus
 
 The application implements a traditional machine learning pipeline (not LLM fine-tuning) for tabular student performance data. Active development areas include:
 
@@ -497,7 +563,7 @@ The application implements a traditional machine learning pipeline (not LLM fine
 6. **Accessibility Audits**: WCAG 2.1 AA compliance verification
 7. **ML Experiment Tracking**: Integrating MLflow for comprehensive model versioning
 
-## 🤝 Contributing
+## Contributing
 
 We welcome contributions to improve the application! Please follow these guidelines:
 
@@ -527,13 +593,13 @@ We welcome contributions to improve the application! Please follow these guideli
 - Ensure CI checks pass before requesting review
 - Keep PR scope manageable for efficient review
 
-## 📄 License
+## License
 
 This project is distributed under the MIT License. See the `LICENSE` file for details.
 
 *Note: A root LICENSE file should be present in the repository. If missing, the MIT license terms apply by declaration in package.json.*
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [Kaggle Student Performance Dataset](https://www.kaggle.com/datasets/harshadapatil31/student-performance-and-study-habits-dataset) for the foundational data
 - The open-source projects and libraries that make this application possible

@@ -1,19 +1,20 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { api, ApiError } from '../api';
 import { useFlash } from '../components/FlashProvider';
 import { useLanguage } from '../hooks/useLanguage';
 import {
+  formatAdminMetric,
+  getStudentFromDetailsResponse,
+  isPositiveIntegerId,
+} from '../utils/adminAiTools.js';
+import {
   Brain,
   FileText,
   Zap,
-  CheckCircle,
-  AlertCircle,
   Loader2,
   Copy,
   Sparkles,
   Eye,
-  Edit,
-  Trash2,
 } from 'lucide-react';
 
 function FeatureCard({ title, description, icon: Icon, actionLabel, onAction, loading, children, className = '' }) {
@@ -26,16 +27,17 @@ function FeatureCard({ title, description, icon: Icon, actionLabel, onAction, lo
         <div className="flex-1">
           <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100 mb-1">{title}</h3>
           <p className="text-primary-500 dark:text-gray-400 text-sm mb-4">{description}</p>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-3">
+            {children}
             <button
+              type="button"
               onClick={onAction}
               disabled={loading}
-              className="btn-primary text-sm flex items-center gap-2"
+              className="btn-primary flex items-center justify-center gap-2 text-sm"
             >
-              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+              {loading && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
               {actionLabel}
             </button>
-            {children}
           </div>
         </div>
       </div>
@@ -49,6 +51,7 @@ function ResultCard({ title, content, loading, onCopy, copied, t }) {
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-primary-950 dark:text-gray-100">{title}</h3>
         <button
+          type="button"
           onClick={onCopy}
           disabled={loading || !content}
           className="btn-ghost text-sm flex items-center gap-1.5"
@@ -75,7 +78,7 @@ function ResultCard({ title, content, loading, onCopy, copied, t }) {
 }
 
 export default function AdminAITools() {
-  const { flash, addFlash } = useFlash();
+  const { addFlash } = useFlash();
   const { t } = useLanguage();
 
   // Habit Summarization
@@ -97,12 +100,14 @@ export default function AdminAITools() {
   const [interventionCopied, setInterventionCopied] = useState(false);
 
   // Student Details for context
+  const [lookupStudentId, setLookupStudentId] = useState('');
   const [studentDetails, setStudentDetails] = useState(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
 
   const handleSummarizeHabits = async () => {
-    if (!summarizeStudentId.trim()) {
-      addFlash({ type: 'error', message: t('admin.enterStudentId') });
+    if (summarizeLoading) return;
+    if (!isPositiveIntegerId(summarizeStudentId)) {
+      addFlash({ type: 'error', message: t('admin.invalidStudentId') });
       return;
     }
     setSummarizeLoading(true);
@@ -110,7 +115,7 @@ export default function AdminAITools() {
     setSummarizeCopied(false);
     try {
       const data = await api.post(`/admin/students/${summarizeStudentId.trim()}/summarize-habits`);
-      setSummarizeResult(data.summary || 'No summary generated');
+      setSummarizeResult(data.summary || t('admin.noSummaryGenerated'));
       addFlash({ type: 'success', message: t('admin.summaryGenerated') });
     } catch (err) {
       if (err instanceof ApiError) {
@@ -124,9 +129,14 @@ export default function AdminAITools() {
   };
 
   const handleBulkEvaluate = async () => {
+    if (bulkLoading) return;
     const ids = bulkStudentIds.split(',').map(id => id.trim()).filter(Boolean);
     if (ids.length === 0) {
       addFlash({ type: 'error', message: t('admin.enterAtLeastOne') });
+      return;
+    }
+    if (ids.some((id) => !isPositiveIntegerId(id))) {
+      addFlash({ type: 'error', message: t('admin.invalidStudentIds') });
       return;
     }
     if (ids.length > 50) {
@@ -144,7 +154,7 @@ export default function AdminAITools() {
       if (err instanceof ApiError) {
         addFlash({ type: 'error', message: err.message });
       } else {
-        addFlash({ type: 'error', message: 'Failed to run bulk AI evaluation' });
+        addFlash({ type: 'error', message: t('admin.bulkEvalFailed') });
       }
     } finally {
       setBulkLoading(false);
@@ -152,8 +162,9 @@ export default function AdminAITools() {
   };
 
   const handleGenerateIntervention = async () => {
-    if (!interventionStudentId.trim()) {
-      addFlash({ type: 'error', message: t('admin.enterStudentId') });
+    if (interventionLoading) return;
+    if (!isPositiveIntegerId(interventionStudentId)) {
+      addFlash({ type: 'error', message: t('admin.invalidStudentId') });
       return;
     }
     setInterventionLoading(true);
@@ -161,7 +172,7 @@ export default function AdminAITools() {
     setInterventionCopied(false);
     try {
       const data = await api.post(`/admin/students/${interventionStudentId.trim()}/intervention`);
-      setInterventionResult(data.intervention_note || 'No intervention note generated');
+      setInterventionResult(data.intervention_note || t('admin.noInterventionGenerated'));
       addFlash({ type: 'success', message: t('admin.interventionGenerated') });
     } catch (err) {
       if (err instanceof ApiError) {
@@ -174,12 +185,22 @@ export default function AdminAITools() {
     }
   };
 
-  const handleFetchStudent = async (id) => {
-    if (!id.trim()) return;
+  const handleFetchStudent = async (event) => {
+    event?.preventDefault();
+    if (detailsLoading) return;
+    const id = lookupStudentId.trim();
+    if (!isPositiveIntegerId(id)) {
+      addFlash({ type: 'error', message: t('admin.invalidStudentId') });
+      return;
+    }
+
     setDetailsLoading(true);
+    setStudentDetails(null);
     try {
-      const data = await api.get(`/admin/students/${id.trim()}`);
-      setStudentDetails(data);
+      const data = await api.get(`/students/${id}`);
+      const student = getStudentFromDetailsResponse(data);
+      if (!student) throw new Error('Invalid student details response');
+      setStudentDetails(student);
     } catch (err) {
       if (err instanceof ApiError) {
         addFlash({ type: 'error', message: err.message });
@@ -228,7 +249,10 @@ export default function AdminAITools() {
           <div className="relative">
             <input
               type="text"
-              placeholder={t('admin.enterStudentId')}
+              inputMode="numeric"
+              pattern="[0-9]+"
+              placeholder={t('admin.studentIdPlaceholder')}
+              aria-label={t('admin.studentIdLabel')}
               value={summarizeStudentId}
               onChange={(e) => setSummarizeStudentId(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSummarizeHabits()}
@@ -249,7 +273,10 @@ export default function AdminAITools() {
           <div className="relative">
             <input
               type="text"
-              placeholder={t('admin.enterStudentId')}
+              inputMode="numeric"
+              pattern="[0-9]+"
+              placeholder={t('admin.studentIdPlaceholder')}
+              aria-label={t('admin.studentIdLabel')}
               value={interventionStudentId}
               onChange={(e) => setInterventionStudentId(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleGenerateIntervention()}
@@ -269,6 +296,7 @@ export default function AdminAITools() {
         >
           <textarea
             placeholder={t('admin.enterStudentIds')}
+            aria-label={t('admin.studentIdsLabel')}
             value={bulkStudentIds}
             onChange={(e) => setBulkStudentIds(e.target.value)}
             rows={3}
@@ -312,58 +340,71 @@ export default function AdminAITools() {
           {t('admin.quickLookup')}
         </h3>
         <p className="text-primary-500 dark:text-gray-400 text-sm mb-4">{t('admin.quickLookupDesc')}</p>
-        <div className="flex flex-col sm:flex-row gap-3 max-w-md">
-          <input
-            type="text"
-            placeholder={t('admin.enterStudentId')}
-            value={studentDetails ? studentDetails.student_id : ''}
-            onChange={(e) => {}}
-            className="flex-1 px-4 py-2.5 text-sm bg-white dark:bg-gray-800 border border-primary-100 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
-          />
-          <button
-            onClick={() => handleFetchStudent(studentDetails?.student_id || '')}
-            disabled={detailsLoading}
-            className="btn-secondary flex items-center gap-2 whitespace-nowrap"
-          >
-            {detailsLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-            {t('admin.lookup')}
-          </button>
-        </div>
+        <form onSubmit={handleFetchStudent} className="max-w-md">
+          <label htmlFor="admin-student-lookup" className="label">
+            {t('admin.studentIdLabel')}
+          </label>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <input
+              id="admin-student-lookup"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]+"
+              placeholder={t('admin.studentIdPlaceholder')}
+              value={lookupStudentId}
+              onChange={(event) => setLookupStudentId(event.target.value)}
+              className="flex-1 rounded-xl border border-primary-100 bg-white px-4 py-2.5 text-sm transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-800"
+            />
+            <button
+              type="submit"
+              disabled={detailsLoading}
+              className="btn-secondary flex items-center justify-center gap-2 whitespace-nowrap"
+            >
+              {detailsLoading && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
+              {t('admin.lookup')}
+            </button>
+          </div>
+        </form>
         {studentDetails && (
           <div className="mt-4 p-4 bg-primary-50 dark:bg-primary-900/20 rounded-xl border border-primary-100 dark:border-primary-800 animate-slide-down">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
               <div>
                 <p className="text-primary-500 dark:text-primary-400">{t('admin.studentLookupId')}</p>
-                <p className="font-medium text-primary-950 dark:text-gray-100">{studentDetails.student_id}</p>
+                <p className="font-medium text-primary-950 dark:text-gray-100">
+                  {studentDetails.student_id ?? studentDetails.id ?? '—'}
+                </p>
               </div>
               <div>
                 <p className="text-primary-500 dark:text-primary-400">{t('admin.name')}</p>
-                <p className="font-medium text-primary-950 dark:text-gray-100">{studentDetails.name}</p>
+                <p className="font-medium text-primary-950 dark:text-gray-100">{studentDetails.name || '—'}</p>
               </div>
               <div>
-                <p className="text-primary-500 dark:text-primary-400">Grade</p>
-                <p className="font-medium text-primary-950 dark:text-gray-100">{studentDetails.grade}</p>
+                <p className="text-primary-500 dark:text-primary-400">{t('common.grade')}</p>
+                <p className="font-medium text-primary-950 dark:text-gray-100">{studentDetails.grade || '—'}</p>
               </div>
               <div>
                 <p className="text-primary-500 dark:text-primary-400">{t('admin.riskLevel')}</p>
-                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                  studentDetails.risk_level === 'high' ? 'bg-danger-100 dark:bg-danger-900/30 text-danger-700 dark:text-danger-300' :
-                  studentDetails.risk_level === 'medium' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' :
-                  'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-300'
+                <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+                  studentDetails.risk_level === 'high' ? 'bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-300' :
+                  studentDetails.risk_level === 'medium' ? 'bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-300' :
+                  studentDetails.risk_level === 'low' ? 'bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-300' :
+                  'bg-surface-muted text-ink-muted'
                 }`}>
-                  {studentDetails.risk_level?.charAt(0).toUpperCase() + studentDetails.risk_level?.slice(1) || 'Unknown'}
+                  {['high', 'medium', 'low'].includes(studentDetails.risk_level)
+                    ? t(`admin.${studentDetails.risk_level}Risk`)
+                    : t('admin.unknown')}
                 </span>
               </div>
               <div className="sm:col-span-2">
                 <p className="text-primary-500 dark:text-primary-400">{t('admin.finalScoreGPA')}</p>
                 <p className="font-medium text-primary-950 dark:text-gray-100">
-                  {studentDetails.final_score?.toFixed(1) || '—'} / {studentDetails.previous_gpa?.toFixed(2) || '—'}
+                  {formatAdminMetric(studentDetails.final_score, 1)} / {formatAdminMetric(studentDetails.previous_gpa, 2)}
                 </p>
               </div>
               <div className="sm:col-span-2">
                 <p className="text-primary-500 dark:text-primary-400">{t('admin.attendanceSleep')}</p>
                 <p className="font-medium text-primary-950 dark:text-gray-100">
-                  {studentDetails.attendance_percent?.toFixed(1) || '—'}% / {studentDetails.sleep_hours?.toFixed(1) || '—'} hrs
+                  {formatAdminMetric(studentDetails.attendance_percent, 1, '%')} / {formatAdminMetric(studentDetails.sleep_hours, 1, ` ${t('admin.hoursShort')}`)}
                 </p>
               </div>
             </div>
@@ -382,30 +423,20 @@ export default function AdminAITools() {
             </svg>
           </span>
         </summary>
-        <div className="px-6 pb-6 space-y-3 text-sm text-primary-600 dark:text-gray-400">
-          <div className="border-l-2 border-violet-200 dark:border-violet-800 pl-4 space-y-2">
-            <h4 className="font-medium text-primary-950 dark:text-gray-100">{t('admin.rateLimits')}</h4>
-            <ul className="list-disc list-inside space-y-1">
-              <li>Single student AI operations: 30 requests/minute</li>
-              <li>Bulk AI evaluation: 5 requests/minute (max 50 students per request)</li>
-              <li>Habit summarization: 20 requests/minute</li>
+        <div className="space-y-4 px-6 pb-6 text-sm text-primary-600 dark:text-gray-400">
+          <div className="space-y-2 border-l-2 border-violet-200 pl-4 dark:border-violet-800">
+            <h4 className="font-medium text-primary-950 dark:text-gray-100">{t('admin.dataHandling')}</h4>
+            <ul className="list-inside list-disc space-y-1">
+              <li>{t('admin.guidelineAuthorizedRecords')}</li>
+              <li>{t('admin.guidelineApprovedSystems')}</li>
             </ul>
           </div>
-          <div className="border-l-2 border-violet-200 dark:border-violet-800 pl-4 space-y-2">
-            <h4 className="font-medium text-primary-950 dark:text-gray-100">{t('admin.dataPrivacy')}</h4>
-            <ul className="list-disc list-inside space-y-1">
-              <li>All AI processing happens on your local ML pipeline</li>
-              <li>No student data is sent to external APIs</li>
-              <li>Generated notes are stored only in the student's <code className="font-mono bg-primary-100 dark:bg-gray-800 px-1 rounded">notes</code> column</li>
-            </ul>
-          </div>
-          <div className="border-l-2 border-violet-200 dark:border-violet-800 pl-4 space-y-2">
+          <div className="space-y-2 border-l-2 border-violet-200 pl-4 dark:border-violet-800">
             <h4 className="font-medium text-primary-950 dark:text-gray-100">{t('admin.bestPractices')}</h4>
-            <ul className="list-disc list-inside space-y-1">
-              <li>Review AI-generated content before sharing with students</li>
-              <li>Use habit summaries for parent-teacher conferences</li>
-              <li>Intervention notes work best for medium/high risk students</li>
-              <li>Bulk evaluation is ideal for end-of-term reviews</li>
+            <ul className="list-inside list-disc space-y-1">
+              <li>{t('admin.guidelineDecisionSupport')}</li>
+              <li>{t('admin.guidelineReviewOutput')}</li>
+              <li>{t('admin.guidelineVerifyStudent')}</li>
             </ul>
           </div>
         </div>

@@ -5,6 +5,8 @@ import {
   Button,
   Card,
   ConfirmDialog,
+  EmptyState,
+  ErrorState,
   Icon,
   Select,
   SkeletonCard,
@@ -158,17 +160,17 @@ export default function Notifications() {
     <div className="mx-auto max-w-5xl space-y-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-action-muted text-action-strong" aria-hidden="true">
             <Icon name="bell" className="size-5" />
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-bold text-primary-950 dark:text-gray-100">{t('notifications.title')}</h1>
-              <Badge variant={unreadCount > 0 ? 'primary' : 'default'} size="sm">
+              <h1 className="page-title">{t('notifications.title')}</h1>
+              <Badge variant={unreadCount > 0 ? 'danger' : 'gray'} size="sm">
                 {t('notifications.unreadCount', { count: unreadCount })}
               </Badge>
             </div>
-            <p className="mt-1 max-w-2xl text-primary-600 dark:text-gray-400">{t('notifications.subtitle')}</p>
+            <p className="page-subtitle max-w-2xl">{t('notifications.subtitle')}</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2 sm:justify-end">
@@ -219,23 +221,20 @@ export default function Notifications() {
       )}
 
       {!loading && loadError && (
-        <section className="rounded-2xl border border-danger-200 bg-danger-50 p-6 text-danger-700 dark:border-danger-900/50 dark:bg-danger-950/30 dark:text-danger-300" role="alert">
-          <p className="font-semibold">{loadError}</p>
-          <Button className="mt-4" variant="outline" onClick={refreshList}>
-            {t('notifications.retry')}
-          </Button>
-        </section>
+        <ErrorState
+          title={t('common.failedToLoad')}
+          description={loadError}
+          action={refreshList}
+          actionLabel={t('notifications.retry')}
+        />
       )}
 
       {!loading && !loadError && pageData.notifications.length === 0 && (
-        <section className="rounded-2xl border border-primary-100 bg-white p-8 text-center dark:border-gray-800 dark:bg-gray-900">
-          <Icon name="bell" className="mx-auto size-8 text-primary-400 dark:text-gray-500" />
-          <p className="mt-3 font-semibold text-primary-950 dark:text-gray-100">{t('notifications.empty')}</p>
-        </section>
+        <EmptyState icon="bell" title={t('notifications.empty')} />
       )}
 
       {!loadError && pageData.notifications.length > 0 && (
-        <section className="overflow-hidden rounded-2xl border border-primary-100 bg-white shadow-clay-sm dark:border-gray-800 dark:bg-gray-900" aria-busy={loading}>
+        <section className="overflow-hidden rounded-2xl border border-divider bg-surface shadow-sm" aria-busy={loading}>
           {pageData.notifications.map((notification, index) => (
             <NotificationItem
               key={notification?.id || `notification-${index}`}
@@ -250,15 +249,15 @@ export default function Notifications() {
       )}
 
       {!loadError && pageData.totalPages > 0 && (
-        <footer className="flex flex-col gap-3 rounded-2xl border border-primary-100 bg-white p-4 sm:flex-row sm:items-center sm:justify-between dark:border-gray-800 dark:bg-gray-900">
-          <p className="text-center text-sm text-primary-600 sm:text-left dark:text-gray-300">
+        <footer className="flex flex-col gap-3 rounded-2xl border border-divider bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-center text-sm text-ink-muted sm:text-left">
             {t('notifications.pagination.summary', {
               page: pageData.page,
               totalPages: pageData.totalPages,
               total: pageData.total,
             })}
           </p>
-          <div className="flex justify-center gap-2 sm:justify-end">
+          <nav className="flex justify-center gap-2 sm:justify-end" aria-label={t('table.pagination')}>
             <Button
               variant="secondary"
               size="sm"
@@ -279,7 +278,7 @@ export default function Notifications() {
             >
               {t('notifications.pagination.next')}
             </Button>
-          </div>
+          </nav>
         </footer>
       )}
 

@@ -2,7 +2,7 @@
  * Admin Users Page - User management using new UI components
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../hooks/useAuth';
@@ -11,63 +11,119 @@ import {
   Card,
   Button,
   Badge,
-  Icon,
   SkeletonCard,
   ConfirmDialog,
+  EmptyState,
+  ErrorState,
+  PageHeader,
 } from '../components/ui';
 import { useFlash } from '../components/ui/Toast';
 import { CreateUserModal } from '../components/CreateUserModal';
+import {
+  ADMIN_USERS_PAGE_SIZE as PAGE_SIZE,
+  displayAdminUserText,
+  formatAdminUserDate,
+  normalizeAdminUsersResponse,
+  positiveAdminUserId,
+} from '../utils/adminUsers';
+
+const ROLE_VARIANTS = {
+  admin: 'warning',
+  teacher: 'default',
+  student: 'success',
+};
 
 export default function AdminUsers() {
   const { user: currentUser } = useAuth();
-  const { t } = useLanguage();
+  const { lang, t } = useLanguage();
   const { addFlash } = useFlash();
+  const requestRef = useRef(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [deletingUserId, setDeletingUserId] = useState(null);
   const [users, setUsers] = useState([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState({ open: false, id: null, name: '' });
 
-  const fetchUsers = async ({ showLoading = true } = {}) => {
+  const fetchUsers = useCallback(async ({ showLoading = true, requestedPage = 1 } = {}) => {
+    const requestId = ++requestRef.current;
+    const safePage = positiveAdminUserId(requestedPage) || 1;
     if (showLoading) setLoading(true);
+    setLoadError(false);
+
     try {
-      const data = await api.get('/admin/users');
-      setUsers(data.users);
-    } catch (err) {
-      addFlash(err.message, 'error');
+      const query = new URLSearchParams({ page: String(safePage), size: String(PAGE_SIZE) });
+      const data = await api.get(`/admin/users?${query.toString()}`);
+      if (requestId !== requestRef.current) return false;
+
+      const normalized = normalizeAdminUsersResponse(data, safePage, PAGE_SIZE);
+      setTotal(normalized.total);
+      setTotalPages(normalized.totalPages);
+      if (normalized.page !== safePage) {
+        setPage(normalized.page);
+      } else {
+        setUsers(normalized.users);
+      }
+      return true;
+    } catch {
+      if (requestId !== requestRef.current) return false;
+      setLoadError(true);
+      return false;
     } finally {
-      setLoading(false);
+      if (showLoading && requestId === requestRef.current) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchUsers({ requestedPage: page });
+    return () => {
+      requestRef.current += 1;
+    };
+  }, [fetchUsers, page]);
+
+  const handleUserCreated = async (createdUser) => {
+    const name = typeof createdUser?.name === 'string' ? createdUser.name : t('admin.unknown');
+    addFlash(t('admin.userCreated', { name }), 'success');
+    if (page === 1) {
+      await fetchUsers({ showLoading: false, requestedPage: 1 });
+    } else {
+      setPage(1);
     }
   };
 
-  useEffect(() => {
-    fetchUsers();
-  }, [addFlash]);
-
-  const handleUserCreated = async (createdUser) => {
-    addFlash(t('admin.userCreated', { name: createdUser.name }), 'success');
-    await fetchUsers({ showLoading: false });
-  };
-
   const handleDelete = (id, name) => {
-    if (id === currentUser?.id) return;
-    setConfirmDialog({ open: true, id, name });
+    const safeId = positiveAdminUserId(id);
+    if (safeId === null || safeId === positiveAdminUserId(currentUser?.id)) return;
+    setConfirmDialog({ open: true, id: safeId, name: typeof name === 'string' ? name : t('admin.unknown') });
   };
 
   const confirmDelete = async () => {
     const { id, name } = confirmDialog;
+    if (id === null || deletingUserId !== null) return;
+
+    setDeletingUserId(id);
     try {
       await api.delete(`/admin/users/${id}`);
       addFlash(t('admin.userDeleted', { name }), 'success');
-      fetchUsers();
-    } catch (err) {
-      addFlash(err.message, 'error');
+      setConfirmDialog({ open: false, id: null, name: '' });
+      if (users.length === 1 && page > 1) {
+        setPage((currentPage) => currentPage - 1);
+      } else {
+        await fetchUsers({ showLoading: false, requestedPage: page });
+      }
+    } catch (error) {
+      addFlash(error?.message || t('admin.userDeleteFailed'), 'error');
+    } finally {
+      setDeletingUserId(null);
     }
-    setConfirmDialog({ open: false, id: null, name: '' });
   };
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6" aria-busy="true" aria-label={t('common.loading')}>
         <div className="flex items-center gap-3">
           <SkeletonCard className="w-10 h-10 rounded-lg bg-warning-100" />
           <SkeletonCard className="h-6 w-40" />
@@ -81,93 +137,144 @@ export default function AdminUsers() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-warning-100 dark:bg-warning-900/30 text-warning-600 dark:text-warning-400 flex items-center justify-center">
-            <Icon name="users" className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-primary-950 dark:text-gray-100">{t('admin.manageUsers')}</h2>
-            <p className="text-sm text-primary-500 dark:text-gray-400">{t('admin.manageUsersDesc')}</p>
-          </div>
-        </div>
-        <Button
-          leftIcon="userPlus"
-          onClick={() => setCreateModalOpen(true)}
-          className="w-full sm:w-auto"
-        >
-          {t('admin.addUser')}
-        </Button>
-      </div>
+      <PageHeader
+        title={t('admin.manageUsers')}
+        subtitle={t('admin.manageUsersDesc')}
+        actions={(
+          <Button
+            leftIcon="userPlus"
+            onClick={() => setCreateModalOpen(true)}
+            className="w-full sm:w-auto"
+          >
+            {t('admin.addUser')}
+          </Button>
+        )}
+      />
 
-      {/* Users Table */}
+      {loadError && (
+        <ErrorState
+          title={t('common.failedToLoad')}
+          description={t('admin.usersLoadFailed')}
+          actionLabel={t('common.tryAgain')}
+          action={() => fetchUsers({ requestedPage: page })}
+        />
+      )}
+
+      {!loadError && (
+      /* Users Table */
       <Card padding="none" className="overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-primary-50/60 dark:bg-gray-900 border-b border-primary-100 dark:border-gray-800">
+          <table className="w-full min-w-[760px]">
+            <caption className="sr-only">{t('admin.manageUsersDesc')}</caption>
+            <thead className="border-b border-divider bg-surface-muted">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-primary-500 dark:text-primary-400 uppercase tracking-wider">{t('admin.id')}</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-primary-500 dark:text-primary-400 uppercase tracking-wider">{t('admin.name')}</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-primary-500 dark:text-primary-400 uppercase tracking-wider">{t('admin.email')}</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-primary-500 dark:text-primary-400 uppercase tracking-wider">{t('admin.role')}</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-primary-500 dark:text-primary-400 uppercase tracking-wider">{t('admin.created')}</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-primary-500 dark:text-primary-400 uppercase tracking-wider">{t('common.actions')}</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-ink-muted">{t('admin.id')}</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-ink-muted">{t('admin.name')}</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-ink-muted">{t('admin.email')}</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-ink-muted">{t('admin.role')}</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-ink-muted">{t('admin.created')}</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-ink-muted">{t('common.actions')}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-primary-100 dark:divide-gray-800">
+            <tbody className="divide-y divide-divider">
               {users.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-16 text-center text-primary-400 dark:text-gray-500">
-                    {t('admin.noUsersFound')}
+                  <td colSpan={6} className="p-4">
+                    <EmptyState
+                      icon="users"
+                      title={t('admin.noUsersFound')}
+                    />
                   </td>
                 </tr>
               ) : (
-                users.map((u) => (
-                  <tr key={u.id} className="hover:bg-primary-50/50 dark:hover:bg-gray-800/50 transition-colors">
-                    <td className="px-4 py-3 text-sm text-primary-400 dark:text-gray-500">{u.id}</td>
-                    <td className="px-4 py-3 text-sm text-primary-950 dark:text-gray-100 font-medium">
-                      {u.name}
-                      {u.id === currentUser?.id && <span className="text-xs text-primary-300 dark:text-gray-500 ml-1">{t('admin.you')}</span>}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-primary-700 dark:text-gray-300">{u.email}</td>
-                    <td className="px-4 py-3 text-sm">
-                      <Badge variant={u.role === 'admin' ? 'warning' : 'default'} size="sm">
-                        {t(`nav.role.${u.role}`)}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-primary-400 dark:text-gray-500">
-                      {new Date(u.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {u.role !== 'admin' ? (
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          icon={<Icon name="trash2" className="w-4 h-4" />}
-                          onClick={() => handleDelete(u.id, u.name)}
-                          disabled={u.id === currentUser?.id}
-                        >
-                          {t('common.delete')}
-                        </Button>
-                      ) : (
-                        <span className="text-sm text-gray-400">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))
+                users.map((userRecord, index) => {
+                  const role = Object.hasOwn(ROLE_VARIANTS, userRecord.role) ? userRecord.role : null;
+                  const recordId = positiveAdminUserId(userRecord.id);
+                  const isCurrentUser = recordId !== null && recordId === positiveAdminUserId(currentUser?.id);
+                  const canDelete = recordId !== null && role !== 'admin' && role !== null && !isCurrentUser;
+
+                  return (
+                    <tr
+                      key={recordId ?? `${displayAdminUserText(userRecord.email)}-${index}`}
+                      className="transition-colors hover:bg-surface-muted"
+                    >
+                      <td className="px-4 py-3 text-sm text-ink-muted">{displayAdminUserText(userRecord.id)}</td>
+                      <td className="px-4 py-3 text-sm font-semibold text-ink">
+                        {displayAdminUserText(userRecord.name)}
+                        {isCurrentUser && <span className="ml-1 text-xs font-medium text-ink-muted">{t('admin.you')}</span>}
+                      </td>
+                      <td className="max-w-xs break-all px-4 py-3 text-sm text-ink-muted">{displayAdminUserText(userRecord.email)}</td>
+                      <td className="px-4 py-3 text-sm">
+                        <Badge variant={role ? ROLE_VARIANTS[role] : 'gray'} size="sm">
+                          {role ? t(`nav.role.${role}`) : t('admin.unknown')}
+                        </Badge>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-sm text-ink-muted">
+                        {formatAdminUserDate(userRecord.created_at, lang)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {canDelete ? (
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            leftIcon="trash"
+                            onClick={() => handleDelete(recordId, userRecord.name)}
+                            loading={deletingUserId === recordId}
+                            disabled={deletingUserId !== null}
+                          >
+                            {t('common.delete')}
+                          </Button>
+                        ) : (
+                          <span className="text-sm text-ink-muted">
+                            <span aria-hidden="true">—</span>
+                            <span className="sr-only">{t('admin.deleteUnavailable')}</span>
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
 
-        <div className="px-4 py-3 border-t border-primary-100 dark:border-gray-800 text-sm text-primary-500 dark:text-gray-400">
-          {t('admin.usersTotal', { count: users.length })}
+        <div className="flex flex-col gap-3 border-t border-divider bg-surface-muted px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-ink-muted" aria-live="polite">
+            {t('admin.usersTotal', { count: total })}
+          </p>
+          <nav className="flex items-center gap-2" aria-label={t('table.pagination')}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
+              disabled={page <= 1}
+              aria-label={t('table.previousPage')}
+            >
+              {t('common.previous')}
+            </Button>
+            <span className="min-w-24 text-center text-sm font-semibold text-ink" aria-current="page">
+              {t('table.pageOf', { page, totalPages })}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setPage((currentPage) => Math.min(totalPages, currentPage + 1))}
+              disabled={page >= totalPages}
+              aria-label={t('table.nextPage')}
+            >
+              {t('common.next')}
+            </Button>
+          </nav>
         </div>
       </Card>
+      )}
 
-      <div className="mt-4">
-        <Link to="/dashboard" className="inline-flex min-h-11 items-center rounded-xl px-3 py-2 text-sm font-semibold text-primary-700 transition-colors hover:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-primary-300 dark:hover:bg-gray-800">
+      <div>
+        <Link
+          to="/admin"
+          className="focus-ring inline-flex min-h-11 items-center rounded-xl px-3 py-2 text-sm font-semibold text-action transition-colors hover:bg-action-muted"
+        >
           {t('common.backToDashboard')}
         </Link>
       </div>
@@ -180,12 +287,17 @@ export default function AdminUsers() {
 
       <ConfirmDialog
         isOpen={confirmDialog.open}
-        onClose={() => setConfirmDialog({ open: false, id: null, name: '' })}
+        onClose={() => {
+          if (deletingUserId === null) {
+            setConfirmDialog({ open: false, id: null, name: '' });
+          }
+        }}
         onConfirm={confirmDelete}
         title={t('admin.deleteUser')}
         message={t('admin.deleteUserConfirm', { name: confirmDialog.name })}
         confirmText={t('common.delete')}
         variant="danger"
+        loading={deletingUserId !== null}
       />
     </div>
   );

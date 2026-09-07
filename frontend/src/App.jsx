@@ -27,6 +27,7 @@ import AdminAITools from './pages/AdminAITools';
 import StudentGoals from './pages/StudentGoals';
 import StudentGoalsProgress from './pages/StudentGoalsProgress';
 import StudyPlanner from './pages/StudyPlanner';
+import Assignments from './pages/Assignments';
 import Notifications from './pages/Notifications';
 import MlMonitoring from './pages/MlMonitoring';
 
@@ -113,6 +114,7 @@ function App() {
                 <Route path="/goals" element={<StudentGoals />} />
                 <Route path="/student/notifications" element={<Notifications />} />
                 <Route path="/student/study-planner" element={<StudyPlanner />} />
+                <Route path="/student/assignments" element={<Assignments />} />
               </Route>
 
               {/* Shared routes - any authenticated user (floating Navbar via MainLayout) */}

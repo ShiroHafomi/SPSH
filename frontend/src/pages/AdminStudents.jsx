@@ -10,7 +10,6 @@ import {
   ChevronUp,
   Download,
   Brain,
-  Eye,
   Edit,
   Trash2,
   AlertTriangle,
@@ -23,6 +22,7 @@ import {
   Target,
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { formatAdminMetric } from '../utils/adminAiTools.js';
 
 const SORT_OPTIONS = [
   { value: 'student_id', label: 'Student ID' },
@@ -54,7 +54,7 @@ function RiskBadge({ riskLevel }) {
   };
   return (
     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${styles[riskLevel] || styles.unknown}`}>
-      {riskLabels[riskLevel] || riskLevel?.charAt(0).toUpperCase() + riskLevel?.slice(1) || 'Unknown'}
+      {riskLabels[riskLevel] || t('admin.unknown')}
     </span>
   );
 }
@@ -68,8 +68,8 @@ function GradeBadge({ grade }) {
     F: 'bg-danger-100 dark:bg-danger-900/30 text-danger-700 dark:text-danger-300',
   };
   return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${styles[grade] || styles.C}`}>
-      {grade}
+    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${styles[grade] || 'bg-surface-muted text-ink-muted'}`}>
+      {GRADE_OPTIONS.includes(grade) ? grade : '—'}
     </span>
   );
 }
@@ -94,7 +94,7 @@ function SelectFilter({ label, value, options, onChange, placeholder = 'All' }) 
 
 export default function AdminStudents() {
   const navigate = useNavigate();
-  const { flash, addFlash } = useFlash();
+  const { addFlash } = useFlash();
   const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [students, setStudents] = useState([]);
@@ -149,12 +149,12 @@ export default function AdminStudents() {
       if (err instanceof ApiError) {
         addFlash({ type: 'error', message: err.message });
       } else {
-        addFlash({ type: 'error', message: 'Failed to load students' });
+        addFlash({ type: 'error', message: t('admin.studentsLoadFailed') });
       }
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, sort, dir, search, filters, addFlash]);
+  }, [page, pageSize, sort, dir, search, filters, addFlash, t]);
 
   useEffect(() => {
     fetchStudents();
@@ -261,7 +261,7 @@ export default function AdminStudents() {
       if (err instanceof ApiError) {
         addFlash({ type: 'error', message: err.message });
       } else {
-        addFlash({ type: 'error', message: 'Failed to run bulk AI evaluation' });
+        addFlash({ type: 'error', message: t('admin.bulkEvalFailed') });
       }
     } finally {
       setActionLoading(null);
@@ -307,19 +307,15 @@ export default function AdminStudents() {
           if (err instanceof ApiError) {
             addFlash({ type: 'error', message: err.message });
           } else {
-            addFlash({ type: 'error', message: 'Failed to delete student' });
+            addFlash({ type: 'error', message: t('admin.studentDeleteFailed') });
           }
         }
       },
     });
   };
 
-  const handleView = (student) => {
-    window.open(`/students/${student.id}`, '_blank');
-  };
-
   const handleEdit = (student) => {
-    window.location.href = `/students/${student.id}/edit`;
+    navigate(`/students/${student.id}/edit`);
   };
 
   const totalPages = Math.ceil(total / pageSize);
@@ -478,11 +474,11 @@ export default function AdminStudents() {
                       </div>
                     </td>
                     <td className="px-4 py-3"><GradeBadge grade={student.grade} /></td>
-                    <td className="px-4 py-3 font-mono text-sm text-primary-950 dark:text-gray-100">{student.final_score?.toFixed(1) || '—'}</td>
-                    <td className="px-4 py-3 font-mono text-sm text-primary-950 dark:text-gray-100">{student.attendance_percent?.toFixed(1) || '—'}%</td>
-                    <td className="px-4 py-3 font-mono text-sm text-primary-950 dark:text-gray-100">{student.previous_gpa?.toFixed(2) || '—'}</td>
-                    <td className="px-4 py-3 font-mono text-sm text-primary-950 dark:text-gray-100">{student.study_hours_per_day?.toFixed(1) || '—'}</td>
-                    <td className="px-4 py-3 font-mono text-sm text-primary-950 dark:text-gray-100">{student.sleep_hours?.toFixed(1) || '—'}</td>
+                    <td className="px-4 py-3 font-mono text-sm text-primary-950 dark:text-gray-100">{formatAdminMetric(student.final_score, 1)}</td>
+                    <td className="px-4 py-3 font-mono text-sm text-primary-950 dark:text-gray-100">{formatAdminMetric(student.attendance_percent, 1, '%')}</td>
+                    <td className="px-4 py-3 font-mono text-sm text-primary-950 dark:text-gray-100">{formatAdminMetric(student.previous_gpa, 2)}</td>
+                    <td className="px-4 py-3 font-mono text-sm text-primary-950 dark:text-gray-100">{formatAdminMetric(student.study_hours_per_day, 1)}</td>
+                    <td className="px-4 py-3 font-mono text-sm text-primary-950 dark:text-gray-100">{formatAdminMetric(student.sleep_hours, 1)}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
                         student.part_time_job === 'Yes'
@@ -496,41 +492,41 @@ export default function AdminStudents() {
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
-                          onClick={() => handleView(student)}
-                          className="p-2 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-xl transition-colors"
-                          title={t('admin.viewDetails')}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button
+                          type="button"
                           onClick={() => navigate(`/admin/students/${student.id}/goals`)}
-                          className="p-2 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-xl transition-colors"
+                          className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-primary-600 transition-colors hover:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring dark:text-primary-400 dark:hover:bg-primary-900/30"
                           title={t('goals.viewProgress')}
                           aria-label={t('goals.viewProgressAria', { name: student.name || student.student_id })}
                         >
                           <Target className="w-4 h-4" aria-hidden="true" />
                         </button>
                         <button
+                          type="button"
                           onClick={() => handleEdit(student)}
-                          className="p-2 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 rounded-xl transition-colors"
+                          className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-primary-600 transition-colors hover:bg-primary-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring dark:text-primary-400 dark:hover:bg-primary-900/30"
                           title={t('common.edit')}
+                          aria-label={t('common.edit')}
                         >
-                          <Edit className="w-4 h-4" />
+                          <Edit className="w-4 h-4" aria-hidden="true" />
                         </button>
                         <button
+                          type="button"
                           onClick={() => handleGenerateIntervention(student.id)}
                           disabled={actionLoading === `intervention-${student.id}`}
-                          className="p-2 text-violet-600 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/30 rounded-xl transition-colors"
+                          className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-violet-600 transition-colors hover:bg-violet-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring disabled:cursor-not-allowed disabled:opacity-50 dark:text-violet-400 dark:hover:bg-violet-900/30"
                           title={t('admin.aiIntervention')}
+                          aria-label={t('admin.aiIntervention')}
                         >
-                          <Brain className="w-4 h-4" />
+                          <Brain className="w-4 h-4" aria-hidden="true" />
                         </button>
                         <button
+                          type="button"
                           onClick={() => handleDelete(student.id)}
-                          className="p-2 text-danger-600 dark:text-danger-400 hover:bg-danger-100 dark:hover:bg-danger-900/30 rounded-xl transition-colors"
+                          className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-danger-600 transition-colors hover:bg-danger-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring dark:text-danger-400 dark:hover:bg-danger-900/30"
                           title={t('common.delete')}
+                          aria-label={t('common.delete')}
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-4 h-4" aria-hidden="true" />
                         </button>
                       </div>
                     </td>
