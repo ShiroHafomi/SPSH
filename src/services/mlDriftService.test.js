@@ -7,6 +7,7 @@ const modelSnapshotService = require('./modelSnapshotService');
 const service = require('./mlDriftService');
 
 const originalQuery = pool.query;
+const originalGetActiveSnapshot = modelSnapshotService.getActiveSnapshot;
 const originalGetModelSnapshot = modelSnapshotService.getModelSnapshot;
 const MODEL_VERSION = 'c'.repeat(64);
 const baseline = Object.freeze({
@@ -43,11 +44,13 @@ function assertNoNonFiniteNumbers(value) {
 describe('mlDriftService', () => {
   beforeEach(() => {
     pool.query = originalQuery;
+    modelSnapshotService.getActiveSnapshot = originalGetActiveSnapshot;
     modelSnapshotService.getModelSnapshot = originalGetModelSnapshot;
   });
 
   afterEach(() => {
     pool.query = originalQuery;
+    modelSnapshotService.getActiveSnapshot = originalGetActiveSnapshot;
     modelSnapshotService.getModelSnapshot = originalGetModelSnapshot;
   });
 
@@ -220,10 +223,51 @@ describe('mlDriftService', () => {
     assert.equal(report.overallStatus, 'insufficient_data');
   });
 
+  it('registers the active snapshot when the default snapshot table is empty', async () => {
+    let snapshotReads = 0;
+    let registrations = 0;
+    modelSnapshotService.getModelSnapshot = async (modelVersion) => {
+      snapshotReads += 1;
+      if (snapshotReads === 1) {
+        assert.equal(modelVersion, undefined);
+        return null;
+      }
+      assert.equal(modelVersion, MODEL_VERSION);
+      return {
+        snapshotId: 79,
+        modelVersion: MODEL_VERSION,
+        driftBaseline: null,
+      };
+    };
+    modelSnapshotService.getActiveSnapshot = async () => {
+      registrations += 1;
+      return { snapshotId: 79, modelVersion: MODEL_VERSION };
+    };
+    pool.query = async () => {
+      throw new Error('must not aggregate without a baseline');
+    };
+
+    const report = await service.getDriftReport({
+      from: '2026-08-01',
+      to: '2026-08-25',
+    });
+
+    assert.equal(registrations, 1);
+    assert.equal(snapshotReads, 2);
+    assert.equal(report.modelVersion, MODEL_VERSION);
+    assert.equal(report.overallStatus, 'insufficient_data');
+  });
+
   it('returns null for an unavailable selected model and exposes explicit kind policy', async () => {
+    let registrations = 0;
     modelSnapshotService.getModelSnapshot = async () => null;
+    modelSnapshotService.getActiveSnapshot = async () => {
+      registrations += 1;
+      return { snapshotId: 1, modelVersion: MODEL_VERSION };
+    };
 
     assert.equal(await service.getDriftReport({ modelVersion: MODEL_VERSION }), null);
+    assert.equal(registrations, 0);
     assert.deepEqual(service.INCLUDED_PREDICTION_KINDS, ['prediction']);
     assert.deepEqual(service.EXCLUDED_PREDICTION_KINDS, [
       'feedback',

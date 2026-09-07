@@ -158,9 +158,14 @@ function currentStatisticsFromRow(row = {}) {
 
 async function getDriftReport(options = {}) {
   const filters = normalizeDriftFilters(options);
-  const snapshot = await modelSnapshotService.getModelSnapshot(
+  let snapshot = await modelSnapshotService.getModelSnapshot(
     filters.modelVersion === null ? undefined : filters.modelVersion
   );
+
+  if (!snapshot && filters.modelVersion === null) {
+    const activeSnapshot = await modelSnapshotService.getActiveSnapshot();
+    snapshot = await modelSnapshotService.getModelSnapshot(activeSnapshot.modelVersion);
+  }
   if (!snapshot) return null;
 
   let currentStatistics = {};
