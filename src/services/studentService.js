@@ -6,8 +6,6 @@
 const { pool } = require('../config/db');
 const { validateSortColumn, validateSortDir, clampPagination, getSearchableColumns } = require('../utils/columns');
 const { getChartConfig } = require('../utils/chartConfig');
-const mlService = require('./mlService');
-const { generateInterventionNote: aiGenerateInterventionNote } = require('./aiCounselService');
 
 const TABLE = process.env.DB_TABLE || 'students';
 
@@ -767,21 +765,10 @@ async function generateInterventionNote(studentId) {
   const student = await findById(studentId);
   if (!student) throw new Error('Student not found');
 
-  // Get prediction from centralized ML service
-  let prediction;
-  try {
-    prediction = await mlService.predictForStudent(studentId);
-  } catch (err) {
-    if (err.message === 'ML capacity exceeded') {
-      throw new Error('ML capacity exceeded');
-    }
-    throw err;
-  }
-
-  // Generate intervention note using AI counsel service (with pre-fetched prediction)
-  const result = await aiGenerateInterventionNote(studentId, null, prediction);
-
-  return result;
+  const mlService = require('./mlService');
+  const { generateInterventionNote: generateCounselNote } = require('./aiCounselService');
+  const prediction = await mlService.predictForStudent(studentId, student);
+  return generateCounselNote(studentId, null, prediction, student);
 }
 
 /**

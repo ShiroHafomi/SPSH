@@ -9,6 +9,18 @@ afterEach(() => {
 });
 
 describe('API error responses', () => {
+  it('posts intervention requests with cookie authentication and no identity payload', async () => {
+    globalThis.fetch = async (url, options) => {
+      assert.equal(url, '/api/admin/students/2/intervention');
+      assert.equal(options.method, 'POST');
+      assert.equal(options.credentials, 'include');
+      assert.equal(options.body, undefined);
+      return new Response(JSON.stringify({ interventionNote: 'Full note' }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      });
+    };
+    assert.equal((await api.post('/admin/students/2/intervention')).interventionNote, 'Full note');
+  });
   it('retains structured conflict data for safe client recovery', async () => {
     globalThis.fetch = async () => new Response(JSON.stringify({
       error: 'This assignment was changed elsewhere.',

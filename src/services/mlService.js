@@ -7,9 +7,11 @@
  */
 
 const { validatePredictionProfile, studentToProfile } = require('../utils/mlValidation');
+const { MlDependencyError, StudentPredictionDataError } = require('../utils/mlErrors');
 const { runInference, getRunnerStats } = require('../utils/mlRunner');
-const studentService = require('./studentService');
 const { getSchemaMap } = require('../utils/schemaMap');
+
+const SUPPORTED_GRADES = new Set(['A', 'B', 'C', 'D', 'F']);
 
 /**
  * Internal: run a single validated prediction.
@@ -23,20 +25,52 @@ async function predict(input) {
 /**
  * Reject corrupt model output instead of coercing or silently clamping it.
  */
+function invalidPredictionOutput() {
+  return new MlDependencyError('Invalid prediction output');
+}
+
 function validatePredictionOutput(result) {
   if (!result || typeof result !== 'object' || Array.isArray(result)) {
-    throw new Error('Invalid prediction output');
+    throw invalidPredictionOutput();
   }
   if (!Number.isFinite(result.final_score) || result.final_score < 0 || result.final_score > 100) {
-    throw new Error('Invalid prediction output');
+    throw invalidPredictionOutput();
   }
-  if (!['A', 'B', 'C', 'D', 'F'].includes(result.grade)) {
-    throw new Error('Invalid prediction output');
+  if (!SUPPORTED_GRADES.has(result.grade)) {
+    throw invalidPredictionOutput();
   }
   if (!Number.isFinite(result.grade_confidence) || result.grade_confidence < 0 || result.grade_confidence > 1) {
-    throw new Error('Invalid prediction output');
+    throw invalidPredictionOutput();
   }
-  return result;
+
+  const probabilities = result.grade_probabilities;
+  if (!probabilities || typeof probabilities !== 'object' || Array.isArray(probabilities)) {
+    throw invalidPredictionOutput();
+  }
+
+  const normalizedProbabilities = {};
+  let probabilityTotal = 0;
+  for (const [grade, probability] of Object.entries(probabilities)) {
+    if (!SUPPORTED_GRADES.has(grade)
+        || !Number.isFinite(probability)
+        || probability < 0
+        || probability > 1) {
+      throw invalidPredictionOutput();
+    }
+    normalizedProbabilities[grade] = probability;
+    probabilityTotal += probability;
+  }
+  if (Object.keys(normalizedProbabilities).length > 0
+      && Math.abs(probabilityTotal - 1) > 0.001) {
+    throw invalidPredictionOutput();
+  }
+
+  return {
+    final_score: result.final_score,
+    grade: result.grade,
+    grade_confidence: result.grade_confidence,
+    grade_probabilities: normalizedProbabilities,
+  };
 }
 
 /**
@@ -50,12 +84,20 @@ async function predictFromInput(rawInput) {
  * Prediction for a student by ID (used by simulator, advisor, counsel, intervention).
  * Fetches student, adapts via schema map, runs prediction.
  */
-async function predictForStudent(studentId) {
-  const student = await studentService.findById(studentId);
+async function predictForStudent(studentId, studentRecord) {
+  const studentService = require('./studentService');
+  const student = studentRecord ?? await studentService.findById(studentId);
   if (!student) throw new Error('Student not found');
 
-  const schemaMap = getSchemaMap();
-  const profile = studentToProfile(student, schemaMap);
+  let profile;
+  try {
+    profile = validatePredictionProfile(studentToProfile(student, getSchemaMap()));
+  } catch (error) {
+    if (error instanceof TypeError || error instanceof RangeError) {
+      throw new StudentPredictionDataError({ cause: error });
+    }
+    throw error;
+  }
   return predict(profile);
 }
 
@@ -64,6 +106,7 @@ async function predictForStudent(studentId) {
  * Returns { current, simulated } where each is the raw ML result.
  */
 async function simulate(studentId, modifications) {
+  const studentService = require('./studentService');
   const student = await studentService.findById(studentId);
   if (!student) throw new Error('Student not found');
 

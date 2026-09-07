@@ -479,6 +479,49 @@ Administrator
 
 Higher roles inherit all permissions of lower roles.
 
+## Academic Intervention Generator
+
+Administrators can use **Admin → AI Tools → Academic Intervention** to generate a student-specific note with a predicted score/grade, risk factors, and rule-based recommendations. This uses the existing local Python ML service and templates, not an external generative-AI API. Review the note before using it for academic decisions.
+
+### Configuration and API contract
+
+- Use `POST /api/admin/students/:id/intervention`, with the existing authenticated admin cookie. `:id` is the positive safe-integer internal `students.id`, not the display student number. The React action sends no body and never supplies actor identity or a role. GET is not a generation endpoint.
+- The backend needs its normal MySQL/authentication configuration and an imported student table. The schema adapter accepts `schema_map.json`'s `columns` array and maps semantic tags/canonical names to the ten supported model features. Required model values must be present, finite, and within the supported ranges; bad data is rejected, not clamped.
+- Install the Python dependencies in `ml/requirements.txt` into the interpreter used by the server. `ML_PYTHON_CMD` selects that executable (default: `py` on Windows; configure `python3` or the appropriate executable elsewhere). The runner invokes `ml/inference.py --json -` without a shell. `ML_TIMEOUT_MS` defaults to 15000; `ML_MAX_CONCURRENT` defaults to 2, with a bounded waiting queue.
+- Deploy a compatible existing artifact set at `ml/models/`: `regressor.joblib`, `classifier.joblib`, `preprocessor.joblib`, and `metrics.json`. Generation does **not** automatically train or download models. It cannot produce a note when required inference dependencies are unavailable. No external AI API key is required.
+- Successful responses retain `studentId`, `student_id`, `interventionNote`, `prediction`, and `riskAssessment`. The UI reads `interventionNote` and accepts the legacy `intervention_note` spelling. Additional fields `interventionStored` and `persistenceCode` report whether the generated note was saved.
+
+| Status | Meaning |
+| --- | --- |
+| 200 | A real prediction and full intervention note were generated. Check `interventionStored` before assuming the note was saved. |
+| 400 | Invalid student record ID. |
+| 401 / 403 | Missing authentication / insufficient permission. |
+| 404 | No student record with that internal ID. |
+| 422 | Required student prediction data is missing or invalid. |
+| 429 | The existing admin AI request rate limit was reached. |
+| 503 | Inference unavailable, including capacity, timeout, process failure, missing artifacts, invalid JSON, or invalid prediction output. |
+| 500 | Unexpected database or internal failure; the client receives a safe generic error. |
+
+### Persistence and troubleshooting
+
+The imported `notes` column may be too short for an intervention (for example, `VARCHAR(66)`). The service attempts to save once, without truncating the note. A known MySQL length-limit error returns the full note with `interventionStored: false` and `persistenceCode: "INTERVENTION_STORAGE_LIMIT"`; a missing writable notes field returns `INTERVENTION_NOT_STORED`. The UI warns the administrator to copy the note. Unexpected database errors still fail safely. This fix does not alter the database schema or introduce prediction-history writes, and the teacher counsel path retains its existing audit behavior.
+
+For 422, correct the student's model inputs. For 503, check the server's Python executable, installed dependencies, compatible artifact set, timeout, and workload. For 500, inspect server-side operational diagnostics and database availability rather than exposing exception text to the browser. Retry preserves the selected student. Changing the student clears stale results, and repeated clicks/Enter events during a request do not launch duplicate generation.
+
+Chrome `Unchecked runtime.lastError` messages about a closed message channel or missing receiver are separate from an HTTP response shown in the Network panel. This repository contains no `chrome.runtime` or `browser.runtime` messaging integration. To confirm the source locally, compare an Incognito window with **all extensions disabled**, another browser, and a page with the application stopped. If the messages disappear without extensions, investigate the extension; do not suppress application errors or patch browser APIs. An actual `/api/.../intervention` failure must still be investigated independently.
+
+### Regression tests
+
+The focused tests mock database calls and the Python process; they need no running MySQL server, actual inference, training, external API, or secrets:
+
+```bash
+node --test src/controllers/adminIntervention.test.js src/controllers/adminInterventionRoute.test.js src/utils/mlValidation.test.js src/utils/mlRunner.test.js src/services/mlService.test.js
+node --test frontend/src/utils/adminAiTools.test.js frontend/src/api.test.js frontend/src/locales/uiRefreshLocaleParity.test.js
+npm test
+npm --prefix frontend test
+npm --prefix frontend run build
+```
+
 ## Security & Privacy
 
 ### Authentication Security
@@ -532,7 +575,7 @@ Higher roles inherit all permissions of lower roles.
   extracurricular_activities, part_time_job
   ```
 - **Target Variables**: Models predict only `final_score` (regression) and `grade` (classification)
-- **Training/Inference Mismatch**: Current implementation uses different features for training vs. inference (known issue requiring pipeline alignment)
+- **Artifact Compatibility**: Training and inference share interaction-feature engineering in `ml/feature_engineering.py`; deploy a matching preprocessor, regressor, classifier, and metrics set.
 - **Drift Baseline Missing**: Initial `metrics.json` lacks baseline for drift calculation; first training establishes baseline
 - **Non-Atomic Retraining**: Model files updated sequentially during retraining; brief window where predictor/preprocessor versions may mismatch
 - **Connection Hardcoding**: `ml/fetch_data.py` uses hardcoded database credentials (should use environment variables)

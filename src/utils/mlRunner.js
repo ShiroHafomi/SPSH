@@ -10,6 +10,7 @@
 
 const { spawn } = require('child_process');
 const path = require('path');
+const { MlDependencyError } = require('./mlErrors');
 
 const SCRIPT_PATH = path.join(__dirname, '..', '..', 'ml', 'inference.py');
 const PYTHON_CMD = process.env.ML_PYTHON_CMD || 'py';
@@ -27,7 +28,7 @@ function acquireSlot() {
     } else if (waitingQueue.length < 50) {
       waitingQueue.push({ resolve, reject });
     } else {
-      reject(new Error('ML capacity exceeded'));
+      reject(new MlDependencyError('ML capacity exceeded'));
     }
   });
 }
@@ -50,63 +51,70 @@ function runInference(pythonInput) {
   return acquireSlot().then(() => {
     return new Promise((resolve, reject) => {
       let settled = false;
+      let timer;
       function settle(err, value) {
         if (settled) return;
         settled = true;
+        clearTimeout(timer);
         releaseSlot();
         if (err) reject(err);
         else resolve(value);
       }
 
-      const proc = spawn(PYTHON_CMD, [SCRIPT_PATH, '--json', '-'], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        shell: false,
-        env: {
-          ...process.env,
-          PYTHONIOENCODING: 'utf-8',
-          PYTHONUNBUFFERED: '1',
-        },
-      });
+      let proc;
+      try {
+        proc = spawn(PYTHON_CMD, [SCRIPT_PATH, '--json', '-'], {
+          stdio: ['pipe', 'pipe', 'pipe'],
+          shell: false,
+          env: {
+            ...process.env,
+            PYTHONIOENCODING: 'utf-8',
+            PYTHONUNBUFFERED: '1',
+          },
+        });
+      } catch (error) {
+        settle(new MlDependencyError('ML process failed to start'));
+        return;
+      }
 
       // Hard timeout
       const timeoutMs = Number(process.env.ML_TIMEOUT_MS) || 15000;
-      const timer = setTimeout(() => {
+      timer = setTimeout(() => {
         proc.kill('SIGKILL');
-        settle(new Error('ML inference timeout'));
+        settle(new MlDependencyError('ML inference timeout'));
       }, timeoutMs);
 
       // Bounded buffers
       const MAX_STDOUT = 64 * 1024; // 64 KiB
-      const MAX_STDERR = 32 * 1024; // 32 KiB
       let stdout = '';
-      let stderr = '';
+      proc.stdout.setEncoding('utf8');
 
       proc.stdout.on('data', (chunk) => {
+        if (settled) return;
         stdout += chunk;
         if (stdout.length > MAX_STDOUT) {
           proc.kill('SIGKILL');
-          settle(new Error('ML output too large'));
+          settle(new MlDependencyError('ML output too large'));
         }
       });
 
-      proc.stderr.on('data', (chunk) => {
-        stderr += chunk;
-        if (stderr.length > MAX_STDERR) {
-          // Don't kill, just truncate logging
-        }
+      // Python diagnostics can contain input data and local paths; drain without retaining them.
+      proc.stderr.resume();
+      proc.stdin.on('error', () => {
+        proc.kill('SIGKILL');
+        settle(new MlDependencyError('Failed to write ML input'));
       });
 
       proc.on('error', (err) => {
         clearTimeout(timer);
-        settle(new Error('ML process failed to start'));
+        settle(new MlDependencyError('ML process failed to start'));
       });
 
       proc.on('close', (code) => {
-        clearTimeout(timer);
+        if (settled) return;
         if (code !== 0) {
-          // Log full stderr server-side only
-          console.error('[mlRunner] Python exited with code', code, 'stderr:', stderr.slice(0, 500));
-          settle(new Error('Prediction failed'));
+          console.error('[mlRunner] Python exited with code', code);
+          settle(new MlDependencyError('Prediction failed'));
           return;
         }
 
@@ -114,8 +122,8 @@ function runInference(pythonInput) {
           const result = JSON.parse(stdout.trim());
           settle(null, result);
         } catch (parseErr) {
-          console.error('[mlRunner] Parse error:', parseErr, 'stdout:', stdout.slice(0, 500));
-          settle(new Error('Failed to parse prediction result'));
+          console.error('[mlRunner] Invalid prediction JSON');
+          settle(new MlDependencyError('Failed to parse prediction result'));
         }
       });
 
@@ -126,7 +134,7 @@ function runInference(pythonInput) {
       } catch (writeErr) {
         clearTimeout(timer);
         proc.kill('SIGKILL');
-        settle(new Error('Failed to write ML input'));
+        settle(new MlDependencyError('Failed to write ML input'));
       }
     });
   });

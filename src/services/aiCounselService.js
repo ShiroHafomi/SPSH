@@ -3,7 +3,12 @@
  * Uses rule-based templates + ML predictions for immediate value.
  * Scaffolding for future LLM integration (Phase 3).
  */
-const studentService = require('./studentService');
+
+const { validatePredictionProfile, studentToProfile } = require('../utils/mlValidation');
+const { getSchemaMap } = require('../utils/schemaMap');
+const { StudentPredictionDataError } = require('../utils/mlErrors');
+
+const MAX_INTERVENTION_NOTE_LENGTH = 16000;
 
 // Risk threshold constants
 const RISK_THRESHOLDS = {
@@ -13,45 +18,87 @@ const RISK_THRESHOLDS = {
   sleepHours: 5.5,
 };
 
+function normalizeCustomPrompt(value) {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string') throw new TypeError('customPrompt must be a string.');
+  const prompt = value.trim();
+  if (prompt.length > 2000) throw new RangeError('customPrompt cannot exceed 2000 characters.');
+  return prompt || null;
+}
+
+function isNoteCapacityError(error) {
+  return error?.code === 'ER_DATA_TOO_LONG' || error?.errno === 1406;
+}
+
+function safeDisplayValue(value, fallback = 'N/A', maxLength = 100) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const normalized = String(value).replace(/[\x00-\x1f\x7f]/g, ' ').trim();
+  return normalized ? normalized.slice(0, maxLength) : fallback;
+}
+
 /**
- * Generate intervention note for a student (used by Teacher/Admin).
- * Saves to student.notes column.
+ * Generate an intervention note and attempt optional persistence to student.notes.
  * @param {number} studentId - Internal students.id
- * @param {string} [customPrompt] - Optional custom notes
- * @param {Object} [prediction] - Pre-fetched ML prediction (avoids duplicate call)
+ * @param {string} [customPrompt] - Optional custom notes, at most 2000 characters
+ * @param {Object} [prediction] - Pre-fetched ML prediction
+ * @param {Object} [studentRecord] - Already-loaded student row
  */
-async function generateInterventionNote(studentId, customPrompt, prediction) {
-  const student = await studentService.findById(studentId);
-  if (!student) {
-    throw new Error('Student not found');
+async function generateInterventionNote(studentId, customPrompt, prediction, studentRecord) {
+  const studentService = require('./studentService');
+  const student = studentRecord ?? await studentService.findById(studentId);
+  if (!student) throw new Error('Student not found');
+
+  const prompt = normalizeCustomPrompt(customPrompt);
+  let profile;
+  try {
+    profile = validatePredictionProfile(studentToProfile(student, getSchemaMap()));
+  } catch (error) {
+    if (error instanceof TypeError || error instanceof RangeError) {
+      throw new StudentPredictionDataError({ cause: error });
+    }
+    throw error;
+  }
+  const mlService = require('./mlService');
+  const normalizedPrediction = prediction
+    ? mlService.validatePredictionOutput(prediction)
+    : await mlService.predictForStudent(studentId, student);
+  const normalizedStudent = { ...student, ...profile };
+  const riskAssessment = assessRisk(normalizedStudent);
+  const interventionNote = buildInterventionNote(
+    normalizedStudent,
+    normalizedPrediction,
+    riskAssessment,
+    prompt
+  );
+  if (interventionNote.length > MAX_INTERVENTION_NOTE_LENGTH) {
+    throw new Error('Generated intervention note exceeds the supported length.');
   }
 
-  // Get ML prediction if not provided
-  if (!prediction) {
-    const mlService = require('./mlService');
-    prediction = await mlService.predictForStudent(studentId);
+  let interventionStored = false;
+  let persistenceCode = null;
+  try {
+    interventionStored = Boolean(await studentService.updateStudent(studentId, {
+      notes: interventionNote,
+    }));
+    if (!interventionStored) persistenceCode = 'INTERVENTION_NOT_STORED';
+  } catch (error) {
+    if (!isNoteCapacityError(error)) throw error;
+    persistenceCode = 'INTERVENTION_STORAGE_LIMIT';
+    console.warn('[generateInterventionNote] Student notes column cannot store the generated note.');
   }
 
-  // Assess risk factors
-  const riskAssessment = assessRisk(student);
-
-  // Build intervention note
-  const interventionNote = buildInterventionNote(student, prediction, riskAssessment, customPrompt);
-
-  // Save to student notes
-  await studentService.updateStudent(studentId, { notes: interventionNote });
+  const displayStudentId = typeof student.student_id === 'number' && Number.isFinite(student.student_id)
+    ? student.student_id
+    : (typeof student.student_id === 'string' ? safeDisplayValue(student.student_id, null) : null);
 
   return {
     studentId,
-    student_id: student.student_id,
+    student_id: displayStudentId,
     interventionNote,
-    prediction: {
-      final_score: prediction.final_score,
-      grade: prediction.grade,
-      grade_confidence: prediction.grade_confidence,
-      grade_probabilities: prediction.grade_probabilities,
-    },
+    prediction: normalizedPrediction,
     riskAssessment,
+    interventionStored,
+    persistenceCode,
   };
 }
 
@@ -205,6 +252,7 @@ async function generateStudentAdvice(student, prediction) {
  * Summarize student habits for notes (used by Admin).
  */
 async function summarizeHabits(studentId) {
+  const studentService = require('./studentService');
   const student = await studentService.findById(studentId);
   if (!student) {
     throw new Error('Student not found');
@@ -297,13 +345,16 @@ function buildInterventionNote(student, prediction, riskAssessment, customPrompt
 
   lines.push(`=== AI INTERVENTION NOTE ===`);
   lines.push(`Generated: ${new Date().toLocaleString()}`);
-  lines.push(`Student: #${student.student_id} (${student.name || 'N/A'})`);
+  lines.push(`Student: #${safeDisplayValue(student.student_id ?? student.id)} (${safeDisplayValue(student.name)})`);
   lines.push(``);
 
   lines.push(`--- PREDICTION ---`);
-  lines.push(`Predicted Final Score: ${prediction.final_score}`);
-  lines.push(`Predicted Grade: ${prediction.grade} (Confidence: ${prediction.grade_confidence}%)`);
-  lines.push(`Grade Probabilities: ${Object.entries(prediction.grade_probabilities).map(([g, p]) => `${g}:${p}%`).join(', ')}`);
+  lines.push(`Predicted Final Score: ${prediction.final_score.toFixed(2)}`);
+  lines.push(`Predicted Grade: ${prediction.grade} (Confidence: ${(prediction.grade_confidence * 100).toFixed(1)}%)`);
+  const probabilitySummary = Object.entries(prediction.grade_probabilities)
+    .map(([grade, probability]) => `${grade}:${(probability * 100).toFixed(1)}%`)
+    .join(', ');
+  lines.push(`Grade Probabilities: ${probabilitySummary || 'Unavailable'}`);
   lines.push(``);
 
   lines.push(`--- RISK ASSESSMENT ---`);

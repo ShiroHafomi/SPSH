@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../api';
 import { useFlash } from '../components/FlashProvider';
 import { useLanguage } from '../hooks/useLanguage';
 import {
+  createInterventionRequester,
   formatAdminMetric,
+  getInterventionErrorKey,
+  getInterventionNote,
   getStudentFromDetailsResponse,
   isPositiveIntegerId,
 } from '../utils/adminAiTools.js';
@@ -45,7 +48,7 @@ function FeatureCard({ title, description, icon: Icon, actionLabel, onAction, lo
   );
 }
 
-function ResultCard({ title, content, loading, onCopy, copied, t }) {
+function ResultCard({ title, content, loading, error, warning, onRetry, onCopy, copied, t }) {
   return (
     <div className="card-clay p-6">
       <div className="flex items-center justify-between mb-4">
@@ -61,14 +64,28 @@ function ResultCard({ title, content, loading, onCopy, copied, t }) {
         </button>
       </div>
       {loading ? (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
+        <div className="flex items-center justify-center py-8" role="status" aria-label={t('common.loading')}>
+          <Loader2 className="w-8 h-8 animate-spin text-violet-500" aria-hidden="true" />
+        </div>
+      ) : error ? (
+        <div className="rounded-xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-800 dark:border-danger-900/60 dark:bg-danger-950/30 dark:text-danger-200" role="alert">
+          <p>{error}</p>
+          <button type="button" className="btn-secondary mt-3 text-sm" onClick={onRetry}>
+            {t('admin.retryIntervention')}
+          </button>
         </div>
       ) : content ? (
-        <div className="prose prose-sm dark:prose-invert max-w-none">
-          <pre className="whitespace-pre-wrap font-mono text-sm bg-primary-50 dark:bg-gray-900 p-4 rounded-xl border border-primary-100 dark:border-gray-800">
-            {content}
-          </pre>
+        <div className="space-y-3">
+          {warning && (
+            <div className="rounded-xl border border-warning-200 bg-warning-50 p-3 text-sm text-warning-800 dark:border-warning-900/60 dark:bg-warning-950/30 dark:text-warning-200" role="status">
+              {warning}
+            </div>
+          )}
+          <div className="prose prose-sm dark:prose-invert max-w-none">
+            <pre className="whitespace-pre-wrap font-mono text-sm bg-primary-50 dark:bg-gray-900 p-4 rounded-xl border border-primary-100 dark:border-gray-800">
+              {content}
+            </pre>
+          </div>
         </div>
       ) : (
         <p className="text-primary-400 dark:text-gray-500 text-center py-8">{t('admin.generateToCreate')}</p>
@@ -80,6 +97,24 @@ function ResultCard({ title, content, loading, onCopy, copied, t }) {
 export default function AdminAITools() {
   const { addFlash } = useFlash();
   const { t } = useLanguage();
+  const mountedRef = useRef(true);
+  const interventionActionRef = useRef(false);
+  const interventionRequestRef = useRef(null);
+  const interventionSequenceRef = useRef(0);
+  const copyTimeoutsRef = useRef(new Set());
+  if (!interventionRequestRef.current) {
+    interventionRequestRef.current = createInterventionRequester(api);
+  }
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      interventionSequenceRef.current += 1;
+      for (const timeoutId of copyTimeoutsRef.current) clearTimeout(timeoutId);
+      copyTimeoutsRef.current.clear();
+    };
+  }, []);
 
   // Habit Summarization
   const [summarizeStudentId, setSummarizeStudentId] = useState('');
@@ -97,6 +132,8 @@ export default function AdminAITools() {
   const [interventionStudentId, setInterventionStudentId] = useState('');
   const [interventionLoading, setInterventionLoading] = useState(false);
   const [interventionResult, setInterventionResult] = useState('');
+  const [interventionError, setInterventionError] = useState('');
+  const [interventionWarning, setInterventionWarning] = useState('');
   const [interventionCopied, setInterventionCopied] = useState(false);
 
   // Student Details for context
@@ -162,27 +199,44 @@ export default function AdminAITools() {
   };
 
   const handleGenerateIntervention = async () => {
-    if (interventionLoading) return;
+    if (interventionActionRef.current) return;
     if (!isPositiveIntegerId(interventionStudentId)) {
       addFlash({ type: 'error', message: t('admin.invalidStudentId') });
       return;
     }
+
+    interventionActionRef.current = true;
+    const sequence = ++interventionSequenceRef.current;
+    const isCurrent = () => mountedRef.current && sequence === interventionSequenceRef.current;
     setInterventionLoading(true);
     setInterventionResult('');
+    setInterventionError('');
+    setInterventionWarning('');
     setInterventionCopied(false);
     try {
-      const data = await api.post(`/admin/students/${interventionStudentId.trim()}/intervention`);
-      setInterventionResult(data.intervention_note || t('admin.noInterventionGenerated'));
+      const data = await interventionRequestRef.current.generate(interventionStudentId);
+      if (!isCurrent()) return;
+      const note = getInterventionNote(data);
+      if (!note) throw new Error('Invalid intervention response');
+      setInterventionResult(note);
+      setInterventionWarning(data.interventionStored === false ? 'admin.interventionNotStored' : '');
       addFlash({ type: 'success', message: t('admin.interventionGenerated') });
     } catch (err) {
-      if (err instanceof ApiError) {
-        addFlash({ type: 'error', message: err.message });
-      } else {
-        addFlash({ type: 'error', message: t('admin.interventionFailed') });
-      }
+      if (!isCurrent()) return;
+      setInterventionError(getInterventionErrorKey(err));
     } finally {
-      setInterventionLoading(false);
+      interventionActionRef.current = false;
+      if (mountedRef.current) setInterventionLoading(false);
     }
+  };
+
+  const handleInterventionStudentChange = (event) => {
+    interventionSequenceRef.current += 1;
+    setInterventionStudentId(event.target.value);
+    setInterventionResult('');
+    setInterventionError('');
+    setInterventionWarning('');
+    setInterventionCopied(false);
   };
 
   const handleFetchStudent = async (event) => {
@@ -215,10 +269,15 @@ export default function AdminAITools() {
   const copyToClipboard = async (text, setCopied) => {
     try {
       await navigator.clipboard.writeText(text);
+      if (!mountedRef.current) return;
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      const timeoutId = setTimeout(() => {
+        copyTimeoutsRef.current.delete(timeoutId);
+        if (mountedRef.current) setCopied(false);
+      }, 2000);
+      copyTimeoutsRef.current.add(timeoutId);
     } catch (err) {
-      addFlash({ type: 'error', message: t('admin.clipboardFailed') });
+      if (mountedRef.current) addFlash({ type: 'error', message: t('admin.clipboardFailed') });
     }
   };
 
@@ -278,7 +337,7 @@ export default function AdminAITools() {
               placeholder={t('admin.studentIdPlaceholder')}
               aria-label={t('admin.studentIdLabel')}
               value={interventionStudentId}
-              onChange={(e) => setInterventionStudentId(e.target.value)}
+              onChange={handleInterventionStudentChange}
               onKeyDown={(e) => e.key === 'Enter' && handleGenerateIntervention()}
               className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-primary-100 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
             />
@@ -319,6 +378,9 @@ export default function AdminAITools() {
           title={t('admin.interventionNoteTitle')}
           content={interventionResult}
           loading={interventionLoading}
+          error={interventionError ? t(interventionError) : ''}
+          warning={interventionWarning ? t(interventionWarning) : ''}
+          onRetry={handleGenerateIntervention}
           onCopy={() => copyToClipboard(interventionResult, setInterventionCopied)}
           copied={interventionCopied}
           t={t}
