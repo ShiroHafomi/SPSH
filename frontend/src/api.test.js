@@ -9,6 +9,19 @@ afterEach(() => {
 });
 
 describe('API error responses', () => {
+  it('forwards GET and POST abort signals without swallowing cancellation', async () => {
+    const controller = new AbortController();
+    globalThis.fetch = async (url, options) => {
+      assert.equal(options.signal, controller.signal);
+      if (options.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+      return new Response('{}', { headers: { 'content-type': 'application/json' } });
+    };
+    await api.get('/student/me/study-timers/current', { signal: controller.signal });
+    await api.post('/student/me/study-timers', { title: 'Study' }, { signal: controller.signal });
+    controller.abort();
+    await assert.rejects(api.get('/student/me/study-timers/current', { signal: controller.signal }), { name: 'AbortError' });
+    await assert.rejects(api.post('/student/me/study-timers', {}, { signal: controller.signal }), { name: 'AbortError' });
+  });
   it('posts intervention requests with cookie authentication and no identity payload', async () => {
     globalThis.fetch = async (url, options) => {
       assert.equal(url, '/api/admin/students/2/intervention');

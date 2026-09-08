@@ -17,6 +17,7 @@ A full-stack web application for analyzing and predicting student performance ba
 - **Notification Center**: Real-time alerts for study goals, weekly check-ins, teacher feedback, and risk alerts with preference controls
 - **Study Goals & Weekly Check-ins**: Set academic targets and track progress with completion analytics
 - **Personal Assignments & Deadlines**: Students can track their own coursework, priorities, deadlines, and completion state with timezone-safe overdue indicators
+- **Study Session Tracker**: Private, recoverable study timers with pause/resume, authorized assignment links, an eight-hour cap, and UTC completed-time summaries
 - **Internationalization**: Full English/Vietnamese localization with synchronized key parity
 - **Role-Based Navigation**: 
   - Students: Personal dashboard, goal tracking, simulation tools
@@ -605,6 +606,85 @@ git diff --check
 ```
 
 Frontend tests exercise the shared form/prefill/state logic, navigation and localization contracts; they do not replace live browser verification of keyboard interaction and desktop/mobile rendering.
+
+## Study Session Tracker
+
+### Workflow and privacy
+
+Students open **Study Sessions** at `/student/study-sessions`, enter a title, optionally select one of their own assignments, and start a timer. They can pause, resume, finish, or explicitly confirm discarding the unfinished session. Refreshing the page recovers the database state. The page includes history filters and pagination, completed-duration summary cards, and a daily Chart.js bar chart with an accessible data table. All controls and state messages are available in English and Vietnamese; the timer itself is not announced every second.
+
+The existing `study_sessions` table and `/api/student/me/study-sessions` endpoints remain the **scheduled study planner**, including its manually reported minutes. They are not compatible with a running timer and are unchanged. The tracker uses `study_session_timers` and `/api/student/me/study-timers`; planner minutes and tracked seconds are not automatically combined.
+
+- Access is exact-role **student only**. Identity comes from the fresh authenticated database user, never from request-supplied student IDs. Both `student_id` and `owner_user_id` scope every timer read and write. Teachers and administrators have no private-history API in this phase.
+- Assignment selection uses the existing paginated student assignment API. Starting with `assignment_id` checks both account and student ownership under a transaction lock. An unavailable or unauthorized assignment returns the same safe 404. Standalone sessions remain available if assignment loading fails.
+- Finishing a timer does **not** complete an assignment, goal, planner block, or academic support task, and does **not** overwrite the ML profile's `study_hours`. These represent different measurement periods and methods.
+- Timer duration is self-directed elapsed time, **not verified attention, participation, or engagement**.
+
+### Timing and concurrency
+
+A running timer continues while the browser is closed. Duration is `accumulated_seconds + time since running_since`, using database UTC time; clients cannot submit durations or completion timestamps. Pause atomically saves elapsed seconds and clears `running_since`. Resume establishes a new server-generated running timestamp, so paused time is excluded. Millisecond precision is preserved across transitions; the UI formats whole seconds as `hh:mm:ss`.
+
+The maximum counted duration is **28,800 seconds (eight hours)**. A read of an abandoned running timer pauses it at that cap and exposes `limitReached: true`; finish also caps duration without requiring an earlier read. It stays unfinished until the student explicitly finishes or discards it. No scheduler automatically completes sessions. A capped session finished later belongs to that later completion date.
+
+A server-side `last_observed_at` high-water mark detects backward clock changes. Recovery preserves already observed elapsed time and pauses the timer with `clockAdjusted: true`. Resume is rejected until database time catches up. Forward jumps are bounded by the eight-hour cap; no wall-clock system can prove actual attention or reconstruct an unobserved clock change.
+
+MySQL enforces a unique `(student_id, unfinished_slot)` key, with a generated slot of `1` for running/paused sessions and `NULL` for closed sessions. This protects concurrent starts across tabs, devices, and even multiple accounts linked to one student. The generated expression depends only on status, avoiding MySQL's restrictions on cascading foreign keys on generated-column base fields. An account sharing a student link cannot view the other account's timer, but cannot start a second unfinished timer either.
+
+Current-session reads and lifecycle operations use transactions and row locks. Actions additionally require the expected `version`; successful transitions increment it. Duplicate same-state requests with the current version are no-ops; a duplicate finish with the old version returns 409 and cannot add time. Version exhaustion, deadlocks, and lock timeouts fail safely as conflicts. The start timestamp is finalized after the successful insert acquires its lock, excluding any insert wait.
+
+The browser uses a monotonic local display clock, not a per-second API request. It refreshes after actions, on focus/visibility return, and on same-account `BroadcastChannel` invalidation from another tab. Requests are cancellable and stale/unmounted responses are ignored. Unsupported broadcast environments and other devices reconcile on focus, refresh, or the next action; this is not real-time cross-device streaming. Timer state is never stored in `localStorage`.
+
+Buttons prevent duplicate in-flight submissions, but creation does not have a persistent idempotency key. After an uncertain network failure, refresh before retrying: the server may have committed the action. The database still prohibits two unfinished timers. Discard closes a record and excludes it from totals; it is not permanent deletion.
+
+### Schema initialization
+
+After the normal database/student import and user/assignment setup, start the existing backend with `npm start` or `npm run dev`. `src/server.js` invokes the idempotent `ensureStudyTimersTable()` after assignment initialization. No replacement import, external migration framework, AI service, or background worker is required. The database user needs the same table-creation privileges as the existing startup initializers.
+
+`study_session_timers` stores an unsigned ID, student/account/optional assignment IDs, a 150-character title, lifecycle status, UTC `DATETIME(3)` start/run/end/high-water timestamps, `DECIMAL(11,3)` accumulated seconds, a clock-adjustment flag, an unsigned version, and created/updated timestamps. Indexes cover owner-scoped history, status/end time, and student/start time. Foreign keys cascade **from a deleted student or user to their timers**; deleting an assignment sets its timer links to `NULL`. Timer deletion cannot delete a student or assignment. There is no timer deletion endpoint.
+
+Startup logs `Study timer table: ready` or a safe failure message. If initialization fails, the rest of the existing startup behavior is retained and timer requests return safe errors rather than exposing SQL details. Automated tests check DDL and mocked transaction semantics; they do not certify deployment against a live MySQL instance.
+
+### Timer API contract
+
+All paths below are relative to `/api/student/me/study-timers`. Successful responses use `Cache-Control: no-store`. Mutations retain the existing authenticated mutation rate limiter and application CSRF protection.
+
+| Method | Path | Input / result |
+|---|---|---|
+| GET | `/current` | Current running/paused session or `null` |
+| POST | base path | `{ title, assignment_id?: positive integer or null }`; returns 201 |
+| POST | `/:sessionId/pause` | `{ version }` |
+| POST | `/:sessionId/resume` | `{ version }` |
+| POST | `/:sessionId/finish` | `{ version }` |
+| POST | `/:sessionId/discard` | `{ version }` |
+| GET | base path | History: `from`, `to`, `status`, `page`, `size` |
+| GET | `/summary` | Completed-time summary: `from`, `to` |
+
+Current/action responses contain `{ session, serverNow, maxSeconds }`. A session contains `id`, `assignment_id`, `title`, `status`, `version`, `started_at`, `running_since`, `ended_at`, `accumulated_seconds`, `elapsedSeconds`, `limitReached`, and `clockAdjusted`. Instants are explicit UTC ISO strings; nullable instants are `null`. Identity fields are not exposed in the session payload. Input fields are allowlisted; titles are trimmed to 1–150 characters without control characters, IDs are positive safe integers, and versions are bounded by the MySQL unsigned integer maximum.
+
+Errors contain safe `{ error, code }` values. Invalid input is 400 (`STUDY_TIMER_INVALID_INPUT`); authentication/access errors are 401/403; missing own sessions and unavailable assignments are 404. Conflicts are **409**: `STUDY_TIMER_CONFLICT`, `STUDY_TIMER_UNFINISHED_EXISTS`, `STUDY_TIMER_INVALID_TRANSITION`, `STUDY_TIMER_LIMIT_REACHED`, or `STUDY_TIMER_CLOCK_ADJUSTED`. Refresh authoritative state and review before retrying. Unexpected failures return 500 `STUDY_TIMER_INTERNAL_ERROR` without SQL, stack traces, or database credentials.
+
+### History and summary scope
+
+Both reports default to today and the previous six **UTC** dates. Explicit `from` and `to` must be supplied together as real `YYYY-MM-DD` dates, ordered and covering at most **93 inclusive days**. SQL uses the corresponding half-open timestamp interval. History includes only completed/discarded records, optionally filtered by `status=all|completed|discarded`, with deterministic `ended_at DESC, id DESC` ordering. Pagination defaults to 20 rows, permits at most 100, and bounds offset to 100,000. Its response contains `sessions`, `pagination: { page, size, total, totalPages }`, `from`, `to`, `timeZone: 'UTC'`, and `grouping: 'end_date'`.
+
+Summary aggregation runs in SQL using `COUNT`, `SUM`, `AVG`, and daily `WITH ROLLUP`, not by loading session history into Node. Only completed records count, regardless of the history status filter. The response contains `completedSessionCount`, `totalCompletedSeconds`, `averageCompletedSeconds`, and zero-filled `daily` rows of `{ date, completedSessionCount, totalCompletedSeconds }`, plus `from`, `to`, `timeZone: 'UTC'`, and `grouping: 'completion_date'`. Empty totals are zero.
+
+**The entire duration belongs to its UTC completion date.** For example, a two-minute session starting at 23:59 UTC and finishing at 00:01 UTC contributes 120 seconds to the second date. These buckets are not minutes actually spent inside each calendar day. History and summary are separate reads and may briefly differ if another device finishes a session between them; refreshing reconciles them.
+
+### Tracker verification
+
+```bash
+# Controlled clocks, mocked database transactions, HTTP authorization, frontend state, and cancellation
+node --test src/services/studyTimerService.test.js src/controllers/studyTimerRoute.test.js frontend/src/utils/studySessions.test.js frontend/src/api.test.js
+
+# Full existing suites and production bundle
+npm test
+npm --prefix frontend test
+npm --prefix frontend run build
+git diff --check
+```
+
+Tests require no live MySQL, real-time timer waits, Python inference, or external API. They cover unique-key structure, competing starts, timing math, stale/duplicate actions, clock rollback and caps, ownership/assignment authorization, validation, safe failures, UTC midnight grouping, pagination, frontend loading/retry/cancellation, late cross-tab invalidation, and EN/VI parity. Browser fixture verification exercises the actual React/Vite UI separately from database integration. Neither package currently defines a lint script.
 
 ## Security & Privacy
 
