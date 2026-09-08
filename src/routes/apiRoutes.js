@@ -136,6 +136,7 @@ const {
 } = require('../controllers/notificationController');
 
 const supportPlans = require('../controllers/supportPlanController');
+const studyTimers = require('../controllers/studyTimerController');
 const router = express.Router();
 const authenticatedLimit = (limiter) => rateLimitMiddleware(limiter, {
   keyGenerator: authenticatedRateLimitKey,
@@ -302,6 +303,14 @@ studentRouter.delete(
 );
 
 // Study Sessions
+studentRouter.get('/me/study-timers/current', studyTimers.current);
+studentRouter.get('/me/study-timers/summary', studyTimers.summary);
+studentRouter.get('/me/study-timers', studyTimers.history);
+studentRouter.post('/me/study-timers', authenticatedLimit(assignmentMutationLimiter), studyTimers.start);
+for (const action of ['pause', 'resume', 'finish', 'discard']) {
+  studentRouter.post(`/me/study-timers/:sessionId/${action}`, authenticatedLimit(assignmentMutationLimiter), studyTimers[action]);
+}
+
 studentRouter.get('/me/study-sessions', apiListStudySessions);
 studentRouter.get('/me/study-sessions/summary', apiGetStudySessionSummary);
 studentRouter.post('/me/study-sessions', authenticatedLimit(studentAiLimiter), apiCreateStudySession);

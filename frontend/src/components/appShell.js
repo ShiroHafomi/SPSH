@@ -77,6 +77,7 @@ export const ROLE_NAVIGATION = Object.freeze({
         { to: '/student/assignments', labelKey: 'nav.assignments', icon: 'fileText' },
         { to: '/student/support-plans', labelKey: 'supportPlans.title', icon: 'fileText' },
         { to: '/student/study-planner', labelKey: 'nav.studyPlanner', icon: 'calendar' },
+        { to: '/student/study-sessions', labelKey: 'studySessions.title', icon: 'clock' },
       ],
     },
     {

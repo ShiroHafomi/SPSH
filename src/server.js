@@ -14,6 +14,7 @@ const { ensurePredictionEventsTable } = require('./services/predictionHistorySer
 const { ensureStudySessionsTable } = require('./services/studySessionService');
 const { ensureStudentAssignmentsTable } = require('./services/assignmentService');
 const { ensureSupportPlanTables } = require('./services/supportPlanService');
+const { ensureStudyTimersTable } = require('./services/studyTimerService');
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -109,6 +110,13 @@ async function main() {
     console.log('   Academic support tables: ready');
   } catch {
     console.error('   Academic support tables: FAILED');
+  }
+
+  try {
+    await ensureStudyTimersTable();
+    console.log('   Study timer table: ready');
+  } catch {
+    console.error('   Study timer table: FAILED');
   }
 
   if (!dbReady) {

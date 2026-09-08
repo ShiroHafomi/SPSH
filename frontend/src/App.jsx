@@ -27,6 +27,7 @@ import AdminAITools from './pages/AdminAITools';
 import StudentGoals from './pages/StudentGoals';
 import StudentGoalsProgress from './pages/StudentGoalsProgress';
 import StudyPlanner from './pages/StudyPlanner';
+import StudySessions from './pages/StudySessions';
 import Assignments from './pages/Assignments';
 import SupportPlans from './pages/SupportPlans';
 import Notifications from './pages/Notifications';
@@ -116,6 +117,7 @@ function App() {
                 <Route path="/goals" element={<StudentGoals />} />
                 <Route path="/student/notifications" element={<Notifications />} />
                 <Route path="/student/study-planner" element={<StudyPlanner />} />
+                <Route path="/student/study-sessions" element={<StudySessions />} />
                 <Route path="/student/assignments" element={<Assignments />} />
                 <Route path="/student/support-plans" element={<SupportPlans />} />
               </Route>

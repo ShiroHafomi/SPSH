@@ -69,6 +69,7 @@ export const api = {
       method: 'GET',
       headers: getAuthHeaders(),
       credentials: 'include',
+      signal: options?.signal,
     });
     return handleResponse(response, options);
   },
@@ -78,6 +79,7 @@ export const api = {
       method: 'POST',
       headers: getAuthHeaders(),
       credentials: 'include',
+      signal: options?.signal,
       body: JSON.stringify(body),
     });
     return handleResponse(response, options);
