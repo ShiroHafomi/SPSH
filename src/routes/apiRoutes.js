@@ -135,6 +135,7 @@ const {
   apiUpdateNotificationPreferences,
 } = require('../controllers/notificationController');
 
+const supportPlans = require('../controllers/supportPlanController');
 const router = express.Router();
 const authenticatedLimit = (limiter) => rateLimitMiddleware(limiter, {
   keyGenerator: authenticatedRateLimitKey,
@@ -209,6 +210,14 @@ adminRouter.get('/at-risk', apiAdminAtRisk);
 // Student management (filtered, with search/sort/pagination)
 adminRouter.get('/students', apiAdminListStudents);
 adminRouter.get('/students/:studentId/goals', apiAdminListStudentGoals);
+adminRouter.get('/students/:studentId/support-plans', supportPlans.list);
+adminRouter.post('/students/:studentId/support-plans', authenticatedLimit(assignmentMutationLimiter), supportPlans.create);
+adminRouter.get('/students/:studentId/support-plans/:planId', supportPlans.get);
+adminRouter.patch('/students/:studentId/support-plans/:planId', authenticatedLimit(assignmentMutationLimiter), supportPlans.edit);
+adminRouter.post('/students/:studentId/support-plans/:planId/activate', authenticatedLimit(assignmentMutationLimiter), supportPlans.activate);
+adminRouter.post('/students/:studentId/support-plans/:planId/complete', authenticatedLimit(assignmentMutationLimiter), supportPlans.complete);
+adminRouter.post('/students/:studentId/support-plans/:planId/cancel', authenticatedLimit(assignmentMutationLimiter), supportPlans.cancel);
+adminRouter.patch('/students/:studentId/support-plans/:planId/tasks/:taskId', authenticatedLimit(assignmentMutationLimiter), supportPlans.updateTask);
 adminRouter.post('/students/bulk-export', apiAdminBulkExport);
 adminRouter.post(
   '/students/bulk-ai-evaluate',
@@ -268,6 +277,10 @@ studentRouter.use(requireAuth, requireRole('student'));
 // Profile
 studentRouter.get('/me/profile', apiStudentProfile);
 studentRouter.put('/me/profile', apiStudentUpdateProfile);
+
+studentRouter.get('/me/support-plans', supportPlans.list);
+studentRouter.get('/me/support-plans/:planId', supportPlans.get);
+studentRouter.patch('/me/support-plans/:planId/tasks/:taskId', authenticatedLimit(assignmentMutationLimiter), supportPlans.updateTask);
 
 // Personal Assignments
 studentRouter.get('/me/assignments', apiListAssignments);

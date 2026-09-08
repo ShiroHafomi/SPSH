@@ -13,6 +13,7 @@ const { ensureModelSnapshotsTable } = require('./services/modelSnapshotService')
 const { ensurePredictionEventsTable } = require('./services/predictionHistoryService');
 const { ensureStudySessionsTable } = require('./services/studySessionService');
 const { ensureStudentAssignmentsTable } = require('./services/assignmentService');
+const { ensureSupportPlanTables } = require('./services/supportPlanService');
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -101,6 +102,13 @@ async function main() {
     console.log('   Student assignments table: ready');
   } catch (err) {
     console.error('   Student assignments table: FAILED —', err.message);
+  }
+
+  try {
+    await ensureSupportPlanTables();
+    console.log('   Academic support tables: ready');
+  } catch {
+    console.error('   Academic support tables: FAILED');
   }
 
   if (!dbReady) {

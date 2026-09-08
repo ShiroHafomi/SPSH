@@ -88,6 +88,27 @@ test('notification creation is idempotent for the same deterministic dedupe key'
   assert.equal(calls[0][5], calls[1][5]);
 });
 
+test('support activation notifications use bounded plan IDs and stable deduplication', async () => {
+  const calls = [];
+  pool.query = async (sql, params) => {
+    calls.push({ sql, params });
+    return [{ insertId: 31, affectedRows: calls.length === 1 ? 1 : 0 }];
+  };
+  const first = await notificationService.createNotification({ userId: 5, type: 'support_plan_activated', metadata: { planId: '8' } });
+  const retry = await notificationService.createNotification({ userId: 5, type: 'support_plan_activated', metadata: { planId: 8 } });
+  assert.equal(first.created, true);
+  assert.equal(retry.created, false);
+  assert.equal(first.dedupeKey, retry.dedupeKey);
+  assert.deepEqual(calls[0].params.slice(0, 5), [5, 'support_plan_activated', 'notifications.supportPlanActivated.title', 'notifications.supportPlanActivated.message', '{"planId":8}']);
+  assert.match(calls[0].sql, /ON DUPLICATE KEY UPDATE/);
+  assert.deepEqual(notificationService.parseStoredMetadata('{"planId":8,"objective":"private"}'), { planId: 8 });
+  for (const planId of [0, -1, Infinity, '8/path', Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => notificationService.validateMetadata({ planId }));
+  }
+  assert.throws(() => notificationService.validateMetadata({ planId: 8, objective: 'private' }));
+  assert.notEqual(first.dedupeKey, notificationService.buildDedupeKey('support_plan_activated', { planId: 9 }));
+});
+
 test('notification creation rejects unsupported types before querying MySQL', async () => {
   let calls = 0;
   pool.query = async () => { calls += 1; };

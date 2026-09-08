@@ -11,6 +11,7 @@ export const ROLE_NAVIGATION = Object.freeze({
       labelKey: 'shell.groups.people',
       items: [
         { to: '/admin/students', labelKey: 'admin.studentManagement', icon: 'users' },
+        { to: '/admin/support-plans', labelKey: 'supportPlans.title', icon: 'fileText' },
         { to: '/admin/at-risk', labelKey: 'admin.atRiskStudents', icon: 'alertTriangle' },
         { to: '/admin/users', labelKey: 'admin.userManagement', icon: 'user' },
       ],
@@ -74,6 +75,7 @@ export const ROLE_NAVIGATION = Object.freeze({
       items: [
         { to: '/goals', labelKey: 'nav.goals', icon: 'target', exact: true },
         { to: '/student/assignments', labelKey: 'nav.assignments', icon: 'fileText' },
+        { to: '/student/support-plans', labelKey: 'supportPlans.title', icon: 'fileText' },
         { to: '/student/study-planner', labelKey: 'nav.studyPlanner', icon: 'calendar' },
       ],
     },

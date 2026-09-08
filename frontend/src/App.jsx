@@ -28,6 +28,7 @@ import StudentGoals from './pages/StudentGoals';
 import StudentGoalsProgress from './pages/StudentGoalsProgress';
 import StudyPlanner from './pages/StudyPlanner';
 import Assignments from './pages/Assignments';
+import SupportPlans from './pages/SupportPlans';
 import Notifications from './pages/Notifications';
 import MlMonitoring from './pages/MlMonitoring';
 
@@ -78,6 +79,7 @@ function App() {
                 <Route path="/admin/ml-monitoring" element={<MlMonitoring apiRole="admin" />} />
                 <Route path="/admin/users" element={<AdminUsers />} />
                 <Route path="/admin/notifications" element={<Notifications />} />
+                <Route path="/admin/support-plans" element={<SupportPlans />} />
               </Route>
 
               {/* Teacher routes - Teacher or Admin (own sidebar + header) */}
@@ -115,6 +117,7 @@ function App() {
                 <Route path="/student/notifications" element={<Notifications />} />
                 <Route path="/student/study-planner" element={<StudyPlanner />} />
                 <Route path="/student/assignments" element={<Assignments />} />
+                <Route path="/student/support-plans" element={<SupportPlans />} />
               </Route>
 
               {/* Shared routes - any authenticated user (floating Navbar via MainLayout) */}

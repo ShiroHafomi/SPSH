@@ -22,6 +22,7 @@ const ALLOWED_PROGRESS_STATUSES = new Set([
 ]);
 const ALLOWED_METADATA_FIELDS = new Set([
   'goalId',
+  'planId',
   'studentId',
   'checkinId',
   'progressStatus',
@@ -36,6 +37,10 @@ const PREFERENCE_COLUMNS = Object.freeze({
   risk_alerts: 'risk_alerts',
 });
 const NOTIFICATION_TYPES = Object.freeze({
+  support_plan_activated: {
+    titleKey: 'notifications.supportPlanActivated.title',
+    messageKey: 'notifications.supportPlanActivated.message',
+  },
   goal_deadline: {
     titleKey: 'notifications.goalDeadline.title',
     messageKey: 'notifications.goalDeadline.message',
@@ -83,7 +88,7 @@ function isCalendarDate(value) {
 }
 
 function normalizeMetadataValue(key, value) {
-  if (key === 'goalId' || key === 'studentId' || key === 'checkinId' || key === 'eventVersion') {
+  if (key === 'goalId' || key === 'planId' || key === 'studentId' || key === 'checkinId' || key === 'eventVersion') {
     return assertPositiveId(value, `metadata.${key}`);
   }
   if (key === 'progressStatus') {
@@ -121,7 +126,7 @@ function validateMetadata(metadata) {
   }
 
   const normalized = {};
-  for (const key of ['goalId', 'studentId', 'checkinId', 'progressStatus', 'deadline', 'eventVersion', 'reminderWeekStart']) {
+  for (const key of ['goalId', 'planId', 'studentId', 'checkinId', 'progressStatus', 'deadline', 'eventVersion', 'reminderWeekStart']) {
     if (Object.prototype.hasOwnProperty.call(metadata, key)) {
       normalized[key] = normalizeMetadataValue(key, metadata[key]);
     }
@@ -145,7 +150,7 @@ function parseStoredMetadata(rawMetadata) {
   if (!isPlainObject(parsed)) return {};
 
   const safeMetadata = {};
-  for (const key of ['goalId', 'studentId', 'checkinId', 'progressStatus', 'deadline', 'eventVersion', 'reminderWeekStart']) {
+  for (const key of ['goalId', 'planId', 'studentId', 'checkinId', 'progressStatus', 'deadline', 'eventVersion', 'reminderWeekStart']) {
     if (!Object.prototype.hasOwnProperty.call(parsed, key)) continue;
     try {
       safeMetadata[key] = normalizeMetadataValue(key, parsed[key]);
