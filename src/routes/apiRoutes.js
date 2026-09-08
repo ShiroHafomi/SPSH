@@ -137,6 +137,7 @@ const {
 
 const supportPlans = require('../controllers/supportPlanController');
 const studyTimers = require('../controllers/studyTimerController');
+const learningJournal = require('../controllers/learningJournalController');
 const router = express.Router();
 const authenticatedLimit = (limiter) => rateLimitMiddleware(limiter, {
   keyGenerator: authenticatedRateLimitKey,
@@ -303,6 +304,12 @@ studentRouter.delete(
 );
 
 // Study Sessions
+studentRouter.get('/me/learning-journal', learningJournal.list);
+studentRouter.get('/me/learning-journal/:entryId', learningJournal.get);
+studentRouter.post('/me/learning-journal', authenticatedLimit(assignmentMutationLimiter), learningJournal.create);
+studentRouter.patch('/me/learning-journal/:entryId', authenticatedLimit(assignmentMutationLimiter), learningJournal.update);
+studentRouter.delete('/me/learning-journal/:entryId', authenticatedLimit(assignmentMutationLimiter), learningJournal.remove);
+
 studentRouter.get('/me/study-timers/current', studyTimers.current);
 studentRouter.get('/me/study-timers/summary', studyTimers.summary);
 studentRouter.get('/me/study-timers', studyTimers.history);

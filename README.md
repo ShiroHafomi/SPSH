@@ -18,6 +18,7 @@ A full-stack web application for analyzing and predicting student performance ba
 - **Study Goals & Weekly Check-ins**: Set academic targets and track progress with completion analytics
 - **Personal Assignments & Deadlines**: Students can track their own coursework, priorities, deadlines, and completion state with timezone-safe overdue indicators
 - **Study Session Tracker**: Private, recoverable study timers with pause/resume, authorized assignment links, an eight-hour cap, and UTC completed-time summaries
+- **Student Learning Journal**: Private dated reflections with search, self-rated understanding, versioned editing, and confirmed deletion
 - **Internationalization**: Full English/Vietnamese localization with synchronized key parity
 - **Role-Based Navigation**: 
   - Students: Personal dashboard, goal tracking, simulation tools
@@ -685,6 +686,60 @@ git diff --check
 ```
 
 Tests require no live MySQL, real-time timer waits, Python inference, or external API. They cover unique-key structure, competing starts, timing math, stale/duplicate actions, clock rollback and caps, ownership/assignment authorization, validation, safe failures, UTC midnight grouping, pagination, frontend loading/retry/cancellation, late cross-tab invalidation, and EN/VI parity. Browser fixture verification exercises the actual React/Vite UI separately from database integration. Neither package currently defines a lint script.
+
+## Student Learning Journal
+
+Students open **Learning Journal** in the student navigation at `/student/learning-journal`. They can create multiple dated reflections per day, search their own history, filter by date and understanding rating, open full entries, edit, and permanently delete after confirmation. The English/Vietnamese page uses the existing responsive light/dark interface and accessible shared dialog.
+
+This is personal reflection, not AI generation or an academic score. The optional **1–5 self-rating is not objective academic performance**. There is no sharing, teacher commenting, staff journal API, external service, or automatic change to assignments, goals, study timers, planner blocks, or ML profile fields.
+
+### Privacy, validation and concurrency
+
+- Exact-role student access is required. Both authenticated `owner_user_id` and linked `student_id` scope every operation, including search. Another account sharing the same student record does not gain access. Ownership cannot be supplied in a request.
+- Titles are trimmed to **1–150 characters**. What I learned is required and trimmed to **1–3,000 characters**. Difficulties and next steps are optional, each limited to **2,000 characters**; omitted values become empty strings. Understanding is an integer **1–5 or null**. Unknown writable fields and invalid IDs/versions are rejected. Text bounds use JavaScript string length, consistent with the form controls.
+- Entry dates are real `YYYY-MM-DD` calendar dates (year 1000 or later). Past entries are allowed; future dates are rejected against the database's **UTC date**. Entry dates are date-only values, not local timestamps.
+- Lists contain at most a **200-character learned-text preview** per entry. Full reflection fields come only from the authorized detail endpoint. Content is rendered as plain text, never HTML. Success and error responses use `Cache-Control: no-store`.
+- PATCH and DELETE require the version read by the student. Transactional row locks plus version predicates reject stale actions with **409 `JOURNAL_CONFLICT`**. Editing preserves the draft after errors; conflicts never silently replace or rebase it. Reloading a dirty draft requires explicit discard confirmation. A failed delete remains in the confirmation dialog; a conflict requires reloading and confirming again.
+- Closing a dirty editor asks before discarding. Reloading/closing the browser warns while edits or a write are pending. Drafts live only in memory, not browser storage. This is not autosave or guaranteed recovery after a crash. The existing browser-history router has no general route-blocking facility; browser Back navigation can still leave the page.
+- Repeated in-flight writes are disabled, requests are cancellable, and late responses after closing/unmounting/account changes are ignored. There is no persistent creation idempotency key: after an ambiguous network failure, inspect the latest entry/history before retrying because the write may already have committed.
+- The application request logger skips journal endpoints, including search URLs. Journal text is not sent to audit metadata or unexpected-error logs. Deployment proxies must likewise avoid logging journal query strings. Privacy here is application authorization, not encryption against database operators.
+
+### Journal database initialization
+
+Normal `npm start` / `npm run dev` startup calls `ensureLearningJournalTable()` after user/student dependencies. The initializer uses `CREATE TABLE IF NOT EXISTS student_learning_journal`; no reset, truncate, replacement import, seed, or new migration framework is needed. The database user needs table-creation privileges. Startup reports `Learning journal table: ready` or a safe failure message.
+
+The table stores unsigned `id`, `student_id`, `owner_user_id`, title, date, three reflection text fields, nullable understanding rating, optimistic version, and created/updated timestamps. An index on `(student_id, owner_user_id, entry_date, id)` supports private newest-first history. A rating CHECK constraint and foreign keys follow MySQL 8 conventions. Deleting a student/account removes its journal entries; deleting a journal entry can never delete a student/account. There is no one-entry-per-day restriction.
+
+### Journal API
+
+All paths below are relative to **`/api/student/me/learning-journal`**. Existing authentication, CSRF/request-provenance protection, and authenticated mutation rate limiting apply.
+
+| Method | Path | Contract |
+|---|---|---|
+| GET | base path | `q`, `from`, `to`, `rating`, `page`, `size`; returns `{ entries, pagination, today, timeZone: 'UTC' }` |
+| GET | `/:entryId` | Returns `{ entry, timeZone: 'UTC' }` with full authorized text |
+| POST | base path | Required `title`, `entry_date`, `learned_text`; optional `difficulties_text`, `next_steps_text`, `understanding_rating`; returns 201 `{ id, version }` |
+| PATCH | `/:entryId` | Same complete form fields plus required `version`; returns `{ id, version }` |
+| DELETE | `/:entryId?version=N` | Required current version; returns `{ ok: true }` |
+
+Pagination defaults to **20**, permits at most **100**, and bounds the offset to **100,000**. Ordering is deterministic: `entry_date DESC, id DESC`. Search is at most **100 characters**, matches the title and all three text fields, and treats SQL LIKE wildcard characters as literal text. All values use bound SQL parameters. Either date filter may be omitted; when both are present, they must be ordered and cover at most **366 inclusive days**. `rating` filters an integer 1–5; omitting it includes unrated entries. Omit empty query filters instead of sending empty dates.
+
+Safe error codes include `JOURNAL_INVALID_INPUT` (400), `JOURNAL_FORBIDDEN` (403), `JOURNAL_NOT_FOUND` (404), `JOURNAL_CONFLICT` (409), and `JOURNAL_INTERNAL_ERROR` (500). Unauthenticated/inactive accounts retain the existing authentication responses. Errors never disclose SQL, stacks, or journal text.
+
+### Development accounts and verification
+
+The supported login roles are `admin`, `teacher`, and `student`. Teachers use the existing user record with optional department, not a separate profile table. Students need a valid `users.student_id` linkage. Local demo-account provisioning is a one-time database operation, not part of startup, tests, or a seed script. Availability and actual credentials are reported separately after provisioning; passwords and hashes must never be stored in documentation, source, or test fixtures. Do not provision these accounts in production or a shared public database. A newly created demo student must use its own clearly marked synthetic profile, not an existing real student record; that demo row participates in existing dataset-wide statistics.
+
+```bash
+# Mocked service/HTTP/store tests; no live MySQL or demo credentials required
+node --test src/services/learningJournalService.test.js src/controllers/learningJournalRoute.test.js frontend/src/utils/learningJournal.test.js frontend/src/api.test.js
+npm test
+npm --prefix frontend test
+npm --prefix frontend run build
+git diff --check
+```
+
+Real-database login and create/read/delete smoke checks are separate from the standard suites. They must remove only the exact journal record created for the smoke check, never existing entries. Neither package defines a lint script.
 
 ## Security & Privacy
 

@@ -22,6 +22,20 @@ describe('API error responses', () => {
     await assert.rejects(api.get('/student/me/study-timers/current', { signal: controller.signal }), { name: 'AbortError' });
     await assert.rejects(api.post('/student/me/study-timers', {}, { signal: controller.signal }), { name: 'AbortError' });
   });
+  it('forwards PATCH and DELETE abort signals and preserves cookie authentication', async () => {
+    const controller = new AbortController();
+    globalThis.fetch = async (url, options) => {
+      assert.equal(options.signal, controller.signal);
+      assert.equal(options.credentials, 'include');
+      if (options.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+      return new Response('{}', { headers: { 'content-type': 'application/json' } });
+    };
+    await api.patch('/student/me/learning-journal/1', { version: 1 }, { signal: controller.signal });
+    await api.delete('/student/me/learning-journal/1?version=1', { signal: controller.signal });
+    controller.abort();
+    await assert.rejects(api.patch('/student/me/learning-journal/1', {}, { signal: controller.signal }), { name: 'AbortError' });
+    await assert.rejects(api.delete('/student/me/learning-journal/1?version=1', { signal: controller.signal }), { name: 'AbortError' });
+  });
   it('posts intervention requests with cookie authentication and no identity payload', async () => {
     globalThis.fetch = async (url, options) => {
       assert.equal(url, '/api/admin/students/2/intervention');
