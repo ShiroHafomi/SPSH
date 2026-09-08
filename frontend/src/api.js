@@ -85,13 +85,14 @@ export const api = {
     return handleResponse(response, options);
   },
 
-  async delete(path) {
+  async delete(path, options) {
     const response = await fetch(`${API_BASE}${path}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
       credentials: 'include',
+      signal: options?.signal,
     });
-    return handleResponse(response);
+    return handleResponse(response, options);
   },
 
   async put(path, body) {
@@ -104,14 +105,15 @@ export const api = {
     return handleResponse(response);
   },
 
-  async patch(path, body) {
+  async patch(path, body, options) {
     const response = await fetch(`${API_BASE}${path}`, {
       method: 'PATCH',
       headers: getAuthHeaders(),
       credentials: 'include',
+      signal: options?.signal,
       body: JSON.stringify(body),
     });
-    return handleResponse(response);
+    return handleResponse(response, options);
   },
 };
 

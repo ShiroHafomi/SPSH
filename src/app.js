@@ -63,7 +63,10 @@ function createApp() {
 
   // --- Middleware ---
   if (process.env.NODE_ENV !== 'test') {
-    app.use(morgan(security.isProduction ? 'combined' : 'dev'));
+    app.use(morgan(security.isProduction ? 'combined' : 'dev', {
+      // Journal search terms are private reflection content, including in URLs.
+      skip: req => /^\/api\/student\/me\/learning-journal(?:\/|$)/i.test(req.path),
+    }));
   }
   app.use(express.urlencoded({
     extended: false,
