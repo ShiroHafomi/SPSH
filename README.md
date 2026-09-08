@@ -522,6 +522,90 @@ npm --prefix frontend test
 npm --prefix frontend run build
 ```
 
+## Academic Intervention Follow-up (Support Plans)
+
+Support plans turn reviewed recommendations into practical tasks. They are separate from personal assignments and numeric study goals. Task completion measures follow-through, **not evidence of improved academic performance**.
+
+### Workflow and permissions
+
+- **Admin:** Generate an intervention under **Admin → AI Tools**, review the result, then choose **Create support plan**. Only bounded action bullets from the recommendation section are suggested as editable tasks; raw model data, risk details, custom notes, and the full generated note are not copied into the plan. Review/edit/remove suggestions and save a **draft**. Generation never creates or activates a plan automatically.
+- **Manual creation:** Open **Support plans** (`/admin/support-plans`), enter the internal `students.id`, load that student's plans, and create a draft. This requires neither a generated note nor ML availability. The page also supports `/admin/support-plans?studentId=7`.
+- **Activation:** An admin explicitly activates a reviewed draft with at least one task. The student can then view it under **Support plans** (`/student/support-plans`) and update task status. Admins can review/update active task progress and explicitly complete or cancel the plan.
+- **Students:** The backend resolves identity from the authenticated user's linked `student_id`, never from request body/query ownership. Students see only their own active, completed, and cancelled plans; drafts are hidden. They may change only task status on active plans. Plan ownership and task membership are checked on each operation.
+- **Teachers:** No support-plan access in this phase. Existing organization-wide teacher analytics permissions are not a reliable teacher-to-student assignment. No assignment relationship or broad management permission is invented. This feature's exact role gates take precedence over the general role hierarchy above.
+
+Saved plans remain usable if the generation service later becomes unavailable. No training, external AI dependency, or automatic conversion from stored notes is introduced.
+
+### Database initialization
+
+`src/server.js` calls `ensureSupportPlanTables()` after the existing dependencies are initialized. With the usual database configuration and imported student table in place, start/restart through `npm start` or `npm run dev` and check for **Academic support tables: ready**. The database account needs permission to create tables and foreign keys. Do not re-import or replace existing student data to enable this feature.
+
+Two idempotent `CREATE TABLE IF NOT EXISTS` statements create:
+
+- `academic_support_plans`: student/creator references, title, objective, draft/active/completed/cancelled status, start/due dates, version, created/updated timestamps, and completion timestamp. Student-scoped indexes support creation-order pagination and status filtering.
+- `academic_support_tasks`: parent plan reference, title, description, pending/in_progress/completed status, optional due date, server-controlled sort order, version, and timestamps. A `(plan_id, sort_order, id)` index supports bounded task retrieval.
+
+IDs and versions use `INT UNSIGNED`. Deleting a student cascades to their plans; deleting a creator sets the creator reference to NULL; deleting a plan cascades only to its tasks. Deleting a task or plan cannot delete users or students. There is **no permanent-delete API**: use cancellation. Startup does not alter an incompatible pre-existing table definition; investigate a failed readiness message rather than running a destructive import.
+
+### API contract
+
+All paths below are under `/api`, use existing authentication and CSRF protection, and return JSON. New mutation routes reuse the authenticated assignment mutation rate limiter.
+
+| Method | Path | Operation |
+| --- | --- | --- |
+| GET | `/admin/students/:studentId/support-plans` | Admin list, optional `page`, `size`, `status` |
+| POST | `/admin/students/:studentId/support-plans` | Create draft (201) |
+| GET | `/admin/students/:studentId/support-plans/:planId` | View plan and tasks |
+| PATCH | `/admin/students/:studentId/support-plans/:planId` | Replace draft content/tasks atomically |
+| POST | `/admin/students/:studentId/support-plans/:planId/activate` | Activate draft |
+| POST | `/admin/students/:studentId/support-plans/:planId/complete` | Explicitly complete active plan |
+| POST | `/admin/students/:studentId/support-plans/:planId/cancel` | Cancel draft or active plan |
+| PATCH | `/admin/students/:studentId/support-plans/:planId/tasks/:taskId` | Update active task status |
+| GET | `/student/me/support-plans` | List own non-draft plans |
+| GET | `/student/me/support-plans/:planId` | View own non-draft plan/tasks |
+| PATCH | `/student/me/support-plans/:planId/tasks/:taskId` | Update own active task status |
+
+Create body: `{ title, objective, start_date, due_date, tasks: [{ title, description?, due_date? }] }`. Draft edits send the full editable draft plus its current `version`; no task IDs, task statuses, ownership, or creator fields are writable. Lifecycle actions send `{ version }`. Task updates send `{ status, version, planVersion }`, requiring both current versions.
+
+Required title/objective/task title bounds are 1–150 / 1–2,000 / 1–150 characters; task descriptions are optional and limited to 1,000. Text is trimmed, unsupported control characters rejected, and tasks are limited to 20. Unknown writable fields are rejected. IDs/versions must be positive safe integers. Dates must be real `YYYY-MM-DD` calendar dates (MySQL years 1000–9999); plan due date must be on/after start, and optional task deadlines must fall within that range.
+
+Lists return `{ plans, total, page, size, totalPages }`; details return `{ plan }`; mutations return `{ plan, warnings }`. Lists default to 20, allow at most 100 records per page, cap offset at 100,000, allow only the documented status filters, and sort deterministically by `created_at DESC, id DESC`. Tasks are returned in `sort_order ASC, id ASC` order. An admin list for a nonexistent student is empty; creation verifies the student exists. Errors use safe `{ error, code }` responses: 400 validation, 401 authentication, 403 role access, 404 unavailable resource, 409 stale version or invalid lifecycle action, and generic 500 unexpected failure. Unauthorized students cannot distinguish another student's plan from a nonexistent plan.
+
+### Lifecycle, progress, and concurrency
+
+- `draft → active`: at least one task required.
+- `draft → cancelled` and `active → cancelled`: allowed.
+- `active → completed`: every task must be completed, with at least one task.
+- Only draft content/tasks can be edited. Completed/cancelled plans are read-only and cannot be reopened. Cancelled plans, including cancelled drafts, are visible to their student.
+- Active tasks can move among pending, in_progress, and completed. Reopening a task clears its completion timestamp. Repeating its current status with current versions leaves versions unchanged.
+- Progress is `completedTaskCount / totalTaskCount * 100`, or zero for an empty draft. A plan at 100% stays active until an admin explicitly completes it.
+- Date-only deadlines include the entire **UTC due date**. Overdue is derived: active plan, deadline before today's UTC date, and unfinished tasks. It is not a persisted status. Completion instants are recorded in UTC.
+
+Multi-table operations use transactions and rollback on partial failure. Writers lock the parent plan first. Content/lifecycle changes increment the plan version; a changed task status increments both task and plan versions. Stale writes return **409** instead of overwriting newer changes. The UI refreshes current data after conflicts, preserves unsaved draft edits, and offers an explicit replacement with the latest draft rather than silently rebasing edits.
+
+### Notifications, audit, and limitations
+
+Activation attempts one in-app `support_plan_activated` notification **after commit**, only for a uniquely linked active student account and when the existing `teacherFeedback` preference permits it (labelled **Staff feedback and support plans**). Metadata contains only `planId`; notification keys and routing are allowlisted. The existing per-user deterministic dedupe key prevents duplicate stored activation events. Draft saves do not notify. Repeated activation cannot send another notification because version/lifecycle validation fails first.
+
+Audit events cover creation, draft editing, activation, completion, cancellation, and task updates. Metadata is limited to student ID, status, version, and task count; full objectives, task descriptions, generated text, and request metadata are excluded. Optional audit/delivery failures are returned in `warnings` (`SUPPORT_PLAN_AUDIT_FAILED`, `SUPPORT_PLAN_NOTIFICATION_FAILED`, or `SUPPORT_PLAN_RECIPIENT_UNAVAILABLE`) without rolling back a saved plan. There is no delivery outbox or automatic retry in this phase; do not repeat a lifecycle action to retry notification delivery.
+
+The UI blocks duplicate submissions while a request is pending and ignores obsolete responses after switching plans/accounts or unmounting. **Creation has no persistent idempotency token**: after an ambiguous network failure, refresh and inspect the list before creating another draft. Title equality is not a deduplication rule. There are no teacher management, permanent deletion, automatic academic outcome evaluation, or real-time plan updates; use Refresh to see another session's changes. Generated action text retains the generator's language and can be edited; interface labels support English and Vietnamese.
+
+### Support-plan verification
+
+Focused node:test suites use mocked database/authentication/notification calls and do not need running MySQL, Python inference, external AI requests, or model training:
+
+```bash
+node --test src/utils/supportPlanValidation.test.js src/services/supportPlanService.test.js src/controllers/supportPlanRoute.test.js src/services/notificationService.test.js
+node --test frontend/src/utils/supportPlans.test.js frontend/src/locales/supportPlanLocaleParity.test.js
+npm test
+npm --prefix frontend test
+npm --prefix frontend run build
+git diff --check
+```
+
+Frontend tests exercise the shared form/prefill/state logic, navigation and localization contracts; they do not replace live browser verification of keyboard interaction and desktop/mobile rendering.
+
 ## Security & Privacy
 
 ### Authentication Security
