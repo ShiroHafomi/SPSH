@@ -373,6 +373,94 @@ async function logAuditEvent({ userId, action, resourceType, resourceId, metadat
 /**
  * Get audit logs with pagination and filters.
  */
+function validateProfileName(name) {
+  if (typeof name !== 'string') throw new RangeError('Name is required.');
+  const normalized = name.trim();
+  if (normalized.length < 2 || normalized.length > 100) {
+    throw new RangeError('Name must be between 2 and 100 characters.');
+  }
+  if (!/^[\p{L}\p{M}]+(?:[ .'-][\p{L}\p{M}]+)*$/u.test(normalized)) {
+    throw new RangeError('Name contains invalid characters.');
+  }
+  return normalized;
+}
+
+function validateProfilePassword(password) {
+  if (typeof password !== 'string' || password.length < 8) {
+    throw new RangeError('Password must be at least 8 characters.');
+  }
+  if (Buffer.byteLength(password, 'utf8') > 72) {
+    throw new RangeError('Password cannot exceed 72 UTF-8 bytes.');
+  }
+  if (!/[A-Z]/.test(password)) throw new RangeError('Password must contain an uppercase letter.');
+  if (!/[a-z]/.test(password)) throw new RangeError('Password must contain a lowercase letter.');
+  if (!/\d/.test(password)) throw new RangeError('Password must contain a number.');
+}
+
+function safeUser(user) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    student_id: user.student_id,
+    department: user.department,
+    is_active: user.is_active,
+  };
+}
+
+async function updateOwnStudentProfile(userId, { name, currentPassword, newPassword } = {}) {
+  const safeUserId = parsePositiveSafeInteger(userId);
+  if (safeUserId === null) throw new RangeError('Authenticated user is required.');
+  if (name === undefined && newPassword === undefined) {
+    throw new RangeError('No profile fields to update.');
+  }
+
+  const normalizedName = name === undefined ? undefined : validateProfileName(name);
+  if (newPassword !== undefined) {
+    validateProfilePassword(newPassword);
+    if (typeof currentPassword !== 'string' || !currentPassword) {
+      const error = new Error('Current password is incorrect.');
+      error.code = 'INVALID_CURRENT_PASSWORD';
+      throw error;
+    }
+  }
+
+  const [rows] = await pool.query(
+    'SELECT id, email, name, role, student_id, department, is_active, password_hash FROM users WHERE id = ? AND role = ?',
+    [safeUserId, 'student']
+  );
+  if (!rows.length) return null;
+
+  const user = rows[0];
+  if (newPassword !== undefined && !(await bcrypt.compare(currentPassword, user.password_hash))) {
+    const error = new Error('Current password is incorrect.');
+    error.code = 'INVALID_CURRENT_PASSWORD';
+    throw error;
+  }
+
+  const fields = [];
+  const values = [];
+  if (normalizedName !== undefined && normalizedName !== user.name) {
+    fields.push('name = ?');
+    values.push(normalizedName);
+  }
+  if (newPassword !== undefined) {
+    fields.push('password_hash = ?');
+    values.push(await bcrypt.hash(newPassword, SALT_ROUNDS));
+  }
+
+  if (fields.length) {
+    await pool.query(
+      `UPDATE users SET ${fields.join(', ')} WHERE id = ? AND role = ?`,
+      [...values, safeUserId, 'student']
+    );
+    if (newPassword !== undefined) await revokeAllUserSessions(safeUserId);
+  }
+
+  return safeUser({ ...user, name: normalizedName ?? user.name });
+}
+
 async function getAuditLogs({ page = 1, size = 50, action, resourceType, userId }) {
   const offset = (page - 1) * size;
   const conditions = [];
@@ -427,4 +515,7 @@ module.exports = {
   isAdmin,
   isTeacherOrAdmin,
   canAccessStudent,
+  updateOwnStudentProfile,
+  validateProfileName,
+  validateProfilePassword,
 };
