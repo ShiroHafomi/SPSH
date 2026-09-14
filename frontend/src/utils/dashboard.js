@@ -1,11 +1,11 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
-import { createDashboardResource } from './dashboardResource';
+import { createDashboardResource } from './dashboardResource.js';
 import {
   computeAssignmentTimeState,
   formatAssignmentDeadline,
   normalizeAssignmentListResponse,
-} from './assignments';
-import { normalizeGoalEntries } from './goalProgress';
+} from './assignments.js';
+import { normalizeGoalEntries } from './goalProgress.js';
 
 /**
  * Wire a createDashboardResource instance into a React component.

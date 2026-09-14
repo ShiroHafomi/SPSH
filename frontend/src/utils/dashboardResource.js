@@ -50,6 +50,7 @@ export function createDashboardResource(load) {
       generation += 1;
       pending?.controller.abort();
       pending = null;
+      publish({ loading: false });
     },
   };
 }

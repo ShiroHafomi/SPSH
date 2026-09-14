@@ -50,6 +50,7 @@ test('createDashboardResource invalidates stale responses after dispose', async 
   const resource = createDashboardResource(() => new Promise((resolve) => { resolveLoad = resolve; }));
 
   const promise = resource.resume();
+  await tick();
   resource.dispose();
   resolveLoad({ ok: 'stale' });
   await promise;
