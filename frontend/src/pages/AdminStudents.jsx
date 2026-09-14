@@ -22,7 +22,7 @@ import {
   Target,
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { formatAdminMetric } from '../utils/adminAiTools.js';
+import { formatAdminMetric, getInterventionErrorKey } from '../utils/adminAiTools.js';
 
 const SORT_OPTIONS = [
   { value: 'student_id', label: 'Student ID' },
@@ -276,7 +276,7 @@ export default function AdminStudents() {
       fetchStudents();
     } catch (err) {
       if (err instanceof ApiError) {
-        addFlash({ type: 'error', message: err.message });
+        addFlash({ type: 'error', message: t(getInterventionErrorKey(err)) });
       } else {
         addFlash({ type: 'error', message: t('admin.interventionFailed') });
       }

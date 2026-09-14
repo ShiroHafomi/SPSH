@@ -92,14 +92,15 @@ export const api = {
     return handleResponse(response);
   },
 
-  async put(path, body) {
+  async put(path, body, options) {
     const response = await fetch(`${API_BASE}${path}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       credentials: 'include',
+      signal: options?.signal,
       body: JSON.stringify(body),
     });
-    return handleResponse(response);
+    return handleResponse(response, options);
   },
 
   async patch(path, body) {

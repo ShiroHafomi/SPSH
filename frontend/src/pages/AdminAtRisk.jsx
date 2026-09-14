@@ -16,8 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { Button, Modal } from '../components/ui';
-import { formatLabel } from '../utils/formatLabel';
-import { formatAdminMetric } from '../utils/adminAiTools';
+import { formatAdminMetric, getInterventionErrorKey } from '../utils/adminAiTools';
 import { filterAndSortAtRiskStudents, paginateAtRiskStudents } from '../utils/adminAtRisk';
 
 const GRADE_OPTIONS = ['A', 'B', 'C', 'D', 'F'];
@@ -56,6 +55,7 @@ function RiskBadge({ riskLevel }) {
 }
 
 function RiskFactorTag({ factor }) {
+  const { t } = useLanguage();
   const factorStyles = {
     attendance: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
     sleep: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300',
@@ -66,7 +66,7 @@ function RiskFactorTag({ factor }) {
 
   return (
     <span className={`inline-flex items-center rounded px-2 py-1 text-xs font-medium ${style}`}>
-      {formatLabel(factor)}
+      {t(`common.riskFactor.${factor}`)}
     </span>
   );
 }
@@ -229,7 +229,7 @@ export default function AdminAtRisk() {
     } catch (err) {
       setSelectedStudent(null);
       if (err instanceof ApiError) {
-        addFlash({ type: 'error', message: err.message });
+        addFlash({ type: 'error', message: t(getInterventionErrorKey(err)) });
       } else {
         addFlash({ type: 'error', message: t('admin.interventionFailed') });
       }
