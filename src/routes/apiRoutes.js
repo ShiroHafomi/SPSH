@@ -73,7 +73,9 @@ const {
 // Student
 const {
   apiStudentProfile,
+  apiStudentUpdateAccount,
   apiStudentSimulate,
+  apiStudentRecommendations,
   apiStudentAdvisor,
   apiStudentUpdateProfile,
 } = require('../controllers/studentController');
@@ -135,6 +137,9 @@ const {
   apiUpdateNotificationPreferences,
 } = require('../controllers/notificationController');
 
+const supportPlans = require('../controllers/supportPlanController');
+const studyTimers = require('../controllers/studyTimerController');
+const learningJournal = require('../controllers/learningJournalController');
 const router = express.Router();
 const authenticatedLimit = (limiter) => rateLimitMiddleware(limiter, {
   keyGenerator: authenticatedRateLimitKey,
@@ -209,6 +214,14 @@ adminRouter.get('/at-risk', apiAdminAtRisk);
 // Student management (filtered, with search/sort/pagination)
 adminRouter.get('/students', apiAdminListStudents);
 adminRouter.get('/students/:studentId/goals', apiAdminListStudentGoals);
+adminRouter.get('/students/:studentId/support-plans', supportPlans.list);
+adminRouter.post('/students/:studentId/support-plans', authenticatedLimit(assignmentMutationLimiter), supportPlans.create);
+adminRouter.get('/students/:studentId/support-plans/:planId', supportPlans.get);
+adminRouter.patch('/students/:studentId/support-plans/:planId', authenticatedLimit(assignmentMutationLimiter), supportPlans.edit);
+adminRouter.post('/students/:studentId/support-plans/:planId/activate', authenticatedLimit(assignmentMutationLimiter), supportPlans.activate);
+adminRouter.post('/students/:studentId/support-plans/:planId/complete', authenticatedLimit(assignmentMutationLimiter), supportPlans.complete);
+adminRouter.post('/students/:studentId/support-plans/:planId/cancel', authenticatedLimit(assignmentMutationLimiter), supportPlans.cancel);
+adminRouter.patch('/students/:studentId/support-plans/:planId/tasks/:taskId', authenticatedLimit(assignmentMutationLimiter), supportPlans.updateTask);
 adminRouter.post('/students/bulk-export', apiAdminBulkExport);
 adminRouter.post(
   '/students/bulk-ai-evaluate',
@@ -268,6 +281,11 @@ studentRouter.use(requireAuth, requireRole('student'));
 // Profile
 studentRouter.get('/me/profile', apiStudentProfile);
 studentRouter.put('/me/profile', apiStudentUpdateProfile);
+studentRouter.patch('/me/profile', apiStudentUpdateAccount);
+
+studentRouter.get('/me/support-plans', supportPlans.list);
+studentRouter.get('/me/support-plans/:planId', supportPlans.get);
+studentRouter.patch('/me/support-plans/:planId/tasks/:taskId', authenticatedLimit(assignmentMutationLimiter), supportPlans.updateTask);
 
 // Personal Assignments
 studentRouter.get('/me/assignments', apiListAssignments);
@@ -289,6 +307,20 @@ studentRouter.delete(
 );
 
 // Study Sessions
+studentRouter.get('/me/learning-journal', learningJournal.list);
+studentRouter.get('/me/learning-journal/:entryId', learningJournal.get);
+studentRouter.post('/me/learning-journal', authenticatedLimit(assignmentMutationLimiter), learningJournal.create);
+studentRouter.patch('/me/learning-journal/:entryId', authenticatedLimit(assignmentMutationLimiter), learningJournal.update);
+studentRouter.delete('/me/learning-journal/:entryId', authenticatedLimit(assignmentMutationLimiter), learningJournal.remove);
+
+studentRouter.get('/me/study-timers/current', studyTimers.current);
+studentRouter.get('/me/study-timers/summary', studyTimers.summary);
+studentRouter.get('/me/study-timers', studyTimers.history);
+studentRouter.post('/me/study-timers', authenticatedLimit(assignmentMutationLimiter), studyTimers.start);
+for (const action of ['pause', 'resume', 'finish', 'discard']) {
+  studentRouter.post(`/me/study-timers/:sessionId/${action}`, authenticatedLimit(assignmentMutationLimiter), studyTimers[action]);
+}
+
 studentRouter.get('/me/study-sessions', apiListStudySessions);
 studentRouter.get('/me/study-sessions/summary', apiGetStudySessionSummary);
 studentRouter.post('/me/study-sessions', authenticatedLimit(studentAiLimiter), apiCreateStudySession);
@@ -301,6 +333,13 @@ studentRouter.post(
   '/me/simulate',
   authenticatedLimit(studentAiLimiter),
   apiStudentSimulate
+);
+
+// Personalized Study Recommendations
+studentRouter.get(
+  '/me/recommendations',
+  authenticatedLimit(studentAiLimiter),
+  apiStudentRecommendations
 );
 
 // AI Advisor
