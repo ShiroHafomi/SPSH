@@ -92,6 +92,7 @@ export const ROLE_NAVIGATION = Object.freeze({
     {
       labelKey: 'shell.groups.account',
       items: [
+        { to: '/student/profile', labelKey: 'studentProfile.nav', icon: 'user', exact: true },
         { to: '/student/notifications', labelKey: 'notifications.title', icon: 'bell' },
       ],
     },

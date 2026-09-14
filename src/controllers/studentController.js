@@ -7,7 +7,7 @@ const mlService = require('../services/mlService');
 const predictionHistoryService = require('../services/predictionHistoryService');
 const { generateStudentAdvice } = require('../services/aiCounselService');
 const studyRecommendationService = require('../services/studyRecommendationService');
-const { logAuditEvent } = require('../services/authService');
+const { logAuditEvent, updateOwnStudentProfile } = require('../services/authService');
 
 /**
  * GET /api/student/me/profile
@@ -35,6 +35,14 @@ async function apiStudentProfile(req, res) {
     const riskAlerts = await studentService.checkPersonalRiskAlerts(student);
 
     res.json({
+      user: {
+        id: req.user.id,
+        email: req.user.email,
+        name: req.user.name,
+        role: req.user.role,
+        studentId: req.user.studentId,
+        department: req.user.department,
+      },
       student,
       percentiles,
       riskAlerts,
@@ -42,6 +50,31 @@ async function apiStudentProfile(req, res) {
   } catch (err) {
     console.error('[apiStudentProfile]', err);
     res.status(500).json({ error: 'Failed to load profile.' });
+  }
+}
+
+/**
+ * PATCH /api/student/me/profile
+ * Update the authenticated student's account name and/or password.
+ */
+async function apiStudentUpdateAccount(req, res) {
+  try {
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const allowed = new Set(['name', 'currentPassword', 'newPassword']);
+    const unexpected = Object.keys(body).filter((key) => !allowed.has(key));
+    if (unexpected.length) {
+      return res.status(400).json({ error: 'Only account profile fields can be updated.' });
+    }
+
+    const user = await updateOwnStudentProfile(req.user?.id, body);
+    if (!user) return res.status(404).json({ error: 'Student account not found.' });
+    return res.json({ user, message: 'Profile updated successfully.' });
+  } catch (err) {
+    if (err instanceof RangeError || err?.code === 'INVALID_CURRENT_PASSWORD') {
+      return res.status(400).json({ error: err.message });
+    }
+    console.error('[apiStudentUpdateAccount]', err?.code || err?.message || 'UNKNOWN');
+    return res.status(500).json({ error: 'Failed to update profile.' });
   }
 }
 
@@ -485,6 +518,7 @@ async function apiStudentUpdateProfile(req, res) {
 
 module.exports = {
   apiStudentProfile,
+  apiStudentUpdateAccount,
   apiStudentSimulate,
   apiStudentRecommendations,
   apiStudentAdvisor,

@@ -12,6 +12,7 @@ describe('role navigation', () => {
     const paths = getNavigationForRole('student').flatMap((group) => group.items.map((item) => item.to));
     assert.ok(paths.includes('/student/assignments'));
     assert.ok(paths.includes('/student/recommendations'));
+    assert.ok(paths.includes('/student/profile'));
     assert.ok(paths.includes('/predictor'));
     assert.equal(paths.some((path) => path.startsWith('/admin') || path.startsWith('/teacher')), false);
   });

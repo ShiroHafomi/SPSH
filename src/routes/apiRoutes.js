@@ -73,6 +73,7 @@ const {
 // Student
 const {
   apiStudentProfile,
+  apiStudentUpdateAccount,
   apiStudentSimulate,
   apiStudentRecommendations,
   apiStudentAdvisor,
@@ -280,6 +281,7 @@ studentRouter.use(requireAuth, requireRole('student'));
 // Profile
 studentRouter.get('/me/profile', apiStudentProfile);
 studentRouter.put('/me/profile', apiStudentUpdateProfile);
+studentRouter.patch('/me/profile', apiStudentUpdateAccount);
 
 studentRouter.get('/me/support-plans', supportPlans.list);
 studentRouter.get('/me/support-plans/:planId', supportPlans.get);
