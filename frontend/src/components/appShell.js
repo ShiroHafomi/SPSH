@@ -84,6 +84,7 @@ export const ROLE_NAVIGATION = Object.freeze({
     {
       labelKey: 'shell.groups.intelligence',
       items: [
+        { to: '/student/recommendations', labelKey: 'studentRecommendations.nav', icon: 'sparkles', exact: true },
         { to: '/predictor', labelKey: 'nav.aiCounselor', icon: 'sparkles', exact: true },
         { to: '/what-if', labelKey: 'nav.whatIfSimulator', icon: 'sliders', exact: true },
       ],

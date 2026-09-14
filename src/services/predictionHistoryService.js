@@ -427,6 +427,42 @@ function normalizeHistoryRow(row) {
   };
 }
 
+async function listPredictionHistoryForStudent(studentId, { size = 10 } = {}) {
+  const normalizedStudentId = Number(studentId);
+  const normalizedSize = Number(size);
+  if (!Number.isSafeInteger(normalizedStudentId) || normalizedStudentId <= 0) {
+    throw new RangeError('studentId must be a positive safe integer');
+  }
+  if (!Number.isSafeInteger(normalizedSize) || normalizedSize < 1 || normalizedSize > 100) {
+    throw new RangeError('size must be a safe integer between 1 and 100');
+  }
+
+  const [rows] = await pool.query(
+    `SELECT id, created_at, prediction_kind, predicted_score, predicted_grade,
+            grade_confidence, inference_latency_ms, student_id
+     FROM ml_prediction_events
+     WHERE student_id = ?
+     ORDER BY created_at DESC, id DESC
+     LIMIT ?`,
+    [normalizedStudentId, normalizedSize]
+  );
+
+  return (Array.isArray(rows) ? rows : []).map((row) => {
+    const createdAt = new Date(row.created_at);
+    const rowStudentId = Number(row.student_id);
+    return {
+      id: Number.isSafeInteger(Number(row.id)) ? Number(row.id) : null,
+      createdAt: Number.isFinite(createdAt.getTime()) ? createdAt.toISOString() : null,
+      predictionKind: PREDICTION_KINDS.includes(row.prediction_kind) ? row.prediction_kind : null,
+      predictedScore: finiteOrNull(row.predicted_score),
+      predictedGrade: GRADE_ALLOWLIST.includes(row.predicted_grade) ? row.predicted_grade : null,
+      gradeConfidence: finiteOrNull(row.grade_confidence),
+      inferenceLatencyMs: finiteOrNull(row.inference_latency_ms),
+      studentId: Number.isSafeInteger(rowStudentId) && rowStudentId > 0 ? rowStudentId : null,
+    };
+  });
+}
+
 async function listPredictionHistory(options = {}) {
   const filters = normalizeHistoryFilters(options);
   const { where, params } = buildHistoryWhere(filters);
@@ -528,6 +564,7 @@ module.exports = {
   validatePredictionEvent,
   normalizeHistoryFilters,
   listPredictionHistory,
+  listPredictionHistoryForStudent,
   insertPredictionEvent,
   recordPredictionEvent,
   ensurePredictionEventsTable,
