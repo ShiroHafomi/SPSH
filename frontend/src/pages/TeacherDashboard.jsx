@@ -40,6 +40,11 @@ const getRiskBadge = (level) => {
   return riskLevelColors[level] || { bg: 'bg-gray-100 dark:bg-gray-800', text: 'text-gray-700 dark:text-gray-300' };
 };
 
+const getGradeBadgeClass = (grade) => {
+  const colors = getGradeBadge(grade);
+  return `${colors.bg} ${colors.text} ${colors.border ? `border ${colors.border}` : ''}`.trim();
+};
+
 export default function TeacherDashboard() {
   const { user, homeForRole } = useAuth();
   const { addFlash } = useFlash();
