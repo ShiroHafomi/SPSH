@@ -6,6 +6,7 @@ const studentService = require('../services/studentService');
 const mlService = require('../services/mlService');
 const predictionHistoryService = require('../services/predictionHistoryService');
 const { generateStudentAdvice } = require('../services/aiCounselService');
+const studyRecommendationService = require('../services/studyRecommendationService');
 const { logAuditEvent } = require('../services/authService');
 
 /**
@@ -145,6 +146,35 @@ async function apiStudentSimulate(req, res) {
   } catch (err) {
     console.error('[apiStudentSimulate]', err);
     res.status(500).json({ error: 'Simulation failed.' });
+  }
+}
+
+/**
+ * GET /api/student/me/recommendations
+ * Student-scoped recommendations assembled from existing learning data.
+ */
+async function apiStudentRecommendations(req, res) {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const studentId = req.user.studentId;
+    if (!studentId) {
+      return res.status(400).json({ error: 'No student record linked to this account.' });
+    }
+
+    const recommendations = await studyRecommendationService.getRecommendations({
+      studentId,
+      userId: req.user.id,
+    });
+    if (!recommendations) {
+      return res.status(404).json({ error: 'Student record not found.' });
+    }
+    return res.json(recommendations);
+  } catch (err) {
+    if (err?.message === 'ML capacity exceeded') {
+      return res.status(503).json({ error: 'Recommendation service temporarily unavailable, please retry' });
+    }
+    console.error('[apiStudentRecommendations]', err?.code || err?.message || 'UNKNOWN');
+    return res.status(500).json({ error: 'Failed to generate study recommendations.' });
   }
 }
 
@@ -456,6 +486,7 @@ async function apiStudentUpdateProfile(req, res) {
 module.exports = {
   apiStudentProfile,
   apiStudentSimulate,
+  apiStudentRecommendations,
   apiStudentAdvisor,
   apiStudentUpdateProfile,
 };

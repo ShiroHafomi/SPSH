@@ -74,6 +74,7 @@ const {
 const {
   apiStudentProfile,
   apiStudentSimulate,
+  apiStudentRecommendations,
   apiStudentAdvisor,
   apiStudentUpdateProfile,
 } = require('../controllers/studentController');
@@ -330,6 +331,13 @@ studentRouter.post(
   '/me/simulate',
   authenticatedLimit(studentAiLimiter),
   apiStudentSimulate
+);
+
+// Personalized Study Recommendations
+studentRouter.get(
+  '/me/recommendations',
+  authenticatedLimit(studentAiLimiter),
+  apiStudentRecommendations
 );
 
 // AI Advisor
