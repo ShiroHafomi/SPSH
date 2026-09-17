@@ -11,12 +11,9 @@ describe('role navigation', () => {
   it('keeps privileged destinations out of student navigation', () => {
     const paths = getNavigationForRole('student').flatMap((group) => group.items.map((item) => item.to));
     assert.ok(paths.includes('/student/assignments'));
-<<<<<<< HEAD
     assert.ok(paths.includes('/student/performance-trend'));
-=======
     assert.ok(paths.includes('/student/recommendations'));
     assert.ok(paths.includes('/student/profile'));
->>>>>>> origin/main
     assert.ok(paths.includes('/predictor'));
     assert.equal(paths.some((path) => path.startsWith('/admin') || path.startsWith('/teacher')), false);
   });
