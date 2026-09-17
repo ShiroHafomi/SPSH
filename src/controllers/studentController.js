@@ -12,6 +12,26 @@ const { logAuditEvent } = require('../services/authService');
  * GET /api/student/me/profile
  * Get own profile with class percentile and risk alerts.
  */
+async function apiStudentPerformanceTrend(req, res) {
+  try {
+    const studentId = req.user.studentId;
+    if (!studentId) {
+      return res.status(400).json({ error: 'No student record linked to this account.' });
+    }
+
+    const student = await studentService.findById(studentId);
+    if (!student) {
+      return res.status(404).json({ error: 'Student record not found.' });
+    }
+
+    const history = await predictionHistoryService.listPredictionHistoryForStudent(studentId);
+    return res.json(history);
+  } catch (err) {
+    console.error('[apiStudentPerformanceTrend]', err);
+    return res.status(500).json({ error: 'Failed to load performance trend.' });
+  }
+}
+
 async function apiStudentProfile(req, res) {
   try {
     // Student can only see their own profile
@@ -454,6 +474,7 @@ async function apiStudentUpdateProfile(req, res) {
 }
 
 module.exports = {
+  apiStudentPerformanceTrend,
   apiStudentProfile,
   apiStudentSimulate,
   apiStudentAdvisor,

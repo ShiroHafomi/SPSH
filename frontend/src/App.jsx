@@ -18,6 +18,7 @@ import StudentForm from './pages/StudentForm';
 import Predictor from './pages/Predictor';
 import WhatIfSimulator from './pages/WhatIfSimulator';
 import StudentDashboard from './pages/StudentDashboard';
+import StudentPerformanceTrend from './pages/StudentPerformanceTrend';
 import TeacherDashboard from './pages/TeacherDashboard';
 import AdminUsers from './pages/AdminUsers';
 import AdminDashboard from './pages/AdminDashboard';
@@ -111,6 +112,7 @@ function App() {
                 </ProtectedRoute>
               }>
                 <Route path="/student" element={<StudentDashboard />} />
+                <Route path="/student/performance-trend" element={<StudentPerformanceTrend />} />
                 <Route path="/goals" element={<StudentGoals />} />
                 <Route path="/student/notifications" element={<Notifications />} />
                 <Route path="/student/study-planner" element={<StudyPlanner />} />

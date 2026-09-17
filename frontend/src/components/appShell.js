@@ -66,6 +66,7 @@ export const ROLE_NAVIGATION = Object.freeze({
       labelKey: 'shell.groups.overview',
       items: [
         { to: '/student', labelKey: 'student.overview', icon: 'home', exact: true },
+        { to: '/student/performance-trend', labelKey: 'studentPerformanceTrend.title', icon: 'activity' },
         { to: '/dashboard', labelKey: 'nav.dashboard', icon: 'lineChart', exact: true },
       ],
     },

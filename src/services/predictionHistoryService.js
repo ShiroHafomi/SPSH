@@ -66,6 +66,7 @@ const HISTORY_FILTER_FIELDS = new Set([
   'kind',
   'modelVersion',
   'grade',
+  'studentId',
 ]);
 
 function assertPlainObject(value, label) {
@@ -366,6 +367,9 @@ function normalizeHistoryFilters(options = {}, now = new Date()) {
   ) {
     throw new RangeError('modelVersion must be a 64-character SHA-256 hash');
   }
+  const studentId = options.studentId === undefined
+    ? null
+    : normalizeOptionalId(options.studentId, 'student_id');
 
   return {
     page,
@@ -375,6 +379,7 @@ function normalizeHistoryFilters(options = {}, now = new Date()) {
     kind,
     modelVersion,
     grade,
+    studentId,
   };
 }
 
@@ -395,6 +400,10 @@ function buildHistoryWhere(filters) {
   if (filters.grade !== null) {
     conditions.push('e.predicted_grade = ?');
     params.push(filters.grade);
+  }
+  if (filters.studentId !== null) {
+    conditions.push('e.student_id = ?');
+    params.push(filters.studentId);
   }
   return { where: conditions.join(' AND '), params };
 }
@@ -478,6 +487,24 @@ async function listPredictionHistory(options = {}) {
   };
 }
 
+async function listPredictionHistoryForStudent(studentId, options = {}) {
+  const normalizedStudentId = normalizeOptionalId(studentId, 'student_id');
+  if (normalizedStudentId === null) {
+    throw new RangeError('student_id must be a positive safe integer');
+  }
+  assertPlainObject(options, 'Student history options');
+  const now = new Date();
+  return listPredictionHistory({
+    ...options,
+    studentId: normalizedStudentId,
+    size: options.size === undefined ? MAX_HISTORY_PAGE_SIZE : options.size,
+    from: options.from === undefined
+      ? new Date(now.getTime() - MAX_HISTORY_WINDOW_DAYS * DAY_MS)
+      : options.from,
+    to: options.to === undefined ? now : options.to,
+  });
+}
+
 async function ensurePredictionEventsTable() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS ml_prediction_events (
@@ -528,6 +555,7 @@ module.exports = {
   validatePredictionEvent,
   normalizeHistoryFilters,
   listPredictionHistory,
+  listPredictionHistoryForStudent,
   insertPredictionEvent,
   recordPredictionEvent,
   ensurePredictionEventsTable,

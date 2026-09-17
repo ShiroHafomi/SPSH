@@ -72,6 +72,7 @@ const {
 
 // Student
 const {
+  apiStudentPerformanceTrend,
   apiStudentProfile,
   apiStudentSimulate,
   apiStudentAdvisor,
@@ -265,9 +266,10 @@ router.use('/teacher', teacherRouter);
 const studentRouter = express.Router();
 studentRouter.use(requireAuth, requireRole('student'));
 
-// Profile
+// Profile and performance
 studentRouter.get('/me/profile', apiStudentProfile);
 studentRouter.put('/me/profile', apiStudentUpdateProfile);
+studentRouter.get('/me/performance-trend', apiStudentPerformanceTrend);
 
 // Personal Assignments
 studentRouter.get('/me/assignments', apiListAssignments);
