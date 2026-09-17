@@ -763,7 +763,6 @@ const en = {
     notesPlaceholder: 'Add optional context about your study habits.',
   },
 
-<<<<<<< HEAD
   studentPerformanceTrend: {
     title: 'Performance Trend',
     subtitle: 'Review how your predicted performance has changed over time.',
@@ -795,7 +794,8 @@ const en = {
     gradeTrend: 'Grade trend',
     gradeTrendDescription: 'Predicted grades recorded alongside your score history.',
     noGrades: 'No predicted grades are available yet.',
-=======
+  },
+
   studentProfile: {
     nav: 'My Profile',
     title: 'My Student Profile',
@@ -901,7 +901,6 @@ const en = {
       predictionTrend: { title: 'Review the recent prediction trend', explanation: 'Recent prediction history has moved downward, which is a signal to review what changed in your routine.', nextStep: 'Compare your latest weekly check-in with the earlier one and choose one habit to restore.' },
       studyPlanReview: { title: 'Review your study plan', explanation: 'A small, consistent plan can help turn available study time into progress.', nextStep: 'Choose one measurable action and add it to your weekly plan.' },
     },
->>>>>>> origin/main
   },
 
   mlMonitoring: {
