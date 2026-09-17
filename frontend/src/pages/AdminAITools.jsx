@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../api';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '../components/ui/Button';
+import { prefillIntervention } from '../utils/supportPlans.js';
 import { useFlash } from '../components/FlashProvider';
 import { useLanguage } from '../hooks/useLanguage';
 import {
@@ -48,7 +51,7 @@ function FeatureCard({ title, description, icon: Icon, actionLabel, onAction, lo
   );
 }
 
-function ResultCard({ title, content, loading, error, warning, onRetry, onCopy, copied, t }) {
+function ResultCard({ title, content, loading, error, warning, onRetry, onCopy, copied, t, children }) {
   return (
     <div className="card-clay p-6">
       <div className="flex items-center justify-between mb-4">
@@ -86,6 +89,7 @@ function ResultCard({ title, content, loading, error, warning, onRetry, onCopy, 
               {content}
             </pre>
           </div>
+          {children}
         </div>
       ) : (
         <p className="text-primary-400 dark:text-gray-500 text-center py-8">{t('admin.generateToCreate')}</p>
@@ -97,6 +101,7 @@ function ResultCard({ title, content, loading, error, warning, onRetry, onCopy, 
 export default function AdminAITools() {
   const { addFlash } = useFlash();
   const { t } = useLanguage();
+  const navigate = useNavigate();
   const mountedRef = useRef(true);
   const interventionActionRef = useRef(false);
   const interventionRequestRef = useRef(null);
@@ -384,7 +389,16 @@ export default function AdminAITools() {
           onCopy={() => copyToClipboard(interventionResult, setInterventionCopied)}
           copied={interventionCopied}
           t={t}
-        />
+        >
+          <Button onClick={() => {
+            if (!interventionResult || interventionLoading || !isPositiveIntegerId(interventionStudentId)) return;
+            const studentId = Number(interventionStudentId.trim());
+            navigate(`/admin/support-plans?studentId=${studentId}`, { state: {
+              supportPlanStudentId: studentId,
+              supportPlanDraft: prefillIntervention(interventionResult, t),
+            } });
+          }}>{t('supportPlans.create')}</Button>
+        </ResultCard>
         <ResultCard
           title={t('admin.bulkEvalResults')}
           content={bulkResult}

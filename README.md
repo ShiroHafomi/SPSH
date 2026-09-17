@@ -17,6 +17,8 @@ A full-stack web application for analyzing and predicting student performance ba
 - **Notification Center**: Real-time alerts for study goals, weekly check-ins, teacher feedback, and risk alerts with preference controls
 - **Study Goals & Weekly Check-ins**: Set academic targets and track progress with completion analytics
 - **Personal Assignments & Deadlines**: Students can track their own coursework, priorities, deadlines, and completion state with timezone-safe overdue indicators
+- **Study Session Tracker**: Private, recoverable study timers with pause/resume, authorized assignment links, an eight-hour cap, and UTC completed-time summaries
+- **Student Learning Journal**: Private dated reflections with search, self-rated understanding, versioned editing, and confirmed deletion
 - **Internationalization**: Full English/Vietnamese localization with synchronized key parity
 - **Role-Based Navigation**: 
   - Students: Personal dashboard, goal tracking, simulation tools
@@ -521,6 +523,223 @@ npm test
 npm --prefix frontend test
 npm --prefix frontend run build
 ```
+
+## Academic Intervention Follow-up (Support Plans)
+
+Support plans turn reviewed recommendations into practical tasks. They are separate from personal assignments and numeric study goals. Task completion measures follow-through, **not evidence of improved academic performance**.
+
+### Workflow and permissions
+
+- **Admin:** Generate an intervention under **Admin → AI Tools**, review the result, then choose **Create support plan**. Only bounded action bullets from the recommendation section are suggested as editable tasks; raw model data, risk details, custom notes, and the full generated note are not copied into the plan. Review/edit/remove suggestions and save a **draft**. Generation never creates or activates a plan automatically.
+- **Manual creation:** Open **Support plans** (`/admin/support-plans`), enter the internal `students.id`, load that student's plans, and create a draft. This requires neither a generated note nor ML availability. The page also supports `/admin/support-plans?studentId=7`.
+- **Activation:** An admin explicitly activates a reviewed draft with at least one task. The student can then view it under **Support plans** (`/student/support-plans`) and update task status. Admins can review/update active task progress and explicitly complete or cancel the plan.
+- **Students:** The backend resolves identity from the authenticated user's linked `student_id`, never from request body/query ownership. Students see only their own active, completed, and cancelled plans; drafts are hidden. They may change only task status on active plans. Plan ownership and task membership are checked on each operation.
+- **Teachers:** No support-plan access in this phase. Existing organization-wide teacher analytics permissions are not a reliable teacher-to-student assignment. No assignment relationship or broad management permission is invented. This feature's exact role gates take precedence over the general role hierarchy above.
+
+Saved plans remain usable if the generation service later becomes unavailable. No training, external AI dependency, or automatic conversion from stored notes is introduced.
+
+### Database initialization
+
+`src/server.js` calls `ensureSupportPlanTables()` after the existing dependencies are initialized. With the usual database configuration and imported student table in place, start/restart through `npm start` or `npm run dev` and check for **Academic support tables: ready**. The database account needs permission to create tables and foreign keys. Do not re-import or replace existing student data to enable this feature.
+
+Two idempotent `CREATE TABLE IF NOT EXISTS` statements create:
+
+- `academic_support_plans`: student/creator references, title, objective, draft/active/completed/cancelled status, start/due dates, version, created/updated timestamps, and completion timestamp. Student-scoped indexes support creation-order pagination and status filtering.
+- `academic_support_tasks`: parent plan reference, title, description, pending/in_progress/completed status, optional due date, server-controlled sort order, version, and timestamps. A `(plan_id, sort_order, id)` index supports bounded task retrieval.
+
+IDs and versions use `INT UNSIGNED`. Deleting a student cascades to their plans; deleting a creator sets the creator reference to NULL; deleting a plan cascades only to its tasks. Deleting a task or plan cannot delete users or students. There is **no permanent-delete API**: use cancellation. Startup does not alter an incompatible pre-existing table definition; investigate a failed readiness message rather than running a destructive import.
+
+### API contract
+
+All paths below are under `/api`, use existing authentication and CSRF protection, and return JSON. New mutation routes reuse the authenticated assignment mutation rate limiter.
+
+| Method | Path | Operation |
+| --- | --- | --- |
+| GET | `/admin/students/:studentId/support-plans` | Admin list, optional `page`, `size`, `status` |
+| POST | `/admin/students/:studentId/support-plans` | Create draft (201) |
+| GET | `/admin/students/:studentId/support-plans/:planId` | View plan and tasks |
+| PATCH | `/admin/students/:studentId/support-plans/:planId` | Replace draft content/tasks atomically |
+| POST | `/admin/students/:studentId/support-plans/:planId/activate` | Activate draft |
+| POST | `/admin/students/:studentId/support-plans/:planId/complete` | Explicitly complete active plan |
+| POST | `/admin/students/:studentId/support-plans/:planId/cancel` | Cancel draft or active plan |
+| PATCH | `/admin/students/:studentId/support-plans/:planId/tasks/:taskId` | Update active task status |
+| GET | `/student/me/support-plans` | List own non-draft plans |
+| GET | `/student/me/support-plans/:planId` | View own non-draft plan/tasks |
+| PATCH | `/student/me/support-plans/:planId/tasks/:taskId` | Update own active task status |
+
+Create body: `{ title, objective, start_date, due_date, tasks: [{ title, description?, due_date? }] }`. Draft edits send the full editable draft plus its current `version`; no task IDs, task statuses, ownership, or creator fields are writable. Lifecycle actions send `{ version }`. Task updates send `{ status, version, planVersion }`, requiring both current versions.
+
+Required title/objective/task title bounds are 1–150 / 1–2,000 / 1–150 characters; task descriptions are optional and limited to 1,000. Text is trimmed, unsupported control characters rejected, and tasks are limited to 20. Unknown writable fields are rejected. IDs/versions must be positive safe integers. Dates must be real `YYYY-MM-DD` calendar dates (MySQL years 1000–9999); plan due date must be on/after start, and optional task deadlines must fall within that range.
+
+Lists return `{ plans, total, page, size, totalPages }`; details return `{ plan }`; mutations return `{ plan, warnings }`. Lists default to 20, allow at most 100 records per page, cap offset at 100,000, allow only the documented status filters, and sort deterministically by `created_at DESC, id DESC`. Tasks are returned in `sort_order ASC, id ASC` order. An admin list for a nonexistent student is empty; creation verifies the student exists. Errors use safe `{ error, code }` responses: 400 validation, 401 authentication, 403 role access, 404 unavailable resource, 409 stale version or invalid lifecycle action, and generic 500 unexpected failure. Unauthorized students cannot distinguish another student's plan from a nonexistent plan.
+
+### Lifecycle, progress, and concurrency
+
+- `draft → active`: at least one task required.
+- `draft → cancelled` and `active → cancelled`: allowed.
+- `active → completed`: every task must be completed, with at least one task.
+- Only draft content/tasks can be edited. Completed/cancelled plans are read-only and cannot be reopened. Cancelled plans, including cancelled drafts, are visible to their student.
+- Active tasks can move among pending, in_progress, and completed. Reopening a task clears its completion timestamp. Repeating its current status with current versions leaves versions unchanged.
+- Progress is `completedTaskCount / totalTaskCount * 100`, or zero for an empty draft. A plan at 100% stays active until an admin explicitly completes it.
+- Date-only deadlines include the entire **UTC due date**. Overdue is derived: active plan, deadline before today's UTC date, and unfinished tasks. It is not a persisted status. Completion instants are recorded in UTC.
+
+Multi-table operations use transactions and rollback on partial failure. Writers lock the parent plan first. Content/lifecycle changes increment the plan version; a changed task status increments both task and plan versions. Stale writes return **409** instead of overwriting newer changes. The UI refreshes current data after conflicts, preserves unsaved draft edits, and offers an explicit replacement with the latest draft rather than silently rebasing edits.
+
+### Notifications, audit, and limitations
+
+Activation attempts one in-app `support_plan_activated` notification **after commit**, only for a uniquely linked active student account and when the existing `teacherFeedback` preference permits it (labelled **Staff feedback and support plans**). Metadata contains only `planId`; notification keys and routing are allowlisted. The existing per-user deterministic dedupe key prevents duplicate stored activation events. Draft saves do not notify. Repeated activation cannot send another notification because version/lifecycle validation fails first.
+
+Audit events cover creation, draft editing, activation, completion, cancellation, and task updates. Metadata is limited to student ID, status, version, and task count; full objectives, task descriptions, generated text, and request metadata are excluded. Optional audit/delivery failures are returned in `warnings` (`SUPPORT_PLAN_AUDIT_FAILED`, `SUPPORT_PLAN_NOTIFICATION_FAILED`, or `SUPPORT_PLAN_RECIPIENT_UNAVAILABLE`) without rolling back a saved plan. There is no delivery outbox or automatic retry in this phase; do not repeat a lifecycle action to retry notification delivery.
+
+The UI blocks duplicate submissions while a request is pending and ignores obsolete responses after switching plans/accounts or unmounting. **Creation has no persistent idempotency token**: after an ambiguous network failure, refresh and inspect the list before creating another draft. Title equality is not a deduplication rule. There are no teacher management, permanent deletion, automatic academic outcome evaluation, or real-time plan updates; use Refresh to see another session's changes. Generated action text retains the generator's language and can be edited; interface labels support English and Vietnamese.
+
+### Support-plan verification
+
+Focused node:test suites use mocked database/authentication/notification calls and do not need running MySQL, Python inference, external AI requests, or model training:
+
+```bash
+node --test src/utils/supportPlanValidation.test.js src/services/supportPlanService.test.js src/controllers/supportPlanRoute.test.js src/services/notificationService.test.js
+node --test frontend/src/utils/supportPlans.test.js frontend/src/locales/supportPlanLocaleParity.test.js
+npm test
+npm --prefix frontend test
+npm --prefix frontend run build
+git diff --check
+```
+
+Frontend tests exercise the shared form/prefill/state logic, navigation and localization contracts; they do not replace live browser verification of keyboard interaction and desktop/mobile rendering.
+
+## Study Session Tracker
+
+### Workflow and privacy
+
+Students open **Study Sessions** at `/student/study-sessions`, enter a title, optionally select one of their own assignments, and start a timer. They can pause, resume, finish, or explicitly confirm discarding the unfinished session. Refreshing the page recovers the database state. The page includes history filters and pagination, completed-duration summary cards, and a daily Chart.js bar chart with an accessible data table. All controls and state messages are available in English and Vietnamese; the timer itself is not announced every second.
+
+The existing `study_sessions` table and `/api/student/me/study-sessions` endpoints remain the **scheduled study planner**, including its manually reported minutes. They are not compatible with a running timer and are unchanged. The tracker uses `study_session_timers` and `/api/student/me/study-timers`; planner minutes and tracked seconds are not automatically combined.
+
+- Access is exact-role **student only**. Identity comes from the fresh authenticated database user, never from request-supplied student IDs. Both `student_id` and `owner_user_id` scope every timer read and write. Teachers and administrators have no private-history API in this phase.
+- Assignment selection uses the existing paginated student assignment API. Starting with `assignment_id` checks both account and student ownership under a transaction lock. An unavailable or unauthorized assignment returns the same safe 404. Standalone sessions remain available if assignment loading fails.
+- Finishing a timer does **not** complete an assignment, goal, planner block, or academic support task, and does **not** overwrite the ML profile's `study_hours`. These represent different measurement periods and methods.
+- Timer duration is self-directed elapsed time, **not verified attention, participation, or engagement**.
+
+### Timing and concurrency
+
+A running timer continues while the browser is closed. Duration is `accumulated_seconds + time since running_since`, using database UTC time; clients cannot submit durations or completion timestamps. Pause atomically saves elapsed seconds and clears `running_since`. Resume establishes a new server-generated running timestamp, so paused time is excluded. Millisecond precision is preserved across transitions; the UI formats whole seconds as `hh:mm:ss`.
+
+The maximum counted duration is **28,800 seconds (eight hours)**. A read of an abandoned running timer pauses it at that cap and exposes `limitReached: true`; finish also caps duration without requiring an earlier read. It stays unfinished until the student explicitly finishes or discards it. No scheduler automatically completes sessions. A capped session finished later belongs to that later completion date.
+
+A server-side `last_observed_at` high-water mark detects backward clock changes. Recovery preserves already observed elapsed time and pauses the timer with `clockAdjusted: true`. Resume is rejected until database time catches up. Forward jumps are bounded by the eight-hour cap; no wall-clock system can prove actual attention or reconstruct an unobserved clock change.
+
+MySQL enforces a unique `(student_id, unfinished_slot)` key, with a generated slot of `1` for running/paused sessions and `NULL` for closed sessions. This protects concurrent starts across tabs, devices, and even multiple accounts linked to one student. The generated expression depends only on status, avoiding MySQL's restrictions on cascading foreign keys on generated-column base fields. An account sharing a student link cannot view the other account's timer, but cannot start a second unfinished timer either.
+
+Current-session reads and lifecycle operations use transactions and row locks. Actions additionally require the expected `version`; successful transitions increment it. Duplicate same-state requests with the current version are no-ops; a duplicate finish with the old version returns 409 and cannot add time. Version exhaustion, deadlocks, and lock timeouts fail safely as conflicts. The start timestamp is finalized after the successful insert acquires its lock, excluding any insert wait.
+
+The browser uses a monotonic local display clock, not a per-second API request. It refreshes after actions, on focus/visibility return, and on same-account `BroadcastChannel` invalidation from another tab. Requests are cancellable and stale/unmounted responses are ignored. Unsupported broadcast environments and other devices reconcile on focus, refresh, or the next action; this is not real-time cross-device streaming. Timer state is never stored in `localStorage`.
+
+Buttons prevent duplicate in-flight submissions, but creation does not have a persistent idempotency key. After an uncertain network failure, refresh before retrying: the server may have committed the action. The database still prohibits two unfinished timers. Discard closes a record and excludes it from totals; it is not permanent deletion.
+
+### Schema initialization
+
+After the normal database/student import and user/assignment setup, start the existing backend with `npm start` or `npm run dev`. `src/server.js` invokes the idempotent `ensureStudyTimersTable()` after assignment initialization. No replacement import, external migration framework, AI service, or background worker is required. The database user needs the same table-creation privileges as the existing startup initializers.
+
+`study_session_timers` stores an unsigned ID, student/account/optional assignment IDs, a 150-character title, lifecycle status, UTC `DATETIME(3)` start/run/end/high-water timestamps, `DECIMAL(11,3)` accumulated seconds, a clock-adjustment flag, an unsigned version, and created/updated timestamps. Indexes cover owner-scoped history, status/end time, and student/start time. Foreign keys cascade **from a deleted student or user to their timers**; deleting an assignment sets its timer links to `NULL`. Timer deletion cannot delete a student or assignment. There is no timer deletion endpoint.
+
+Startup logs `Study timer table: ready` or a safe failure message. If initialization fails, the rest of the existing startup behavior is retained and timer requests return safe errors rather than exposing SQL details. Automated tests check DDL and mocked transaction semantics; they do not certify deployment against a live MySQL instance.
+
+### Timer API contract
+
+All paths below are relative to `/api/student/me/study-timers`. Successful responses use `Cache-Control: no-store`. Mutations retain the existing authenticated mutation rate limiter and application CSRF protection.
+
+| Method | Path | Input / result |
+|---|---|---|
+| GET | `/current` | Current running/paused session or `null` |
+| POST | base path | `{ title, assignment_id?: positive integer or null }`; returns 201 |
+| POST | `/:sessionId/pause` | `{ version }` |
+| POST | `/:sessionId/resume` | `{ version }` |
+| POST | `/:sessionId/finish` | `{ version }` |
+| POST | `/:sessionId/discard` | `{ version }` |
+| GET | base path | History: `from`, `to`, `status`, `page`, `size` |
+| GET | `/summary` | Completed-time summary: `from`, `to` |
+
+Current/action responses contain `{ session, serverNow, maxSeconds }`. A session contains `id`, `assignment_id`, `title`, `status`, `version`, `started_at`, `running_since`, `ended_at`, `accumulated_seconds`, `elapsedSeconds`, `limitReached`, and `clockAdjusted`. Instants are explicit UTC ISO strings; nullable instants are `null`. Identity fields are not exposed in the session payload. Input fields are allowlisted; titles are trimmed to 1–150 characters without control characters, IDs are positive safe integers, and versions are bounded by the MySQL unsigned integer maximum.
+
+Errors contain safe `{ error, code }` values. Invalid input is 400 (`STUDY_TIMER_INVALID_INPUT`); authentication/access errors are 401/403; missing own sessions and unavailable assignments are 404. Conflicts are **409**: `STUDY_TIMER_CONFLICT`, `STUDY_TIMER_UNFINISHED_EXISTS`, `STUDY_TIMER_INVALID_TRANSITION`, `STUDY_TIMER_LIMIT_REACHED`, or `STUDY_TIMER_CLOCK_ADJUSTED`. Refresh authoritative state and review before retrying. Unexpected failures return 500 `STUDY_TIMER_INTERNAL_ERROR` without SQL, stack traces, or database credentials.
+
+### History and summary scope
+
+Both reports default to today and the previous six **UTC** dates. Explicit `from` and `to` must be supplied together as real `YYYY-MM-DD` dates, ordered and covering at most **93 inclusive days**. SQL uses the corresponding half-open timestamp interval. History includes only completed/discarded records, optionally filtered by `status=all|completed|discarded`, with deterministic `ended_at DESC, id DESC` ordering. Pagination defaults to 20 rows, permits at most 100, and bounds offset to 100,000. Its response contains `sessions`, `pagination: { page, size, total, totalPages }`, `from`, `to`, `timeZone: 'UTC'`, and `grouping: 'end_date'`.
+
+Summary aggregation runs in SQL using `COUNT`, `SUM`, `AVG`, and daily `WITH ROLLUP`, not by loading session history into Node. Only completed records count, regardless of the history status filter. The response contains `completedSessionCount`, `totalCompletedSeconds`, `averageCompletedSeconds`, and zero-filled `daily` rows of `{ date, completedSessionCount, totalCompletedSeconds }`, plus `from`, `to`, `timeZone: 'UTC'`, and `grouping: 'completion_date'`. Empty totals are zero.
+
+**The entire duration belongs to its UTC completion date.** For example, a two-minute session starting at 23:59 UTC and finishing at 00:01 UTC contributes 120 seconds to the second date. These buckets are not minutes actually spent inside each calendar day. History and summary are separate reads and may briefly differ if another device finishes a session between them; refreshing reconciles them.
+
+### Tracker verification
+
+```bash
+# Controlled clocks, mocked database transactions, HTTP authorization, frontend state, and cancellation
+node --test src/services/studyTimerService.test.js src/controllers/studyTimerRoute.test.js frontend/src/utils/studySessions.test.js frontend/src/api.test.js
+
+# Full existing suites and production bundle
+npm test
+npm --prefix frontend test
+npm --prefix frontend run build
+git diff --check
+```
+
+Tests require no live MySQL, real-time timer waits, Python inference, or external API. They cover unique-key structure, competing starts, timing math, stale/duplicate actions, clock rollback and caps, ownership/assignment authorization, validation, safe failures, UTC midnight grouping, pagination, frontend loading/retry/cancellation, late cross-tab invalidation, and EN/VI parity. Browser fixture verification exercises the actual React/Vite UI separately from database integration. Neither package currently defines a lint script.
+
+## Student Learning Journal
+
+Students open **Learning Journal** in the student navigation at `/student/learning-journal`. They can create multiple dated reflections per day, search their own history, filter by date and understanding rating, open full entries, edit, and permanently delete after confirmation. The English/Vietnamese page uses the existing responsive light/dark interface and accessible shared dialog.
+
+This is personal reflection, not AI generation or an academic score. The optional **1–5 self-rating is not objective academic performance**. There is no sharing, teacher commenting, staff journal API, external service, or automatic change to assignments, goals, study timers, planner blocks, or ML profile fields.
+
+### Privacy, validation and concurrency
+
+- Exact-role student access is required. Both authenticated `owner_user_id` and linked `student_id` scope every operation, including search. Another account sharing the same student record does not gain access. Ownership cannot be supplied in a request.
+- Titles are trimmed to **1–150 characters**. What I learned is required and trimmed to **1–3,000 characters**. Difficulties and next steps are optional, each limited to **2,000 characters**; omitted values become empty strings. Understanding is an integer **1–5 or null**. Unknown writable fields and invalid IDs/versions are rejected. Text bounds use JavaScript string length, consistent with the form controls.
+- Entry dates are real `YYYY-MM-DD` calendar dates (year 1000 or later). Past entries are allowed; future dates are rejected against the database's **UTC date**. Entry dates are date-only values, not local timestamps.
+- Lists contain at most a **200-character learned-text preview** per entry. Full reflection fields come only from the authorized detail endpoint. Content is rendered as plain text, never HTML. Success and error responses use `Cache-Control: no-store`.
+- PATCH and DELETE require the version read by the student. Transactional row locks plus version predicates reject stale actions with **409 `JOURNAL_CONFLICT`**. Editing preserves the draft after errors; conflicts never silently replace or rebase it. Reloading a dirty draft requires explicit discard confirmation. A failed delete remains in the confirmation dialog; a conflict requires reloading and confirming again.
+- Closing a dirty editor asks before discarding. Reloading/closing the browser warns while edits or a write are pending. Drafts live only in memory, not browser storage. This is not autosave or guaranteed recovery after a crash. The existing browser-history router has no general route-blocking facility; browser Back navigation can still leave the page.
+- Repeated in-flight writes are disabled, requests are cancellable, and late responses after closing/unmounting/account changes are ignored. There is no persistent creation idempotency key: after an ambiguous network failure, inspect the latest entry/history before retrying because the write may already have committed.
+- The application request logger skips journal endpoints, including search URLs. Journal text is not sent to audit metadata or unexpected-error logs. Deployment proxies must likewise avoid logging journal query strings. Privacy here is application authorization, not encryption against database operators.
+
+### Journal database initialization
+
+Normal `npm start` / `npm run dev` startup calls `ensureLearningJournalTable()` after user/student dependencies. The initializer uses `CREATE TABLE IF NOT EXISTS student_learning_journal`; no reset, truncate, replacement import, seed, or new migration framework is needed. The database user needs table-creation privileges. Startup reports `Learning journal table: ready` or a safe failure message.
+
+The table stores unsigned `id`, `student_id`, `owner_user_id`, title, date, three reflection text fields, nullable understanding rating, optimistic version, and created/updated timestamps. An index on `(student_id, owner_user_id, entry_date, id)` supports private newest-first history. A rating CHECK constraint and foreign keys follow MySQL 8 conventions. Deleting a student/account removes its journal entries; deleting a journal entry can never delete a student/account. There is no one-entry-per-day restriction.
+
+### Journal API
+
+All paths below are relative to **`/api/student/me/learning-journal`**. Existing authentication, CSRF/request-provenance protection, and authenticated mutation rate limiting apply.
+
+| Method | Path | Contract |
+|---|---|---|
+| GET | base path | `q`, `from`, `to`, `rating`, `page`, `size`; returns `{ entries, pagination, today, timeZone: 'UTC' }` |
+| GET | `/:entryId` | Returns `{ entry, timeZone: 'UTC' }` with full authorized text |
+| POST | base path | Required `title`, `entry_date`, `learned_text`; optional `difficulties_text`, `next_steps_text`, `understanding_rating`; returns 201 `{ id, version }` |
+| PATCH | `/:entryId` | Same complete form fields plus required `version`; returns `{ id, version }` |
+| DELETE | `/:entryId?version=N` | Required current version; returns `{ ok: true }` |
+
+Pagination defaults to **20**, permits at most **100**, and bounds the offset to **100,000**. Ordering is deterministic: `entry_date DESC, id DESC`. Search is at most **100 characters**, matches the title and all three text fields, and treats SQL LIKE wildcard characters as literal text. All values use bound SQL parameters. Either date filter may be omitted; when both are present, they must be ordered and cover at most **366 inclusive days**. `rating` filters an integer 1–5; omitting it includes unrated entries. Omit empty query filters instead of sending empty dates.
+
+Safe error codes include `JOURNAL_INVALID_INPUT` (400), `JOURNAL_FORBIDDEN` (403), `JOURNAL_NOT_FOUND` (404), `JOURNAL_CONFLICT` (409), and `JOURNAL_INTERNAL_ERROR` (500). Unauthenticated/inactive accounts retain the existing authentication responses. Errors never disclose SQL, stacks, or journal text.
+
+### Development accounts and verification
+
+The supported login roles are `admin`, `teacher`, and `student`. Teachers use the existing user record with optional department, not a separate profile table. Students need a valid `users.student_id` linkage. Local demo-account provisioning is a one-time database operation, not part of startup, tests, or a seed script. Availability and actual credentials are reported separately after provisioning; passwords and hashes must never be stored in documentation, source, or test fixtures. Do not provision these accounts in production or a shared public database. A newly created demo student must use its own clearly marked synthetic profile, not an existing real student record; that demo row participates in existing dataset-wide statistics.
+
+```bash
+# Mocked service/HTTP/store tests; no live MySQL or demo credentials required
+node --test src/services/learningJournalService.test.js src/controllers/learningJournalRoute.test.js frontend/src/utils/learningJournal.test.js frontend/src/api.test.js
+npm test
+npm --prefix frontend test
+npm --prefix frontend run build
+git diff --check
+```
+
+Real-database login and create/read/delete smoke checks are separate from the standard suites. They must remove only the exact journal record created for the smoke check, never existing entries. Neither package defines a lint script.
 
 ## Security & Privacy
 

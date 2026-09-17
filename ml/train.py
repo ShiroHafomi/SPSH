@@ -5,10 +5,14 @@ Run: python ml/train.py
 """
 
 import sys
+import os
 import json
 import warnings
 import logging
 import time
+import argparse
+import signal
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Tuple, List, Optional
@@ -98,6 +102,7 @@ DATA_PATH = PROJECT_ROOT / "ml" / "data" / "students.csv"
 MODELS_DIR = PROJECT_ROOT / "ml" / "models"
 OUTPUT_DIR = PROJECT_ROOT / "ml" / "output"
 LOGS_DIR = PROJECT_ROOT / "ml" / "logs"
+DEFAULT_TRAIN_INTERVAL_MINUTES = 2
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -1355,7 +1360,7 @@ def plot_learning_curves(model, X, y, output_path: Path, model_name: str):
 # ============================================================
 # MAIN TRAINING PIPELINE
 # ============================================================
-def main():
+def train_once():
     global logger, log_file_path
 
     # Setup logging
@@ -1620,6 +1625,126 @@ def main():
         clf_results[best_clf_name]["f1_weighted_mean"],
     )
     logger.info("Log file: %s", log_file_path)
+
+
+def get_train_interval_seconds(environ=None) -> float:
+    """Return the scheduler interval in seconds from the environment."""
+    environ = os.environ if environ is None else environ
+    raw_value = environ.get("TRAIN_INTERVAL_MINUTES", str(DEFAULT_TRAIN_INTERVAL_MINUTES))
+    try:
+        minutes = float(raw_value)
+    except (TypeError, ValueError):
+        minutes = DEFAULT_TRAIN_INTERVAL_MINUTES
+
+    if minutes <= 0:
+        minutes = DEFAULT_TRAIN_INTERVAL_MINUTES
+    return minutes * 60
+
+
+def get_data_fingerprint(data_path: Path = DATA_PATH):
+    """Return a cheap fingerprint for the cached training data."""
+    try:
+        stat = data_path.stat()
+    except FileNotFoundError:
+        return None
+    return stat.st_mtime_ns, stat.st_size
+
+
+class TrainingScheduler:
+    """Run training in one background worker and poll for changed data."""
+
+    def __init__(self, train_fn=train_once, data_path: Path = DATA_PATH,
+                 interval_seconds: float = None, logger_instance=None):
+        self.train_fn = train_fn
+        self.data_path = data_path
+        self.interval_seconds = (
+            get_train_interval_seconds() if interval_seconds is None else interval_seconds
+        )
+        self.logger = logger_instance or logging.getLogger("train")
+        self.stop_event = threading.Event()
+        self.training_lock = threading.Lock()
+        self.worker = None
+        self.last_successful_fingerprint = None
+
+    def _train(self, fingerprint):
+        try:
+            self.logger.info("Starting model training")
+            self.train_fn()
+            self.last_successful_fingerprint = fingerprint
+            self.logger.info("Model training completed successfully")
+        except Exception:
+            self.logger.exception("Model training failed; scheduler will continue")
+        finally:
+            self.training_lock.release()
+
+    def start_training(self, force=False) -> bool:
+        """Start training if needed, returning whether a worker was started."""
+        if not self.training_lock.acquire(blocking=False):
+            self.logger.info("Training already running; skipping scheduled check")
+            return False
+
+        fingerprint = get_data_fingerprint(self.data_path)
+        if fingerprint is None:
+            self.training_lock.release()
+            self.logger.error("Training data not found at %s", self.data_path)
+            return False
+
+        if not force and fingerprint == self.last_successful_fingerprint:
+            self.training_lock.release()
+            self.logger.info("Training data unchanged; skipping training")
+            return False
+
+        self.worker = threading.Thread(
+            target=self._train,
+            args=(fingerprint,),
+            name="model-training",
+            daemon=False,
+        )
+        self.worker.start()
+        return True
+
+    def request_stop(self):
+        """Request shutdown without waiting for an active training job."""
+        self.stop_event.set()
+
+    def stop(self):
+        """Request shutdown and wait for the active worker to finish."""
+        self.request_stop()
+        worker = self.worker
+        if worker and worker.is_alive() and worker is not threading.current_thread():
+            worker.join()
+
+    def run(self):
+        """Run initial training, then poll until shutdown is requested."""
+        self.start_training(force=True)
+        try:
+            while not self.stop_event.wait(self.interval_seconds):
+                self.start_training()
+        finally:
+            self.stop()
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Train and monitor student performance models")
+    parser.add_argument(
+        "--once",
+        action="store_true",
+        help="run one training job and exit instead of monitoring for changes",
+    )
+    args = parser.parse_args(argv)
+
+    if args.once:
+        train_once()
+        return
+
+    scheduler = TrainingScheduler()
+    try:
+        signal.signal(signal.SIGINT, lambda signum, frame: scheduler.request_stop())
+        signal.signal(signal.SIGTERM, lambda signum, frame: scheduler.request_stop())
+    except ValueError:
+        pass
+
+    scheduler.run()
 
 
 if __name__ == "__main__":

@@ -249,7 +249,7 @@ async function doSetup() {
     catch { log.warn('fetch_data.py failed, continuing...'); }
 
     log.info('Training ML models...');
-    try { run('python', ['ml/train.py']); }
+    try { run('python', ['ml/train.py', '--once']); }
     catch { log.warn('train.py failed, continuing...'); }
   } else {
     log.warn('ml/requirements.txt not found, skipping ML setup');

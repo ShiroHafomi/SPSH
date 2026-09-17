@@ -1,6 +1,12 @@
 import { safeInternalPath } from './safeNavigation.js';
 
 export const NOTIFICATION_TYPES = Object.freeze({
+  support_plan_activated: {
+    titleKey: 'notifications.supportPlanActivated.title',
+    messageKey: 'notifications.supportPlanActivated.message',
+    icon: 'fileText',
+    tone: 'primary',
+  },
   goal_deadline: {
     titleKey: 'notifications.goalDeadline.title',
     messageKey: 'notifications.goalDeadline.message',
@@ -216,6 +222,9 @@ export function resolveNotificationDestination(notification, role) {
   const presentation = getNotificationPresentation(notification);
   if (!presentation) return fallback;
 
+  if (presentation.type === 'support_plan_activated') {
+    return role === 'student' ? safeInternalPath('/student/support-plans', fallback) : fallback;
+  }
   if (role === 'student') {
     return safeInternalPath('/goals', fallback);
   }

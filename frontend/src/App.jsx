@@ -18,7 +18,12 @@ import StudentForm from './pages/StudentForm';
 import Predictor from './pages/Predictor';
 import WhatIfSimulator from './pages/WhatIfSimulator';
 import StudentDashboard from './pages/StudentDashboard';
+<<<<<<< HEAD
 import StudentPerformanceTrend from './pages/StudentPerformanceTrend';
+=======
+import StudentRecommendations from './pages/StudentRecommendations';
+import StudentProfile from './pages/StudentProfile';
+>>>>>>> origin/main
 import TeacherDashboard from './pages/TeacherDashboard';
 import AdminUsers from './pages/AdminUsers';
 import AdminDashboard from './pages/AdminDashboard';
@@ -28,7 +33,10 @@ import AdminAITools from './pages/AdminAITools';
 import StudentGoals from './pages/StudentGoals';
 import StudentGoalsProgress from './pages/StudentGoalsProgress';
 import StudyPlanner from './pages/StudyPlanner';
+import StudySessions from './pages/StudySessions';
+import LearningJournal from './pages/LearningJournal';
 import Assignments from './pages/Assignments';
+import SupportPlans from './pages/SupportPlans';
 import Notifications from './pages/Notifications';
 import MlMonitoring from './pages/MlMonitoring';
 
@@ -79,6 +87,7 @@ function App() {
                 <Route path="/admin/ml-monitoring" element={<MlMonitoring apiRole="admin" />} />
                 <Route path="/admin/users" element={<AdminUsers />} />
                 <Route path="/admin/notifications" element={<Notifications />} />
+                <Route path="/admin/support-plans" element={<SupportPlans />} />
               </Route>
 
               {/* Teacher routes - Teacher or Admin (own sidebar + header) */}
@@ -112,11 +121,19 @@ function App() {
                 </ProtectedRoute>
               }>
                 <Route path="/student" element={<StudentDashboard />} />
+<<<<<<< HEAD
                 <Route path="/student/performance-trend" element={<StudentPerformanceTrend />} />
+=======
+                <Route path="/student/profile" element={<StudentProfile />} />
+                <Route path="/student/recommendations" element={<StudentRecommendations />} />
+>>>>>>> origin/main
                 <Route path="/goals" element={<StudentGoals />} />
                 <Route path="/student/notifications" element={<Notifications />} />
                 <Route path="/student/study-planner" element={<StudyPlanner />} />
+                <Route path="/student/study-sessions" element={<StudySessions />} />
+                <Route path="/student/learning-journal" element={<LearningJournal />} />
                 <Route path="/student/assignments" element={<Assignments />} />
+                <Route path="/student/support-plans" element={<SupportPlans />} />
               </Route>
 
               {/* Shared routes - any authenticated user (floating Navbar via MainLayout) */}
