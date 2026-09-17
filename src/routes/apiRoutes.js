@@ -72,6 +72,7 @@ const {
 
 // Student
 const {
+  apiStudentPerformanceTrend,
   apiStudentProfile,
   apiStudentUpdateAccount,
   apiStudentSimulate,
@@ -278,14 +279,18 @@ router.use('/teacher', teacherRouter);
 const studentRouter = express.Router();
 studentRouter.use(requireAuth, requireRole('student'));
 
-// Profile
+// Profile and performance
 studentRouter.get('/me/profile', apiStudentProfile);
 studentRouter.put('/me/profile', apiStudentUpdateProfile);
+<<<<<<< HEAD
+studentRouter.get('/me/performance-trend', apiStudentPerformanceTrend);
+=======
 studentRouter.patch('/me/profile', apiStudentUpdateAccount);
 
 studentRouter.get('/me/support-plans', supportPlans.list);
 studentRouter.get('/me/support-plans/:planId', supportPlans.get);
 studentRouter.patch('/me/support-plans/:planId/tasks/:taskId', authenticatedLimit(assignmentMutationLimiter), supportPlans.updateTask);
+>>>>>>> origin/main
 
 // Personal Assignments
 studentRouter.get('/me/assignments', apiListAssignments);

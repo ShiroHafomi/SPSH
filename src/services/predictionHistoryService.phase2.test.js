@@ -166,6 +166,38 @@ describe('predictionHistoryService Phase 2 history queries', () => {
     assert.equal(Object.hasOwn(result.rows[0], 'actorUserId'), false);
   });
 
+  it('filters student history by the trusted internal student ID', async () => {
+    const calls = [];
+    pool.query = async (sql, params) => {
+      calls.push({ sql, params });
+      if (/COUNT\(\*\) AS total/.test(sql)) return [[{ total: '1' }]];
+      return [[{
+        id: '12',
+        created_at: '2026-08-20T10:00:00.000Z',
+        prediction_kind: 'prediction',
+        model_version: MODEL_VERSION,
+        predicted_score: '91',
+        predicted_grade: 'A',
+        grade_confidence: '0.9',
+        inference_latency_ms: '20',
+        student_id: '42',
+      }]];
+    };
+
+    const result = await service.listPredictionHistoryForStudent(42, {
+      from: '2026-08-01',
+      to: '2026-08-25',
+    });
+
+    assert.equal(calls.length, 2);
+    for (const call of calls) {
+      assert.match(call.sql, /e\.student_id = \?/);
+      assert.equal(call.params.includes(42), true);
+      assert.equal(call.sql.includes('42'), false);
+    }
+    assert.equal(result.rows[0].studentId, 42);
+  });
+
   it('returns bounded empty pagination when database count data is malformed', async () => {
     pool.query = async (sql) => (/COUNT\(\*\)/.test(sql) ? [[{ total: 'invalid' }]] : [[]]);
 

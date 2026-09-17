@@ -2,7 +2,10 @@
 
 const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
-const { apiStudentSimulate } = require('./studentController');
+const {
+  apiStudentPerformanceTrend,
+  apiStudentSimulate,
+} = require('./studentController');
 const studentService = require('../services/studentService');
 const mlService = require('../services/mlService');
 const predictionHistoryService = require('../services/predictionHistoryService');
@@ -10,6 +13,7 @@ const predictionHistoryService = require('../services/predictionHistoryService')
 const originalFindById = studentService.findById;
 const originalSimulate = mlService.simulate;
 const originalRecord = predictionHistoryService.recordPredictionEvent;
+const originalListForStudent = predictionHistoryService.listPredictionHistoryForStudent;
 const originalConsoleError = console.error;
 
 const profile = Object.freeze({
@@ -58,6 +62,61 @@ function createRequest(body = { study_hours_per_day: 5 }) {
   };
 }
 
+describe('student performance trend history access', () => {
+  beforeEach(() => {
+    studentService.findById = async () => ({ id: 29 });
+    predictionHistoryService.listPredictionHistoryForStudent = async () => ({ rows: [] });
+  });
+
+  afterEach(() => {
+    studentService.findById = originalFindById;
+    predictionHistoryService.listPredictionHistoryForStudent = originalListForStudent;
+  });
+
+  it('uses the authenticated student ID and returns only history data', async () => {
+    let requestedStudentId;
+    predictionHistoryService.listPredictionHistoryForStudent = async (studentId) => {
+      requestedStudentId = studentId;
+      return { rows: [{ studentId, predictedScore: 84 }] };
+    };
+    const res = createResponse();
+    const req = createRequest({ studentId: 999 });
+
+    await apiStudentPerformanceTrend(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(requestedStudentId, 29);
+    assert.deepEqual(res.body, { rows: [{ studentId: 29, predictedScore: 84 }] });
+  });
+
+  it('rejects an unlinked student account before querying history', async () => {
+    studentService.findById = async () => null;
+    let historyCalled = false;
+    predictionHistoryService.listPredictionHistoryForStudent = async () => {
+      historyCalled = true;
+      return { rows: [] };
+    };
+    const res = createResponse();
+    const req = createRequest();
+    req.user.studentId = null;
+
+    await apiStudentPerformanceTrend(req, res);
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(historyCalled, false);
+  });
+
+  it('returns not found when the authenticated student record is missing', async () => {
+    studentService.findById = async () => null;
+    const res = createResponse();
+
+    await apiStudentPerformanceTrend(createRequest(), res);
+
+    assert.equal(res.statusCode, 404);
+    assert.deepEqual(res.body, { error: 'Student record not found.' });
+  });
+});
+
 describe('student simulator prediction history integration', () => {
   beforeEach(() => {
     studentService.findById = async () => ({ id: 29, ...profile });
@@ -74,6 +133,7 @@ describe('student simulator prediction history integration', () => {
       ],
     });
     predictionHistoryService.recordPredictionEvent = async () => ({ eventId: 1 });
+    predictionHistoryService.listPredictionHistoryForStudent = async () => ({ rows: [] });
     console.error = originalConsoleError;
   });
 
@@ -81,6 +141,7 @@ describe('student simulator prediction history integration', () => {
     studentService.findById = originalFindById;
     mlService.simulate = originalSimulate;
     predictionHistoryService.recordPredictionEvent = originalRecord;
+    predictionHistoryService.listPredictionHistoryForStudent = originalListForStudent;
     console.error = originalConsoleError;
   });
 

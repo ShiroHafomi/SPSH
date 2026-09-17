@@ -763,6 +763,39 @@ const en = {
     notesPlaceholder: 'Add optional context about your study habits.',
   },
 
+<<<<<<< HEAD
+  studentPerformanceTrend: {
+    title: 'Performance Trend',
+    subtitle: 'Review how your predicted performance has changed over time.',
+    loading: 'Loading your performance trend',
+    error: 'Could not load your performance trend',
+    errorDescription: 'Historical prediction data could not be retrieved. Try again when you are ready.',
+    retry: 'Try again',
+    empty: 'No performance history yet',
+    emptyDescription: 'Your score and grade trend will appear here after prediction activity is recorded.',
+    statusLabel: 'Trend status',
+    statusImproving: 'Improving',
+    statusStable: 'Stable',
+    statusDeclining: 'Declining',
+    latestScore: 'Latest score',
+    previousScore: 'Previous score',
+    change: 'Change',
+    scoreOutOf100: 'out of 100',
+    previousDetail: 'Most recent earlier prediction',
+    changeDetail: 'Difference from previous score',
+    predictedScore: 'Predicted score',
+    predictedDetail: 'Latest available prediction',
+    scoreTrend: 'Score trend',
+    scoreTrendDescription: 'Predicted score history from your recorded activity.',
+    historyCount: '{count} data points',
+    chartSummary: 'Predicted score trend with {count} data points.',
+    scoreAxis: 'Score',
+    dateAxis: 'Date',
+    noScores: 'No predicted scores are available yet.',
+    gradeTrend: 'Grade trend',
+    gradeTrendDescription: 'Predicted grades recorded alongside your score history.',
+    noGrades: 'No predicted grades are available yet.',
+=======
   studentProfile: {
     nav: 'My Profile',
     title: 'My Student Profile',
@@ -868,6 +901,7 @@ const en = {
       predictionTrend: { title: 'Review the recent prediction trend', explanation: 'Recent prediction history has moved downward, which is a signal to review what changed in your routine.', nextStep: 'Compare your latest weekly check-in with the earlier one and choose one habit to restore.' },
       studyPlanReview: { title: 'Review your study plan', explanation: 'A small, consistent plan can help turn available study time into progress.', nextStep: 'Choose one measurable action and add it to your weekly plan.' },
     },
+>>>>>>> origin/main
   },
 
   mlMonitoring: {
